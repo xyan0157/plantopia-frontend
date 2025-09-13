@@ -4,8 +4,13 @@
  */
 
 // API base URL configuration with environment variables
-const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84';
-const FALLBACK_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84';
+// In production, use Vercel proxy to avoid HTTPS/HTTP mixed content issues
+const PRIMARY_API_URL = import.meta.env.MODE === 'production' 
+  ? '/api/proxy' 
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+const FALLBACK_API_URL = import.meta.env.MODE === 'production'
+  ? '/api/proxy'
+  : (import.meta.env.VITE_API_URL || 'http://34.70.141.84');
 
 // Current API URL (will switch to fallback if needed)
 let currentApiUrl = PRIMARY_API_URL;
