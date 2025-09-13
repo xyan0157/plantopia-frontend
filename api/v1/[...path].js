@@ -17,19 +17,35 @@ export default async function handler(req, res) {
   // Construct backend URL
   const backendUrl = `http://34.70.141.84/api/v1/${apiPath}`;
   
-  console.log(`Proxying ${req.method} request to: ${backendUrl}`);
-  console.log('Request path:', apiPath);
-  console.log('Request body:', req.body);
+  console.log(`[PROXY] ${req.method} request to: ${backendUrl}`);
+  console.log('[PROXY] Request path:', apiPath);
+  console.log('[PROXY] Request body:', req.body);
+  console.log('[PROXY] Request headers:', req.headers);
   
   try {
-    // Forward the request to backend
-    const response = await fetch(backendUrl, {
+    // Prepare fetch options
+    const fetchOptions = {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
-    });
+      // Add timeout
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    };
+    
+    // Add body for methods that support it
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+      fetchOptions.body = JSON.stringify(req.body);
+    }
+    
+    console.log('[PROXY] Fetch options:', fetchOptions);
+    
+    // Forward the request to backend
+    const response = await fetch(backendUrl, fetchOptions);
+    
+    console.log('[PROXY] Response status:', response.status);
+    console.log('[PROXY] Response headers:', Object.fromEntries(response.headers.entries()));
     
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
@@ -41,14 +57,37 @@ export default async function handler(req, res) {
       data = await response.text();
     }
     
+    console.log('[PROXY] Response data:', data);
+    
+    // Forward the response
     res.status(response.status).json(data);
   } catch (error) {
-    console.error('Proxy error:', error);
-    res.status(500).json({ 
-      error: 'Failed to connect to backend', 
-      details: error.message,
+    console.error('[PROXY] Error:', error);
+    console.error('[PROXY] Error details:', {
+      message: error.message,
+      stack: error.stack,
       path: apiPath,
-      method: req.method 
+      method: req.method,
+      url: backendUrl,
+      name: error.name
     });
+    
+    // Return appropriate error response
+    if (error.name === 'TimeoutError') {
+      res.status(504).json({ 
+        error: 'Gateway Timeout', 
+        details: 'Backend request timed out',
+        path: apiPath,
+        method: req.method
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Failed to connect to backend', 
+        details: error.message,
+        path: apiPath,
+        method: req.method,
+        url: backendUrl
+      });
+    }
   }
 }
