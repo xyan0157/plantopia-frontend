@@ -20,6 +20,7 @@ export default async function handler(req, res) {
   console.log(`[PROXY] ${req.method} request to: ${backendUrl}`);
   console.log('[PROXY] Request path:', apiPath);
   console.log('[PROXY] Request body:', req.body);
+  console.log('[PROXY] Request headers:', req.headers);
   
   try {
     // Prepare fetch options
@@ -36,7 +37,10 @@ export default async function handler(req, res) {
     // Add body for methods that support it
     if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
       fetchOptions.body = JSON.stringify(req.body);
+      console.log('[PROXY] Request body JSON:', fetchOptions.body);
     }
+    
+    console.log('[PROXY] Fetch options:', JSON.stringify(fetchOptions, null, 2));
     
     // Forward the request to backend
     const response = await fetch(backendUrl, fetchOptions);
