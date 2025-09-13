@@ -18,6 +18,8 @@ export default async function handler(req, res) {
   const backendUrl = `http://34.70.141.84/api/v1/${apiPath}`;
   
   console.log(`Proxying ${req.method} request to: ${backendUrl}`);
+  console.log('Request path:', apiPath);
+  console.log('Request body:', req.body);
   
   try {
     // Forward the request to backend
@@ -29,10 +31,24 @@ export default async function handler(req, res) {
       body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
     });
     
-    const data = await response.json();
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    let data;
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    
     res.status(response.status).json(data);
   } catch (error) {
     console.error('Proxy error:', error);
-    res.status(500).json({ error: 'Failed to connect to backend', details: error.message });
+    res.status(500).json({ 
+      error: 'Failed to connect to backend', 
+      details: error.message,
+      path: apiPath,
+      method: req.method 
+    });
   }
 }
