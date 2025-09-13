@@ -10,12 +10,12 @@ export default async function handler(req, res) {
     return;
   }
   
-  console.log(`[RECOMMENDATIONS] ${req.method} request received`);
-  console.log('[RECOMMENDATIONS] Request body:', req.body);
-  console.log('[RECOMMENDATIONS] Request body type:', typeof req.body);
-  console.log('[RECOMMENDATIONS] Request headers:', req.headers);
-  console.log('[RECOMMENDATIONS] Request URL:', req.url);
-  console.log('[RECOMMENDATIONS] Request query:', req.query);
+  console.log(`[V1-RECOMMENDATIONS] ${req.method} request received`);
+  console.log('[V1-RECOMMENDATIONS] Request body:', req.body);
+  console.log('[V1-RECOMMENDATIONS] Request body type:', typeof req.body);
+  console.log('[V1-RECOMMENDATIONS] Request headers:', req.headers);
+  console.log('[V1-RECOMMENDATIONS] Request URL:', req.url);
+  console.log('[V1-RECOMMENDATIONS] Request query:', req.query);
   
   // Construct backend URL
   const backendUrl = 'http://34.70.141.84/api/v1/recommendations';
@@ -35,15 +35,15 @@ export default async function handler(req, res) {
     // Add body for methods that support it
     if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
       fetchOptions.body = JSON.stringify(req.body);
-      console.log('[RECOMMENDATIONS] Request body JSON:', fetchOptions.body);
+      console.log('[V1-RECOMMENDATIONS] Request body JSON:', fetchOptions.body);
     }
     
-    console.log('[RECOMMENDATIONS] Fetch options:', JSON.stringify(fetchOptions, null, 2));
+    console.log('[V1-RECOMMENDATIONS] Fetch options:', JSON.stringify(fetchOptions, null, 2));
     
     // Forward the request to backend
     const response = await fetch(backendUrl, fetchOptions);
     
-    console.log('[RECOMMENDATIONS] Response status:', response.status);
+    console.log('[V1-RECOMMENDATIONS] Response status:', response.status);
     
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
@@ -55,12 +55,12 @@ export default async function handler(req, res) {
       data = await response.text();
     }
     
-    console.log('[RECOMMENDATIONS] Response data length:', JSON.stringify(data).length);
+    console.log('[V1-RECOMMENDATIONS] Response data length:', JSON.stringify(data).length);
     
     // Forward the response
     res.status(response.status).json(data);
   } catch (error) {
-    console.error('[RECOMMENDATIONS] Error:', error);
+    console.error('[V1-RECOMMENDATIONS] Error:', error);
     res.status(500).json({ 
       error: 'Failed to connect to backend', 
       details: error.message,
