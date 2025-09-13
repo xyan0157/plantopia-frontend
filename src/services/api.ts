@@ -1,14 +1,21 @@
 // API service for Plantopia Recommendation Engine
 // Handles all communication with the backend recommendation API
 
-// Base configuration with environment variables
-// In production, use Vercel proxy to avoid HTTPS/HTTP mixed content issues
-const PRIMARY_API_URL = import.meta.env.MODE === 'production' 
-  ? '/api/proxy' 
-  : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
-const FALLBACK_API_URL = import.meta.env.MODE === 'production'
-  ? '/api/proxy'
-  : (import.meta.env.VITE_API_URL || 'http://34.70.141.84')
+// Base configuration with smart protocol detection
+// In HTTPS environment, use relative paths to leverage Vercel rewrites
+// In HTTP environment (local dev), use direct backend URL
+function getApiUrl(): string {
+  // Check if we're in browser and using HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    // Use relative path, Vercel will proxy to backend
+    return ''
+  }
+  // Local development or HTTP environment
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000'
+}
+
+const PRIMARY_API_URL = getApiUrl()
+const FALLBACK_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
@@ -267,9 +274,7 @@ export class PlantRecommendationService {
   // Health check endpoint
   async healthCheck(): Promise<{ message: string }> {
     try {
-      // In production, the proxy already includes /api/v1 path
-      const endpoint = import.meta.env.MODE === 'production' ? '/' : '/api/v1/'
-      const response = await this.fetchWithFallback(endpoint)
+      const response = await this.fetchWithFallback('/api/v1/')
       return await response.json()
     } catch (error) {
       console.error('Health check failed:', error)
@@ -281,12 +286,10 @@ export class PlantRecommendationService {
   async getAllPlants(): Promise<ApiAllPlantsResponse> {
     try {
       console.group('[PLANTS API] Get All Plants Request')
-      // In production, the proxy already includes /api/v1 path
-      const endpoint = import.meta.env.MODE === 'production' ? '/plants' : '/api/v1/plants'
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}${endpoint}`)
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/plants`)
       console.log('[REQUEST] Method:', 'GET')
 
-      const response = await this.fetchWithFallback(endpoint)
+      const response = await this.fetchWithFallback('/api/v1/plants')
 
       console.log('[RESPONSE] Status:', response.status)
       console.log('[RESPONSE] Status Text:', response.statusText)
@@ -312,9 +315,7 @@ export class PlantRecommendationService {
   async getRecommendations(request: ApiRecommendationRequest): Promise<ApiRecommendationResponse> {
     try {
       console.group('[PLANT API] Request Debug')
-      // In production, the proxy already includes /api/v1 path
-      const endpoint = import.meta.env.MODE === 'production' ? '/recommendations' : '/api/v1/recommendations'
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}${endpoint}`)
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/recommendations`)
       console.log('[REQUEST] Method:', 'POST')
       console.log('[REQUEST] Headers:', {
         'Content-Type': 'application/json',
@@ -323,7 +324,7 @@ export class PlantRecommendationService {
       console.log('[REQUEST] Raw Object:', request)
       console.groupEnd()
 
-      const response = await this.fetchWithFallback(endpoint, {
+      const response = await this.fetchWithFallback('/api/v1/recommendations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

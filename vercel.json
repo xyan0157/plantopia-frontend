@@ -5,18 +5,13 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "destination": "http://34.70.141.84/api/:path*"
     },
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/proxy/[...path].js": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",

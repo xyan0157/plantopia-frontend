@@ -3,14 +3,19 @@
  * Handles secure image URLs via backend API calls
  */
 
-// API base URL configuration with environment variables
-// In production, use Vercel proxy to avoid HTTPS/HTTP mixed content issues
-const PRIMARY_API_URL = import.meta.env.MODE === 'production' 
-  ? '/api/proxy' 
-  : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
-const FALLBACK_API_URL = import.meta.env.MODE === 'production'
-  ? '/api/proxy'
-  : (import.meta.env.VITE_API_URL || 'http://34.70.141.84');
+// API base URL configuration with smart protocol detection
+function getApiUrl() {
+  // Check if we're in browser and using HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    // Use relative path, Vercel will proxy to backend
+    return '';
+  }
+  // Local development or HTTP environment
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+}
+
+const PRIMARY_API_URL = getApiUrl();
+const FALLBACK_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84';
 
 // Current API URL (will switch to fallback if needed)
 let currentApiUrl = PRIMARY_API_URL;
