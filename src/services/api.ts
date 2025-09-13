@@ -267,7 +267,9 @@ export class PlantRecommendationService {
   // Health check endpoint
   async healthCheck(): Promise<{ message: string }> {
     try {
-      const response = await this.fetchWithFallback('/api/v1/')
+      // In production, the proxy already includes /api/v1 path
+      const endpoint = import.meta.env.MODE === 'production' ? '/' : '/api/v1/'
+      const response = await this.fetchWithFallback(endpoint)
       return await response.json()
     } catch (error) {
       console.error('Health check failed:', error)
@@ -279,10 +281,12 @@ export class PlantRecommendationService {
   async getAllPlants(): Promise<ApiAllPlantsResponse> {
     try {
       console.group('[PLANTS API] Get All Plants Request')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/plants`)
+      // In production, the proxy already includes /api/v1 path
+      const endpoint = import.meta.env.MODE === 'production' ? '/plants' : '/api/v1/plants'
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}${endpoint}`)
       console.log('[REQUEST] Method:', 'GET')
 
-      const response = await this.fetchWithFallback('/api/v1/plants')
+      const response = await this.fetchWithFallback(endpoint)
 
       console.log('[RESPONSE] Status:', response.status)
       console.log('[RESPONSE] Status Text:', response.statusText)
@@ -308,7 +312,9 @@ export class PlantRecommendationService {
   async getRecommendations(request: ApiRecommendationRequest): Promise<ApiRecommendationResponse> {
     try {
       console.group('[PLANT API] Request Debug')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/recommendations`)
+      // In production, the proxy already includes /api/v1 path
+      const endpoint = import.meta.env.MODE === 'production' ? '/recommendations' : '/api/v1/recommendations'
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}${endpoint}`)
       console.log('[REQUEST] Method:', 'POST')
       console.log('[REQUEST] Headers:', {
         'Content-Type': 'application/json',
@@ -317,7 +323,7 @@ export class PlantRecommendationService {
       console.log('[REQUEST] Raw Object:', request)
       console.groupEnd()
 
-      const response = await this.fetchWithFallback('/api/v1/recommendations', {
+      const response = await this.fetchWithFallback(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
