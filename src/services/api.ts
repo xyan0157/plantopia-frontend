@@ -1,11 +1,17 @@
 // API service for Plantopia Recommendation Engine
 // Handles all communication with the backend recommendation API
 
-// Simple configuration - always use direct backend URL
-// This avoids mixed content issues by using HTTP for both local and production
+// Configuration to handle mixed content issues
+// In HTTPS environment, use relative paths to leverage Vercel proxy
+// In HTTP environment (local dev), use direct backend URL
 function getApiUrl(): string {
-  // Always use direct backend URL to avoid mixed content issues
-  return import.meta.env.VITE_API_URL || 'http://34.70.141.84'
+  // Check if we're in browser and using HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    // Use relative path, Vercel will proxy to backend
+    return ''
+  }
+  // Local development or HTTP environment
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000'
 }
 
 const PRIMARY_API_URL = getApiUrl()
