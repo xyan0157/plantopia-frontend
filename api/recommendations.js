@@ -10,18 +10,12 @@ export default async function handler(req, res) {
     return;
   }
   
-  // Get the path after /api/v1/
-  const { path } = req.query;
-  const apiPath = Array.isArray(path) ? path.join('/') : path || '';
+  console.log(`[RECOMMENDATIONS] ${req.method} request received`);
+  console.log('[RECOMMENDATIONS] Request body:', req.body);
+  console.log('[RECOMMENDATIONS] Request headers:', req.headers);
   
   // Construct backend URL
-  const backendUrl = `http://34.70.141.84/api/v1/${apiPath}`;
-  
-  console.log(`[PROXY] ${req.method} request to: ${backendUrl}`);
-  console.log('[PROXY] Request path:', apiPath);
-  console.log('[PROXY] Request body:', req.body);
-  console.log('[PROXY] Request body type:', typeof req.body);
-  console.log('[PROXY] Request headers:', req.headers);
+  const backendUrl = 'http://34.70.141.84/api/v1/recommendations';
   
   try {
     // Prepare fetch options
@@ -38,15 +32,15 @@ export default async function handler(req, res) {
     // Add body for methods that support it
     if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
       fetchOptions.body = JSON.stringify(req.body);
-      console.log('[PROXY] Request body JSON:', fetchOptions.body);
+      console.log('[RECOMMENDATIONS] Request body JSON:', fetchOptions.body);
     }
     
-    console.log('[PROXY] Fetch options:', JSON.stringify(fetchOptions, null, 2));
+    console.log('[RECOMMENDATIONS] Fetch options:', JSON.stringify(fetchOptions, null, 2));
     
     // Forward the request to backend
     const response = await fetch(backendUrl, fetchOptions);
     
-    console.log('[PROXY] Response status:', response.status);
+    console.log('[RECOMMENDATIONS] Response status:', response.status);
     
     // Check if response is JSON
     const contentType = response.headers.get('content-type');
@@ -58,14 +52,15 @@ export default async function handler(req, res) {
       data = await response.text();
     }
     
+    console.log('[RECOMMENDATIONS] Response data length:', JSON.stringify(data).length);
+    
     // Forward the response
     res.status(response.status).json(data);
   } catch (error) {
-    console.error('[PROXY] Error:', error);
+    console.error('[RECOMMENDATIONS] Error:', error);
     res.status(500).json({ 
       error: 'Failed to connect to backend', 
       details: error.message,
-      path: apiPath,
       method: req.method
     });
   }
