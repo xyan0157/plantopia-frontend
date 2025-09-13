@@ -10,24 +10,23 @@ export default async function handler(req, res) {
     return;
   }
   
-  // Only accept GET requests
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
+  // Get the path after /api/v1/
+  const { path } = req.query;
+  const apiPath = Array.isArray(path) ? path.join('/') : path || '';
   
   // Construct backend URL
-  const backendUrl = 'http://34.70.141.84/api/v1/plants';
+  const backendUrl = `http://34.70.141.84/api/v1/${apiPath}`;
   
-  console.log(`Proxying GET request to: ${backendUrl}`);
+  console.log(`Proxying ${req.method} request to: ${backendUrl}`);
   
   try {
     // Forward the request to backend
     const response = await fetch(backendUrl, {
-      method: 'GET',
+      method: req.method,
       headers: {
         'Content-Type': 'application/json',
       },
+      body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
     });
     
     const data = await response.json();
