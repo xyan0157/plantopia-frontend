@@ -1,21 +1,10 @@
 // API service for Plantopia Recommendation Engine
 // Handles all communication with the backend recommendation API
 
-// Configuration to handle mixed content issues
-// In HTTPS environment, use relative paths to leverage Vercel proxy
-// In HTTP environment (local dev), use direct backend URL
-function getApiUrl(): string {
-  // Check if we're in browser and using HTTPS
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    // Use relative path, Vercel will proxy to backend
-    return ''
-  }
-  // Local development or HTTP environment
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000'
-}
-
-const PRIMARY_API_URL = getApiUrl()
-const FALLBACK_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
+// Configuration - Now using Cloudflare Tunnel for HTTPS
+// Production uses Cloudflare Tunnel URL, development uses local backend
+const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const FALLBACK_API_URL = 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
