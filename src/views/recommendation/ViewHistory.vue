@@ -53,22 +53,20 @@ const loadHistory = () => {
 const getImageSource = (plant: Plant): string => {
   if (!plant) return ''
   
-  // Priority 1: Use Base64 data if available
-  if (plant.imageData) {
-    // Check if it's already a data URL
-    if (plant.imageData.startsWith('data:')) {
-      return plant.imageData
-    }
-    
-    // If it's just the base64 string, add the data URL prefix
-    return `data:image/jpeg;base64,${plant.imageData}`
-  }
-  
-  // Priority 2: Fall back to URL construction if no Base64 data
-  if (plant.imagePath) {
-    return getImageUrl(plant.imagePath)
-  }
-  
+  // 0) New API base64
+  const imageBase64 = (plant as any).image_base64 as string | undefined
+  if (imageBase64) return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+
+  // 1) Legacy base64
+  if (plant.imageData) return plant.imageData.startsWith('data:') ? plant.imageData : `data:image/jpeg;base64,${plant.imageData}`
+
+  // 2) API image_url
+  const imageUrl = (plant as any).image_url as string | undefined
+  if (imageUrl) return imageUrl
+
+  // 3) Relative path
+  if (plant.imagePath) return getImageUrl(plant.imagePath)
+
   return ''
 }
 
@@ -80,7 +78,7 @@ const getImageUrl = (imagePath: string): string => {
   }
   
   // Otherwise, construct URL relative to API base
-  const primaryUrl = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
+  const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
   return `${primaryUrl}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`
 }
 

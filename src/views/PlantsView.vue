@@ -63,22 +63,22 @@
               </div>
             </div>
 
-            <!-- Loading State -->
+            <!-- Loading State (keeps showing while pages progressively render) -->
             <div v-if="loading" class="loading-state text-center py-5">
               <div class="loading-spinner mx-auto mb-3"></div>
-              <p class="mb-0">Loading plants...</p>
+              <p class="mb-0 loading-text">Loading plants...</p>
             </div>
 
             <!-- Error State -->
-            <div v-else-if="error" class="error-state">
+            <div v-if="error" class="error-state">
               <div class="alert alert-danger d-flex align-items-center" role="alert">
                 <div class="flex-grow-1">{{ error }}</div>
                 <button @click="loadPlants" class="btn btn-outline-danger btn-sm ms-3">Retry</button>
               </div>
             </div>
 
-            <!-- Plants Grid -->
-            <div v-else-if="filteredPlants.length > 0" class="plants-results">
+            <!-- Plants Grid (render even when loading is true) -->
+            <div v-if="filteredPlants.length > 0" class="plants-results">
               <div class="plants-count">
                 <p class="mb-3">
                   Showing {{ ((currentPage - 1) * plantsPerPage) + 1 }}-{{ Math.min(currentPage * plantsPerPage, totalPlants) }}
@@ -182,8 +182,8 @@
               </div>
             </div>
 
-            <!-- No Results State -->
-            <div v-else class="no-results-state">
+            <!-- No Results State (only when not loading and no error) -->
+            <div v-if="!loading && !error && filteredPlants.length === 0" class="no-results-state">
               <div class="alert alert-info text-center" role="alert">
                 <p class="mb-0">
                   {{ searchQuery ? 'No plants found matching your search.' : 'No plants available at the moment.' }}
@@ -206,10 +206,10 @@
           <div class="plant-detail-image">
             <!-- Show Google Drive image if available -->
             <img
-              v-if="selectedPlant.has_image && !hasImageError(selectedPlant.id)"
+              v-if="selectedPlant?.has_image && !hasImageError(selectedPlant?.id || '')"
               :src="getPlantImageSrc(selectedPlant)"
-              :alt="selectedPlant.name"
-              @error="(event) => handleImageError(event, selectedPlant.id)"
+              :alt="selectedPlant?.name"
+              @error="(event) => selectedPlant && handleImageError(event, selectedPlant.id)"
             >
             <!-- Show placeholder if no image available or image failed to load -->
             <div v-else class="image-placeholder">
@@ -310,8 +310,8 @@
             <div class="climate-sowing" v-if="selectedPlant.climate_specific_sowing && hasClimateData(selectedPlant.climate_specific_sowing)">
               <h4>Sowing Times by Climate</h4>
               <div class="climate-grid">
-                <div class="climate-item" v-for="(months, climate) in selectedPlant.climate_specific_sowing" :key="climate" v-if="months">
-                  <strong>{{ capitalizeFirst(climate) }}:</strong> {{ months }}
+                <div class="climate-item" v-for="(textVal, climate) in (selectedPlant.climate_specific_sowing as Record<string, string>)" :key="String(climate)">
+                  <strong>{{ capitalizeFirst(String(climate)) }}:</strong> {{ String(textVal) }}
                 </div>
               </div>
             </div>
@@ -338,13 +338,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { plantApiService, type Plant } from '@/services/api'
+import { usePlantsStore } from '@/stores/plants'
 import { getPlantImageUrl, handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
 
 // Reactive state
-const plants = ref<Plant[]>([])
-const loading = ref(false)
-const error = ref<string | null>(null)
+const store = usePlantsStore()
+const plants = computed(() => store.plants)
+const loading = computed(() => store.loading)
+const error = computed(() => store.error)
 const searchQuery = ref('')
 const selectedCategory = ref<'all' | 'vegetable' | 'herb' | 'flower'>('all')
 const selectedPlant = ref<Plant | null>(null)
@@ -420,47 +422,10 @@ const pageNumbers = computed(() => {
 
 // Methods
 const loadPlants = async () => {
-  loading.value = true
-  error.value = null
+  // Use store to ensure data loaded; it keeps loading true until all batches done
+  await store.ensureLoaded()
 
-  try {
-    console.log('[PLANTS VIEW] Starting to load plants from API...')
-
-    // First check if API is available
-    try {
-      await plantApiService.healthCheck()
-      console.log('[PLANTS VIEW] Health check passed')
-    } catch (healthErr) {
-      console.error('[PLANTS VIEW] Health check failed:', healthErr)
-      throw new Error('API server is not available. Please check your internet connection.')
-    }
-
-    // Get all plants from API
-    const apiResponse = await plantApiService.getAllPlants()
-    console.log('[PLANTS VIEW] API Response received:', apiResponse)
-
-    // Transform API response to frontend format
-    console.log('[PLANTS VIEW] Raw API response structure:', {
-      total_count: apiResponse.total_count,
-      plants_count: apiResponse.plants?.length || 0,
-      first_plant: apiResponse.plants?.[0] || null
-    })
-
-    const transformedPlants = plantApiService.transformAllPlantsToPlants(apiResponse)
-    console.log('[PLANTS VIEW] Plants transformed:', transformedPlants.length, 'plants')
-    console.log('[PLANTS VIEW] First transformed plant:', transformedPlants[0] || null)
-    console.log('[PLANTS VIEW] First plant has_image:', transformedPlants[0]?.has_image)
-    console.log('[PLANTS VIEW] First plant image_url:', transformedPlants[0]?.image_url)
-    console.log('[PLANTS VIEW] First plant category:', transformedPlants[0]?.category)
-
-    plants.value = transformedPlants
-    console.log('[PLANTS VIEW] Plants loaded successfully!')
-  } catch (err) {
-    console.error('[PLANTS VIEW] Error loading plants:', err)
-    error.value = err instanceof Error ? err.message : 'Failed to load plants'
-  } finally {
-    loading.value = false
-  }
+  // Keep existing scroll and pagination behaviours
 }
 
 const handleSearch = () => {
@@ -534,9 +499,12 @@ const getPlantImageSrc = (plant: Plant): string => {
     return plant.image_url
   }
 
-  // Priority 4: Generate Google Drive URL from category (fallback)
-  if (plant.category && plant.has_image !== false) {
-    return getPlantImageUrl(plant.category)
+  // Priority 4: Category-specific fallback image (sync)
+  if (plant.category) {
+    const c = plant.category.toLowerCase()
+    if (c === 'flower') return '/Flower.jpg'
+    if (c === 'herb') return '/Herb.jpg'
+    if (c === 'vegetable') return '/Vegetable.jpg'
   }
 
   // Final fallback to placeholder
@@ -1280,5 +1248,8 @@ onMounted(() => {
   .modal-body {
     padding: 1rem;
   }
+}
+.loading-text {
+  color: #ffffff;
 }
 </style>

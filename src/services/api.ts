@@ -3,8 +3,8 @@
 
 // Configuration - Now using Cloudflare Tunnel for HTTPS
 // Production uses Cloudflare Tunnel URL, development uses local backend
-const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const FALLBACK_API_URL = 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+const FALLBACK_API_URL = 'http://localhost:8000'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
@@ -216,11 +216,14 @@ export class PlantRecommendationService {
   private primaryUrl: string
   private fallbackUrl: string
   private currentBaseUrl: string
+  private gcsPlantImagesBaseUrl: string
 
   constructor(primaryUrl: string = PRIMARY_API_URL, fallbackUrl: string = FALLBACK_API_URL) {
     this.primaryUrl = primaryUrl
     this.fallbackUrl = fallbackUrl
     this.currentBaseUrl = primaryUrl
+    // Prefer env override if provided; otherwise use the shared bucket base
+    this.gcsPlantImagesBaseUrl = (import.meta as any).env?.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   }
 
   // Helper method to try API call with fallback
@@ -646,7 +649,7 @@ export class PlantRecommendationService {
     return requirements
   }
 
-  // Helper method to process plant description and fix mismatched plant names
+  // Helper method to build dataset image URL from GCS for plants without explicit URL
   private findVictoriaPlantImage(plantName: string, scientificName: string, category: string): string | null {
     /**
      * Search for plant images in Victoria Plants Data structure in public folder
@@ -689,12 +692,12 @@ export class PlantRecommendationService {
       }
     }
 
-    // Try each pattern to construct the image URL
+    // Try each pattern to construct the image URL against GCS base
     for (const pattern of searchPatterns) {
       if (!pattern) continue
       
-      // Construct the expected image path
-      const imagePath = `/VICTORIA_PLANTS_DATA/${folderName}/${pattern}/${pattern}_1.jpg`
+      // Construct the expected image path under GCS base
+      const imagePath = `${this.gcsPlantImagesBaseUrl}/${folderName}/${pattern}/${pattern}_1.jpg`
       
       // We can't check if the file exists in the browser, so we return the first viable path
       // The browser will handle 404s gracefully with our fallback logic
@@ -707,24 +710,21 @@ export class PlantRecommendationService {
   private getImageUrl(apiPlant: ApiPlantRecommendation): string {
     /**
      * Get the best available image URL with fallback priority:
-     * 1. Base64 data (if available)
-     * 2. Victoria Plants Data image
+     * 1. Explicit image_path from backend (served via GCS base)
+     * 2. Base64 data (if available)
      * 3. Google Drive URL
-     * 4. Category-specific fallback image
+     * 4. Victoria Plants Data image (derived path)
+     * 5. Category-specific fallback image
      */
-    // First priority: Base64 data
-    if (apiPlant.media.image_base64) {
-      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
+    // First priority: Direct path from backend (GCS)
+    if (apiPlant.media?.image_path) {
+      const direct = this.buildGcsImageUrl(apiPlant.media.image_path)
+      if (direct) return direct
     }
 
-    // Second priority: Victoria Plants Data image
-    const victoriaImage = this.findVictoriaPlantImage(
-      apiPlant.plant_name,
-      apiPlant.scientific_name,
-      apiPlant.plant_category
-    )
-    if (victoriaImage) {
-      return victoriaImage
+    // Second priority: Base64 data
+    if (apiPlant.media.image_base64) {
+      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
     }
 
     // Third priority: Google Drive URL
@@ -732,20 +732,7 @@ export class PlantRecommendationService {
       return apiPlant.media.drive_url
     }
 
-    // Fourth priority: Category-specific fallback
-    return this.getCategoryFallbackImage(apiPlant.plant_category)
-  }
-
-  private getImageUrlForAllPlants(apiPlant: ApiPlantData): string {
-    /**
-     * Get the best available image URL for /plants endpoint
-     */
-    // First priority: Base64 data
-    if (apiPlant.media?.image_base64) {
-      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
-    }
-
-    // Second priority: Victoria Plants Data image
+    // Fourth priority: Victoria Plants Data image
     const victoriaImage = this.findVictoriaPlantImage(
       apiPlant.plant_name,
       apiPlant.scientific_name,
@@ -755,12 +742,43 @@ export class PlantRecommendationService {
       return victoriaImage
     }
 
-    // Third priority: Google Drive URL
+    // Fifth priority: Category-specific fallback
+    return this.getCategoryFallbackImage(apiPlant.plant_category)
+  }
+
+  private getImageUrlForAllPlants(apiPlant: ApiPlantData): string {
+    /**
+     * Get the best available image URL for /plants endpoint
+     */
+    // 1) Direct path from backend (GCS base)
+    if (apiPlant.media?.image_path) {
+      const direct = this.buildGcsImageUrl(apiPlant.media.image_path)
+      if (direct) return direct
+    }
+
+    // 2) Base64 from API h
+    if (apiPlant.media?.image_base64) {
+      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
+    }
+
+    // 3) Google Drive (explicit URLs from backend)
     if (apiPlant.media?.drive_url) {
       return apiPlant.media.drive_url
     }
 
-    // Fourth priority: Category-specific fallback
+    // 4) Victoria dataset image only if backend indicates it exists
+    if (apiPlant.media?.has_image) {
+      const victoriaImage = this.findVictoriaPlantImage(
+        apiPlant.plant_name,
+        apiPlant.scientific_name,
+        apiPlant.plant_category
+      )
+      if (victoriaImage) {
+        return victoriaImage
+      }
+    }
+
+    // 5) Category fallback image
     return this.getCategoryFallbackImage(apiPlant.plant_category)
   }
 
@@ -774,6 +792,18 @@ export class PlantRecommendationService {
       'vegetable': '/Vegetable.jpg'
     }
     return fallbackImages[category.toLowerCase()] || '/placeholder-plant.svg'
+  }
+
+  private buildGcsImageUrl(pathFromApi: string | undefined): string | null {
+    if (!pathFromApi) return null
+    // If backend already returns a full URL, use it as is
+    if (/^https?:\/\//i.test(pathFromApi)) return pathFromApi
+    const normalized = pathFromApi.replace(/^\/+/, '')
+    // Avoid duplicating plant_images segment if included in path
+    const relative = normalized.startsWith('plant_images/')
+      ? normalized.substring('plant_images/'.length)
+      : normalized
+    return `${this.gcsPlantImagesBaseUrl}/${relative}`
   }
 
 }

@@ -162,12 +162,13 @@ const findVictoriaPlantImage = (): string | null => {
     }
   }
 
+  const gcsBase = (import.meta as any).env?.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   // Try each pattern to construct the image URL
   for (const pattern of searchPatterns) {
     if (!pattern) continue
     
-    // Construct the expected image path
-    const imagePath = `/VICTORIA_PLANTS_DATA/${folderName}/${pattern}/${pattern}_1.jpg`
+    // Construct the expected image path (GCS)
+    const imagePath = `${gcsBase}/${folderName}/${pattern}/${pattern}_1.jpg`
     
     // Return the first viable path - browser will handle 404s with our error handler
     return imagePath
@@ -200,8 +201,8 @@ const getImageUrl = (imagePath: string): string => {
   }
   
   // Base URL for your backend with environment variables
-  const primaryUrl = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
-  const fallbackUrl = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
+  const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+  const fallbackUrl = 'http://localhost:8000'
   
   // For separated frontend/backend projects, we need API endpoints
   const possibleUrls = [

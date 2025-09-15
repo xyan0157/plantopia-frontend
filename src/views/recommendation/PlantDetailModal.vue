@@ -267,23 +267,21 @@ const handleHistoryPlantSelect = (plant: Plant) => {
 // Function to get image source (Base64 or URL)
 const getImageSource = (): string => {
   if (!props.plant) return ''
-  
-  // Priority 1: Use Base64 data if available
-  if (props.plant.imageData) {
-    // Check if it's already a data URL
-    if (props.plant.imageData.startsWith('data:')) {
-      return props.plant.imageData
-    }
-    
-    // If it's just the base64 string, add the data URL prefix
-    return `data:image/jpeg;base64,${props.plant.imageData}`
-  }
-  
-  // Priority 2: Fall back to URL construction if no Base64 data
-  if (props.plant.imagePath) {
-    return getImageUrl(props.plant.imagePath)
-  }
-  
+
+  // 0) New API base64 field
+  const imageBase64 = (props.plant as any).image_base64 as string | undefined
+  if (imageBase64) return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+
+  // 1) Legacy base64 field
+  if (props.plant.imageData) return props.plant.imageData.startsWith('data:') ? props.plant.imageData : `data:image/jpeg;base64,${props.plant.imageData}`
+
+  // 2) API-provided image_url
+  const imageUrl = (props.plant as any).image_url as string | undefined
+  if (imageUrl) return imageUrl
+
+  // 3) Relative image path served by backend
+  if (props.plant.imagePath) return getImageUrl(props.plant.imagePath)
+
   return ''
 }
 
@@ -295,8 +293,8 @@ const getImageUrl = (imagePath: string): string => {
   }
   
   // If it's a relative path, construct URL with backend base
-  const primaryUrl = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
-  const fallbackUrl = import.meta.env.VITE_API_URL || 'http://34.70.141.84'
+  const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+  const fallbackUrl = 'http://localhost:8000'
   
   // Try primary URL first, fallback URL if needed
   const fullUrl = `${primaryUrl}/static/${imagePath}`

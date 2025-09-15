@@ -3,19 +3,10 @@
  * Handles secure image URLs via backend API calls
  */
 
-// API base URL configuration with smart protocol detection
-function getApiUrl() {
-  // Check if we're in browser and using HTTPS
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    // Use relative path, Vercel will proxy to backend
-    return '';
-  }
-  // Local development or HTTP environment
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
-}
-
-const PRIMARY_API_URL = getApiUrl();
-const FALLBACK_API_URL = import.meta.env.VITE_API_URL || 'http://34.70.141.84';
+// API base URL configuration: always prefer explicit VITE_API_URL
+const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com';
+// Local dev as fallback when primary fails
+const FALLBACK_API_URL = 'http://localhost:8000';
 
 // Current API URL (will switch to fallback if needed)
 let currentApiUrl = PRIMARY_API_URL;
