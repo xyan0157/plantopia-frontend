@@ -1,7 +1,7 @@
 <template>
   <div
     class="home"
-    :class="{ 'highlight-left': isLeftActive, 'highlight-right': isRightActive, 'heat-hovered': isHeatHovered }"
+    :class="{ 'highlight-left': isLeftActive, 'highlight-right': isRightActive, 'heat-hovered': isHeatMode }"
     @mousemove="handleMouseMove"
   >
     <!-- Video Background -->
@@ -29,13 +29,13 @@
         @navigate-to-recommendations="goToRecommendations"
         @navigate-to-guides="goToGuides"
         @scroll-to-content="scrollToContent"
-        @heat-hover="handleHeatHover"
+        @heat-toggle="toggleHeatMode"
       />
     </Transition>
 
     <!-- Content Section -->
     <Transition name="fade-in" appear>
-      <div v-show="showContent" class="content-section">
+      <div v-show="showContent && !isHeatMode" class="content-section">
         <div class="home-container">
           <!-- Features Section -->
           <FeaturesSection
@@ -47,6 +47,16 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Heat Mode Page (alternate style) -->
+    <div v-show="isHeatMode" class="heat-mode">
+      <img
+        class="heat-mode-map"
+        src="https://staticmap.openstreetmap.de/staticmap.php?center=-37.8136,144.9631&zoom=10&size=1280x720&maptype=mapnik&markers=-37.8136,144.9631,red-pushpin"
+        alt="Melbourne Region Map"
+      />
+      <p class="heat-mode-caption">Click "Heal" to return</p>
+    </div>
   </div>
 </template>
 
@@ -67,7 +77,7 @@ const videoRef = ref<HTMLVideoElement>()
 const isLeftActive = ref(false)
 const isRightActive = ref(false)
 const isInteractionEnabled = ref(true) // Control whether interaction is enabled
-const isHeatHovered = ref(false) // Control Heat text hover state
+const isHeatMode = ref(false) // Heat alternate page mode
 const showContent = ref(false) // Control content display animation state
 
 const handleMouseMove = (event: MouseEvent) => {
@@ -147,8 +157,8 @@ const scrollToContent = () => {
   }
 }
 
-const handleHeatHover = (isHovered: boolean) => {
-  isHeatHovered.value = isHovered
+const toggleHeatMode = (on: boolean) => {
+  isHeatMode.value = on
 }
 
 const setVideoSpeed = () => {
@@ -222,9 +232,65 @@ onUnmounted(() => {
 }
 
 /* When hovering over Heat text: entire page turns black and white */
-.home.heat-hovered .video-background {
-  filter: grayscale(100%) contrast(1.2) brightness(0.8);
-  transition: filter 0.3s ease;
+.home.heat-hovered .video-background { display: none; }
+
+/* Heat mode alternate page */
+.heat-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, #f7f7f8 0%, #eceff1 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #1f2937;
+  text-align: center;
+}
+
+.heat-mode-hero { 
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  justify-content: flex-start; 
+  padding-top: 5px; 
+}
+
+.heat-mode-title {
+  font-size: 3.75rem;
+  font-weight: 700;
+  margin: 1.5rem 0;
+  color: #111827;
+}
+
+.heat-mode-heal { cursor: pointer; color: #4b5563; }
+.heat-mode-heat { color: #9ca3af; }
+
+.heat-mode-subtitle {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: #4b5563;
+  max-width: 800px;
+  margin: -0.5rem auto 1.5rem auto;
+}
+
+.heat-mode-map {
+  max-width: 92vw;
+  max-height: 65vh;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  border: 1px solid rgba(0,0,0,0.06);
+  filter: grayscale(100%) contrast(1.05) brightness(1.05);
+}
+
+.heat-mode-caption {
+  margin-top: 0.75rem;
+  opacity: 0.7;
+  color: #6b7280;
 }
 
 /* Fade in animation */

@@ -18,14 +18,14 @@
         <!-- Top Section - Plant Image -->
         <div class="plant-detail-image">
           <img 
-            v-if="(plant.imageData || plant.imagePath) && !imageError" 
+            v-if="!imageError" 
             :src="getImageSource()"
             :alt="plant.name"
             class="plant-image"
             @error="handleImageError"
           />
           <!-- Fallback placeholder if no image or image fails to load -->
-          <div v-if="(!plant.imageData && !plant.imagePath) || imageError" class="image-placeholder">
+          <div v-if="imageError" class="image-placeholder">
             <div class="placeholder-icon">Plant</div>
             <span class="placeholder-text">{{ plant.category || 'Plant' }}</span>
           </div>
@@ -275,14 +275,15 @@ const getImageSource = (): string => {
   // 1) Legacy base64 field
   if (props.plant.imageData) return props.plant.imageData.startsWith('data:') ? props.plant.imageData : `data:image/jpeg;base64,${props.plant.imageData}`
 
-  // 2) API-provided image_url
+  // 2) API-provided image_url (recommendation engine usually provides this)
   const imageUrl = (props.plant as any).image_url as string | undefined
   if (imageUrl) return imageUrl
 
-  // 3) Relative image path served by backend
+  // 3) Relative image path served by backend (proxy endpoints)
   if (props.plant.imagePath) return getImageUrl(props.plant.imagePath)
 
-  return ''
+  // 4) Category placeholder image (default image)
+  return getCategoryPlaceholder()
 }
 
 // Function to construct full image URL (fallback method)
@@ -292,21 +293,44 @@ const getImageUrl = (imagePath: string): string => {
     return imagePath
   }
   
-  // If it's a relative path, construct URL with backend base
+  // If it's a relative path, construct candidate URLs with backend base
   const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-  const fallbackUrl = 'http://localhost:8000'
-  
-  // Try primary URL first, fallback URL if needed
-  const fullUrl = `${primaryUrl}/static/${imagePath}`
-  return fullUrl
+  const candidates = [
+    `${primaryUrl}/api/v1/plant-image/${encodeURIComponent(imagePath)}`,
+    `${primaryUrl}/api/v1/plant-image?path=${encodeURIComponent(imagePath)}`,
+    `${primaryUrl}/api/v1/images/${encodeURIComponent(imagePath)}`,
+    `${primaryUrl}/static/${imagePath}`,
+    `${primaryUrl}/media/${imagePath}`,
+  ]
+  return candidates[0]
+}
+
+// Category placeholder
+const getCategoryPlaceholder = (): string => {
+  const category = props.plant?.category?.toLowerCase()
+  switch (category) {
+    case 'flower':
+      return '/Flower.jpg'
+    case 'herb':
+      return '/Herb.jpg'
+    case 'vegetable':
+      return '/Vegetable.jpg'
+    default:
+      return '/placeholder-plant.svg'
+  }
 }
 
 // Handle image loading errors
 const handleImageError = (event: Event) => {
-  imageError.value = true
-  
-  // Hide the broken image and show placeholder
   const img = event.target as HTMLImageElement
+  const fallback = getCategoryPlaceholder()
+  // If not already showing fallback, switch to fallback image
+  if (!img.src.includes(fallback)) {
+    img.src = fallback
+    return
+  }
+  // If even fallback fails, hide image and show placeholder block
+  imageError.value = true
   img.style.display = 'none'
 }
 

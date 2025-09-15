@@ -40,7 +40,7 @@
                 <div v-else-if="error" class="error-state">
                   <div class="alert alert-danger d-flex align-items-center" role="alert">
                     <div class="flex-grow-1">{{ error }}</div>
-                    <button @click="error = null" class="btn btn-outline-danger btn-sm ms-3">Try Again</button>
+                    <button @click="error = null" class="btn btn-outline-danger btn-sm ms-3">Close</button>
                   </div>
                 </div>
 
@@ -82,12 +82,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import SearchForm from './recommendation/SearchForm.vue'
 import PlantCard from './recommendation/PlantCard.vue'
 import PlantDetailModal from './recommendation/PlantDetailModal.vue'
 import FilterSidebar from './recommendation/FilterSidebar.vue'
 import { plantApiService, buildApiRequest, type Plant } from '@/services/api'
+import { useRecommendationsStore } from '@/stores/recommendations'
 
 // Search parameters interface matching the enhanced form
 interface SearchParams {
@@ -108,7 +109,7 @@ interface SearchParams {
 }
 
 // Reactive state management
-const showResults = ref(false)                    // Controls visibility of search results
+// showResults now comes from store; keep this local removed to avoid duplicate declarations
 const selectedPlant = ref<Plant | null>(null)     // Currently selected plant for modal display
 const searchParams = ref<SearchParams>({          // Current search form parameters
   location: '',
@@ -126,9 +127,11 @@ const searchParams = ref<SearchParams>({          // Current search form paramet
   edibleTypes: [],
   ornamentalTypes: [],
 })
-const plants = ref<Plant[]>([])                   // Plant recommendations from API
-const loading = ref(false)                       // Loading state for API calls
-const error = ref<string | null>(null)           // Error state for API failures
+const recStore = useRecommendationsStore()
+const plants = computed(() => recStore.plants)
+const loading = computed(() => recStore.loading)
+const error = computed(() => recStore.error)
+const showResults = computed(() => recStore.showResults)
 
 // Filter data for sidebar
 const filterData = ref({
@@ -149,58 +152,7 @@ const handleFindPlants = async (params: SearchParams) => {
   console.log('[SEARCH] Initiated with parameters:', params)
 
   searchParams.value = params
-  loading.value = true
-  error.value = null
-  plants.value = []
-
-  try {
-    console.log('[SEARCH] Step 1: Health check...')
-    // First check if API is available
-    try {
-      const healthResponse = await plantApiService.healthCheck()
-      console.log('[SEARCH] Health check passed:', healthResponse)
-    } catch (healthErr) {
-      console.error('[SEARCH] Health check failed:', healthErr)
-      throw new Error('API server is not available. Please check your internet connection.')
-    }
-
-    console.log('[SEARCH] Step 2: Building API request...')
-    // Build API request from form parameters
-    const apiRequest = buildApiRequest(params)
-
-    console.log('[SEARCH] Step 3: Making API call...')
-    // Make API call
-    const apiResponse = await plantApiService.getRecommendations(apiRequest)
-
-    console.log('[SEARCH] Step 4: Transforming response...')
-    // Transform API response to frontend plant format
-    const transformedPlants = plantApiService.transformApiResponseToPlants(apiResponse)
-    console.log('[SEARCH] Transformed plants:', transformedPlants)
-    console.log('[SEARCH] Total plants received:', transformedPlants.length)
-
-    plants.value = transformedPlants
-
-    // Show results
-    showResults.value = true
-    console.log('[SEARCH] Completed successfully!')
-    console.groupEnd()
-  } catch (err) {
-    console.group('[SEARCH] Error')
-    console.error('[SEARCH] Error occurred:', err)
-    console.error('[SEARCH] Error type:', typeof err)
-    console.error('[SEARCH] Error constructor:', err?.constructor?.name)
-    if (err instanceof Error) {
-      console.error('[SEARCH] Error message:', err.message)
-      console.error('[SEARCH] Error stack:', err.stack)
-    }
-    console.groupEnd()
-
-    error.value = err instanceof Error ? err.message : 'Failed to get recommendations. Please try again.'
-    showResults.value = false
-  } finally {
-    loading.value = false
-    console.groupEnd()
-  }
+  await recStore.submitSearch(params)
 }
 
 // Handle plant selection from results - opens plant detail modal
@@ -218,11 +170,8 @@ const handleUpdateFilters = (filters: typeof filterData.value) => {
   filterData.value = { ...filters }
   // Update search params with filter data
   Object.assign(searchParams.value, filters)
-
-  // If we have results, re-run the search with new filters
-  if (showResults.value) {
-    handleFindPlants(searchParams.value)
-  }
+  // Do NOT auto-run search when results are already shown.
+  // Results remain fixed until the user submits a new search from the form.
 }
 </script>
 

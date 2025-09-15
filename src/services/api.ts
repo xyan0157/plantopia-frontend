@@ -671,37 +671,50 @@ export class PlantRecommendationService {
       return null
     }
 
-    // Search patterns to try
-    const searchPatterns: string[] = []
-    
-    // Primary pattern: PlantName_ScientificName
-    if (scientificName) {
-      searchPatterns.push(`${plantName}_${scientificName}`)
-    }
-    
-    // Secondary pattern: just PlantName
-    searchPatterns.push(plantName)
-    
-    // Alternative patterns with normalized names (remove special chars)
-    const normalizedPlant = plantName.replace(/[^\w\s-]/g, '').trim()
-    if (normalizedPlant !== plantName) {
-      searchPatterns.push(normalizedPlant)
-      if (scientificName) {
-        const normalizedSci = scientificName.replace(/[^\w\s-]/g, '').trim()
-        searchPatterns.push(`${normalizedPlant}_${normalizedSci}`)
-      }
-    }
+    // Build robust patterns (underscore/hyphen/stripped) and multiple index candidates
+    const toUnderscore = (s: string) => s.replace(/\s+/g, '_')
+    const toHyphen = (s: string) => s.replace(/\s+/g, '-')
+    const strip = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, '').trim()
 
-    // Try each pattern to construct the image URL against GCS base
-    for (const pattern of searchPatterns) {
+    const patterns: string[] = []
+    const add = (v?: string) => { if (v) patterns.push(v) }
+
+    // Raw and stripped combos (prefer Plant_Scientific first, then Plant)
+    add(scientificName ? `${plantName}_${scientificName}` : undefined)
+    add(plantName)
+    const ps = strip(plantName)
+    const ss = scientificName ? strip(scientificName) : ''
+    add(ss ? `${ps}_${ss}` : undefined)
+    add(ps)
+
+    // Underscore combos
+    const pu = toUnderscore(plantName)
+    const su = scientificName ? toUnderscore(scientificName) : ''
+    add(su ? `${pu}_${su}` : undefined)
+    add(pu)
+    const psu = toUnderscore(ps)
+    const ssu = ss ? toUnderscore(ss) : ''
+    add(ssu ? `${psu}_${ssu}` : undefined)
+    add(psu)
+
+    // Hyphen combos
+    const ph = toHyphen(plantName)
+    const sh = scientificName ? toHyphen(scientificName) : ''
+    add(sh ? `${ph}_${sh}` : undefined)
+    add(ph)
+    const psh = toHyphen(ps)
+    const ssh = ss ? toHyphen(ss) : ''
+    add(ssh ? `${psh}_${ssh}` : undefined)
+    add(psh)
+
+    const indexCandidates = ['1','2','3','4']
+    for (const pattern of patterns) {
       if (!pattern) continue
-      
-      // Construct the expected image path under GCS base
-      const imagePath = `${this.gcsPlantImagesBaseUrl}/${folderName}/${pattern}/${pattern}_1.jpg`
-      
-      // We can't check if the file exists in the browser, so we return the first viable path
-      // The browser will handle 404s gracefully with our fallback logic
-      return imagePath
+      const encoded = encodeURIComponent(pattern)
+      for (const idx of indexCandidates) {
+        const imagePath = `${this.gcsPlantImagesBaseUrl}/${folderName}/${encoded}/${encoded}_${idx}.jpg`
+        return imagePath
+      }
     }
 
     return null
@@ -750,15 +763,15 @@ export class PlantRecommendationService {
     /**
      * Get the best available image URL for /plants endpoint
      */
-    // 1) Direct path from backend (GCS base)
+    // 1) Base64 from API
+    if (apiPlant.media?.image_base64) {
+      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
+    }
+
+    // 2) Direct path from backend (GCS base)
     if (apiPlant.media?.image_path) {
       const direct = this.buildGcsImageUrl(apiPlant.media.image_path)
       if (direct) return direct
-    }
-
-    // 2) Base64 from API h
-    if (apiPlant.media?.image_base64) {
-      return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
     }
 
     // 3) Google Drive (explicit URLs from backend)
@@ -766,8 +779,8 @@ export class PlantRecommendationService {
       return apiPlant.media.drive_url
     }
 
-    // 4) Victoria dataset image only if backend indicates it exists
-    if (apiPlant.media?.has_image) {
+    // 4) Victoria dataset image derived from plant/scientific name (attempt regardless of has_image flag)
+    {
       const victoriaImage = this.findVictoriaPlantImage(
         apiPlant.plant_name,
         apiPlant.scientific_name,

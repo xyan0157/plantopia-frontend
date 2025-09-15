@@ -2,7 +2,7 @@
   <div class="hero-section">
     <div class="hero-container">
       <h1 class="main-title">
-        <span class="highlight">Heal</span> or <span class="heat-text" @mouseenter="$emit('heat-hover', true)" @mouseleave="$emit('heat-hover', false)">Heat</span>
+        <span class="highlight heal-text" @click="$emit('heat-toggle', false)">Heal</span> or <span class="heat-text" @click="$emit('heat-toggle', true)">Heat</span>
       </h1>
       <p class="subtitle">
         Get personalized, climate-smart plant recommendations to reduce your carbon footprint
@@ -39,7 +39,7 @@ defineEmits<{
   'navigate-to-recommendations': []
   'navigate-to-guides': []
   'scroll-to-content': []
-  'heat-hover': [boolean]
+  'heat-toggle': [boolean]
 }>()
 </script>
 
@@ -81,7 +81,10 @@ defineEmits<{
 .heat-text {
   color: #9ca3af; /* Gray color */
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  cursor: pointer;
 }
+
+.heal-text { cursor: pointer; }
 
 .subtitle {
   font-size: 1.2rem;

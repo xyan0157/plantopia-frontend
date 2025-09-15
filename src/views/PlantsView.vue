@@ -96,7 +96,7 @@
                   <div class="plant-image">
                     <!-- Show Google Drive image if available -->
                     <img
-                      v-if="plant.has_image && !hasImageError(plant.id)"
+                      v-if="!hasImageError(plant.id)"
                       :src="getPlantImageSrc(plant)"
                       :alt="plant.name"
                       @error="(event) => handleImageError(event, plant.id)"
@@ -494,12 +494,26 @@ const getPlantImageSrc = (plant: Plant): string => {
     return `data:image/jpeg;base64,${plant.image_base64}`
   }
 
-  // Priority 3: Legacy image URL support
+  // Priority 3: Legacy image URL support or service-resolved GCS path
   if (plant.image_url) {
     return plant.image_url
   }
 
-  // Priority 4: Category-specific fallback image (sync)
+  // Priority 4: Try service-resolved imagePath via backend proxies
+  if (plant.imagePath) {
+    const p = plant.imagePath
+    const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+    const candidates = [
+      `${primaryUrl}/api/v1/plant-image/${encodeURIComponent(p)}`,
+      `${primaryUrl}/api/v1/plant-image?path=${encodeURIComponent(p)}`,
+      `${primaryUrl}/api/v1/images/${encodeURIComponent(p)}`,
+      `${primaryUrl}/static/${p}`,
+      `${primaryUrl}/media/${p}`
+    ]
+    return candidates[0]
+  }
+
+  // Priority 5: Category-specific fallback image (sync)
   if (plant.category) {
     const c = plant.category.toLowerCase()
     if (c === 'flower') return '/Flower.jpg'
