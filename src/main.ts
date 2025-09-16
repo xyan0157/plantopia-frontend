@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { usePlantsStore } from '@/stores/plants'
+import { useGuidesStore } from '@/stores/guides'
 
 // Import Bootstrap CSS and JS
 import 'bootstrap/dist/css/bootstrap.min.css'
@@ -18,8 +19,16 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 
-// Kick off preload but don't block mounting
-const store = usePlantsStore(pinia)
-store.ensureLoaded()
+// Load developer utilities in dev only (side-effect import to expose window helpers)
+if (import.meta.env.DEV) {
+  import('@/utils/missingImages')
+}
+
+// Kick off preload but do not block mounting
+const plantsStore = usePlantsStore(pinia)
+plantsStore.ensureLoaded()
+
+const guidesStore = useGuidesStore(pinia)
+guidesStore.ensureLoaded()
 
 app.mount('#app')

@@ -44,6 +44,13 @@
                   <div class="guide-card-title">{{ toLabel(c.name || c.slug) }}</div>
                   <div class="guide-card-desc">Browse articles in {{ toLabel(c.name || c.slug) }}</div>
                   <div class="guide-card-meta">{{ c.file_count ? c.file_count + ' files' : '' }}</div>
+                  <button
+                    class="guide-card-cta"
+                    @pointerdown.stop
+                    @click.stop="openCategory(c.slug)"
+                  >
+                    Browse guides
+                  </button>
                 </div>
               </div>
             </div>
@@ -51,7 +58,7 @@
 
           <!-- Category detail: back + search + list -->
           <div v-else>
-            <button class="back-btn" @click="backToCategories">← Back</button>
+            <button class="back-btn" @click="backToCategories">&larr; Back</button>
             <h2 class="category-title">{{ toLabel(selectedCategory) }}</h2>
             <div class="search-bar">
               <div class="search-input-group">
@@ -69,11 +76,26 @@
               <div v-if="loading" class="placeholder-text">Loading guides...</div>
               <div v-else-if="error" class="placeholder-text">{{ error }}</div>
               <ul v-else class="guide-list">
-                <li v-for="f in filteredFiles" :key="f.filename" class="guide-item">
+                <li v-for="f in filteredFiles" :key="f.filename" class="guide-item" @click="openFile(f)">
                   <div class="guide-title">{{ f.title || f.filename }}</div>
                   <div class="guide-meta">{{ f.file_path }}</div>
                 </li>
               </ul>
+            </div>
+
+            <!-- File Modal -->
+            <div v-if="showModal" class="guide-modal" @click.self="closeModal">
+              <div class="guide-modal-dialog" role="dialog" aria-modal="true">
+                <div class="guide-modal-header">
+                  <div class="guide-modal-title">{{ (activeFile && (activeFile.title || activeFile.filename)) || '' }}</div>
+                  <button class="guide-modal-close" @click="closeModal" aria-label="Close">&times;</button>
+                </div>
+                <div class="guide-modal-body">
+                  <div v-if="fileLoading" class="placeholder-text">Loading article...</div>
+                  <div v-else-if="fileError" class="placeholder-text">{{ fileError }}</div>
+                  <div v-else class="markdown-content" v-html="renderedContent"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -83,14 +105,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
-import { markdownApiService, type MarkdownFilesByCategoryResponse, type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
+import { renderMarkdown } from '@/services/markdownService'
+import { useGuidesStore } from '@/stores/guides'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const files = ref<MarkdownFileSummary[]>([])
-const categories = ref<MarkdownCategory[]>([])
+const guides = useGuidesStore()
+const categories = computed<MarkdownCategory[]>(() => guides.categories)
 const selectedCategory = ref<string>('')
 const mode = ref<'categories' | 'category'>('categories')
 const activeIndex = ref(0)
@@ -110,21 +135,17 @@ onMounted(async () => {
   loading.value = true
   error.value = null
   try {
-    const catResp = await markdownApiService.listCategories()
-    categories.value = catResp.categories || []
-  } catch (e: any) {
-    // Fallback categories if API unavailable
-    categories.value = [
-      { name: 'Grow Guide', slug: 'grow-guide' } as any,
-      { name: 'Soil', slug: 'soil' } as any,
-      { name: 'Pest Guide', slug: 'pest-guide' } as any,
-    ]
+    await guides.ensureLoaded()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load guides'
   } finally {
     loading.value = false
   }
 })
 
 async function openCategory(slug: string) {
+  // if it was a drag, ignore the click
+  if (isDragging.value || dragMoved) return
   selectedCategory.value = slug
   mode.value = 'category'
   await loadFilesForSelected()
@@ -134,10 +155,14 @@ async function loadFilesForSelected() {
   loading.value = true
   error.value = null
   try {
-    const resp = await markdownApiService.listFilesByCategory(selectedCategory.value)
-    files.value = resp.files || []
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load guides'
+    // Use cached if present, otherwise fetch
+    const cached = guides.getCategoryFiles(selectedCategory.value)
+    if (!cached || cached.length === 0) {
+      await guides.getFiles(selectedCategory.value)
+    }
+    files.value = guides.getCategoryFiles(selectedCategory.value)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load guides'
   } finally {
     loading.value = false
   }
@@ -149,10 +174,7 @@ function backToCategories() {
   files.value = []
 }
 
-const snippet = (s: string) => {
-  const t = s.replace(/[#*>`\-\n]/g, ' ').replace(/\s+/g, ' ').trim()
-  return t.length > 220 ? t.slice(0, 220) + '…' : t
-}
+//
 
 const toLabel = (s: string) => s.replace(/-/g, ' ')
 
@@ -180,20 +202,12 @@ function onPointerMove(e: PointerEvent) {
   updateActive()
 }
 
-function onPointerUp(e: PointerEvent) {
+function onPointerUp() {
   if (!isDragging.value) return
   isDragging.value = false
-  // If drag happened, temporarily swallow the next click on cards to avoid opening
-  if (dragMoved && sliderRef.value) {
-    const slider = sliderRef.value
-    const onClick = (evt: MouseEvent) => {
-      evt.stopPropagation()
-      evt.preventDefault()
-      slider.removeEventListener('click', onClick, true)
-    }
-    slider.addEventListener('click', onClick, true)
-  }
   snapToNearest()
+  // reset drag flag after finishing drag
+  dragMoved = false
 }
 
 function onSliderScroll() {
@@ -249,14 +263,60 @@ onMounted(() => {
       }
     }
   })
+  window.addEventListener('keydown', onKeydown)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
+
+// File modal state and actions
+const showModal = ref(false)
+const activeFile = ref<MarkdownFileSummary | null>(null)
+const fileLoading = ref(false)
+const fileError = ref<string | null>(null)
+const renderedContent = ref('')
+
+async function openFile(f: MarkdownFileSummary) {
+  activeFile.value = f
+  showModal.value = true
+  await loadActiveFile()
+}
+
+async function loadActiveFile() {
+  if (!activeFile.value) return
+  fileLoading.value = true
+  fileError.value = null
+  try {
+    const content = await guides.getFileContent(selectedCategory.value, activeFile.value.filename)
+    renderedContent.value = renderMarkdown(content)
+  } catch (e) {
+    fileError.value = e instanceof Error ? e.message : 'Failed to load article'
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+function closeModal() {
+  showModal.value = false
+  renderedContent.value = ''
+  fileError.value = null
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && showModal.value) {
+    e.preventDefault()
+    closeModal()
+  }
+}
 </script>
 
 <style scoped>
 .guides-page {
-  min-height: 100vh;
+  height: 100vh;
   position: relative;
   background: transparent !important;
+  overflow: hidden;
 }
 
 .guides-bg {
@@ -374,8 +434,9 @@ onMounted(() => {
 /* Horizontal slider large card */
 .slider-card { background: transparent; border-radius: 1rem; padding: 1rem; box-shadow: none; }
 .slider { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; cursor: grab; 
-  /* Keep first card centered by adding equal side paddings matching remaining space */
-  --card-width: min(960px, calc(100% - 320px));
+  /* Slightly larger cards: about 2.7 per viewport with bounds */
+  --card-width: clamp(320px, calc((100% - 2rem) / 2.7), 640px);
+  /* Side paddings keep the first card centered in the page */
   padding: 0 calc((100% - var(--card-width)) / 2) 0.5rem;
 }
 .slider.dragging { cursor: grabbing; user-select: none; }
@@ -389,4 +450,37 @@ onMounted(() => {
 .guide-card-title { font-size: 1.5rem; font-weight: 800; color: #93c5fd; margin-bottom: 0.75rem; }
 .guide-card-desc { color: #e5e7eb; line-height: 1.5; flex: 1; }
 .guide-card-meta { color: #9ca3af; font-size: 0.875rem; margin-top: 0.75rem; }
+
+.guide-card-cta {
+  align-self: flex-start;
+  margin-top: auto;
+  background: #10b981;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.5rem 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(16,185,129,0.35);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.guide-card-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
+.guide-card-cta:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
+
+/* Make list items clickable */
+.guide-item { cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+.guide-item:hover { background: #f9fafb; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+/* Modal styles */
+.guide-modal { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.guide-modal-dialog { width: min(960px, 100%); max-height: 85vh; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35); display: flex; flex-direction: column; }
+.guide-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+.guide-modal-title { font-weight: 700; color: #065f46; }
+.guide-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
+.guide-modal-body { padding: 1rem 1.25rem; overflow: auto; }
+
+/* Basic markdown formatting inside modal */
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
+.markdown-content pre { background: #0b1020; color: #e5e7eb; padding: .75rem; border-radius: 8px; overflow: auto; }
+.markdown-content code { background: #f3f4f6; padding: .15rem .35rem; border-radius: 4px; }
 </style>
