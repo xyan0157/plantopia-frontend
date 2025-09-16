@@ -28,6 +28,7 @@ export interface ApiPlantRecommendation {
     season_label: string
   }
   media: {
+    image_url?: string     // Direct URL from backend (with special character fixes)
     image_path: string
     image_base64?: string  // Base64 encoded image data
     drive_url?: string     // Google Drive URL
@@ -723,19 +724,25 @@ export class PlantRecommendationService {
   private getImageUrl(apiPlant: ApiPlantRecommendation): string {
     /**
      * Get the best available image URL with fallback priority:
-     * 1. Explicit image_path from backend (served via GCS base)
-     * 2. Base64 data (if available)
-     * 3. Google Drive URL
-     * 4. Victoria Plants Data image (derived path)
-     * 5. Category-specific fallback image
+     * 1. Backend-provided direct URL (highest priority)
+     * 2. Explicit image_path from backend (served via GCS base)
+     * 3. Base64 data (if available)
+     * 4. Google Drive URL
+     * 5. Victoria Plants Data image (derived path)
+     * 6. Category-specific fallback image
      */
-    // First priority: Direct path from backend (GCS)
+    // First priority: Backend-provided direct URL (with special character fixes)
+    if (apiPlant.media?.image_url) {
+      return apiPlant.media.image_url
+    }
+
+    // Second priority: Direct path from backend (GCS)
     if (apiPlant.media?.image_path) {
       const direct = this.buildGcsImageUrl(apiPlant.media.image_path)
       if (direct) return direct
     }
 
-    // Second priority: Base64 data
+    // Third priority: Base64 data
     if (apiPlant.media.image_base64) {
       return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
     }
