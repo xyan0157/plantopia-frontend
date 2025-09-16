@@ -371,11 +371,12 @@ const filteredPlants = computed(() => {
   // Filter by search query
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase().trim()
-    filtered = filtered.filter(plant =>
-      plant.name.toLowerCase().includes(query) ||
-      plant.scientific_name.toLowerCase().includes(query) ||
-      plant.tags?.some(tag => tag.toLowerCase().includes(query))
-    )
+    filtered = filtered.filter(plant => {
+      const name = (plant.name || '').toLowerCase()
+      const sci = (plant.scientific_name || '').toLowerCase()
+      const tags = (plant.tags || []).map(t => (t || '').toLowerCase())
+      return name.includes(query) || sci.includes(query) || tags.some(t => t.includes(query))
+    })
   }
 
   return filtered
@@ -711,6 +712,8 @@ onMounted(() => {
   display: flex;
   gap: 0.5rem;
 }
+
+/* search button removed */
 
 .filter-btn {
   padding: 0.5rem 1rem;
