@@ -43,7 +43,6 @@
                 <div class="guide-card-content">
                   <div class="guide-card-title">{{ toLabel(c.name || c.slug) }}</div>
                   <div class="guide-card-desc">Browse articles in {{ toLabel(c.name || c.slug) }}</div>
-                  <div class="guide-card-meta">{{ c.file_count ? c.file_count + ' files' : '' }}</div>
                   <button
                     class="guide-card-cta"
                     @pointerdown.stop
@@ -434,8 +433,8 @@ function onKeydown(e: KeyboardEvent) {
 /* Horizontal slider large card */
 .slider-card { background: transparent; border-radius: 1rem; padding: 1rem; box-shadow: none; }
 .slider { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; cursor: grab; 
-  /* Slightly larger cards: about 2.7 per viewport with bounds */
-  --card-width: clamp(320px, calc((100% - 2rem) / 2.7), 640px);
+  /* Slightly narrower than previous (about 1.8 cards per viewport) */
+  --card-width: clamp(520px, calc((100% - 2rem) / 1.8), 1000px);
   /* Side paddings keep the first card centered in the page */
   padding: 0 calc((100% - var(--card-width)) / 2) 0.5rem;
 }
@@ -452,16 +451,17 @@ function onKeydown(e: KeyboardEvent) {
 .guide-card-meta { color: #9ca3af; font-size: 0.875rem; margin-top: 0.75rem; }
 
 .guide-card-cta {
-  align-self: flex-start;
-  margin-top: auto;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
   background: #10b981;
   color: #ffffff;
   border: none;
-  border-radius: 10px;
-  padding: 0.5rem 0.875rem;
-  font-weight: 700;
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 6px 14px rgba(16,185,129,0.35);
+  box-shadow: 0 8px 18px rgba(16,185,129,0.4);
   transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
 .guide-card-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
