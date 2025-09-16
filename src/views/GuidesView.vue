@@ -6,8 +6,8 @@
     <div class="top-section">
       <div class="container-xl">
         <div class="page-header">
-          <h1 class="page-title">Climate Gardening Guides</h1>
-          <p class="page-subtitle">Learn how to grow smarter for your climate</p>
+          <h1 class="page-title">{{ mode === 'categories' ? 'Climate Gardening Guides' : toLabel(selectedCategory) }}</h1>
+          <p v-if="mode === 'categories'" class="page-subtitle">Learn how to grow smarter for your climate</p>
         </div>
       </div>
     </div>
@@ -58,7 +58,6 @@
           <!-- Category detail: back + search + list -->
           <div v-else>
             <button class="back-btn" @click="backToCategories">&larr; Back</button>
-            <h2 class="category-title">{{ toLabel(selectedCategory) }}</h2>
             <div class="search-bar">
               <div class="search-input-group">
                 <input
@@ -410,7 +409,7 @@ function onKeydown(e: KeyboardEvent) {
 .cat-cta { position: absolute; bottom: 20px; left: 20px; color: white; border: 2px solid rgba(255,255,255,0.8); padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; backdrop-filter: blur(2px); }
 
 .back-btn { margin-bottom: 1rem; background: transparent; border: 2px solid #e5e7eb; border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; color: #374151; }
-.category-title { color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3); margin-bottom: 0.75rem; }
+.category-title { display:none; }
 
 .content-card {
   background: rgba(255, 255, 255, 0.9);
