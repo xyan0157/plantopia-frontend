@@ -275,7 +275,7 @@ const getImageSource = (): string => {
   // 1) Legacy base64 field
   if (props.plant.imageData) return props.plant.imageData.startsWith('data:') ? props.plant.imageData : `data:image/jpeg;base64,${props.plant.imageData}`
 
-  // 2) API-provided image_url (recommendation engine usually provides this)
+  // 2) API-provided image_url (backend now provides; prefer any host)
   const imageUrl = (props.plant as any).image_url as string | undefined
   if (imageUrl) return imageUrl
 

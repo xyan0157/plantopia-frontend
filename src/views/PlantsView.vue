@@ -97,7 +97,8 @@
                     <!-- Show Google Drive image if available -->
                     <img
                       v-if="!hasImageError(plant.id)"
-                      :src="getPlantImageSrc(plant)"
+                      :src="getPlantImage(plant).src"
+                      :data-src-step="getPlantImage(plant).step"
                       :alt="plant.name"
                       @error="(event) => handleImageError(event, plant.id)"
                     >
@@ -206,8 +207,8 @@
           <div class="plant-detail-image">
             <!-- Show Google Drive image if available -->
             <img
-              v-if="selectedPlant?.has_image && !hasImageError(selectedPlant?.id || '')"
-              :src="getPlantImageSrc(selectedPlant)"
+              v-if="!hasImageError(selectedPlant?.id || '')"
+              :src="getPlantImage(selectedPlant).src"
               :alt="selectedPlant?.name"
               @error="(event) => selectedPlant && handleImageError(event, selectedPlant.id)"
             >
@@ -477,29 +478,25 @@ const closeModal = () => {
   selectedPlant.value = null
 }
 
-// Function to get image source (Base64 or URL) - following RecommendationsView pattern
-const getPlantImageSrc = (plant: Plant): string => {
-  // Priority 1: Use Google Drive URL from API if available
-  if (plant.image_url && plant.image_url.includes('drive.google.com')) {
-    return plant.image_url
-  }
-
-  // Priority 2: Legacy Base64 support (for backwards compatibility)
-  if (plant.image_base64) {
-    // Check if it's already a data URL
-    if (plant.image_base64.startsWith('data:')) {
-      return plant.image_base64
-    }
-    // If it's just the base64 string, add the data URL prefix
-    return `data:image/jpeg;base64,${plant.image_base64}`
-  }
-
-  // Priority 3: Legacy image URL support or service-resolved GCS path
+// Get image + debug step info for diagnostics
+const getPlantImage = (plant: Plant): { src: string; step: string } => {
+  // 1) backend image_url
   if (plant.image_url) {
-    return plant.image_url
+    const src = plant.image_url
+    console.debug('[IMG PICK] step=1 image_url', plant.name, src)
+    return { src, step: '1-image_url' }
   }
 
-  // Priority 4: Try service-resolved imagePath via backend proxies
+  // 2) base64
+  if (plant.image_base64) {
+    const src = plant.image_base64.startsWith('data:')
+      ? plant.image_base64
+      : `data:image/jpeg;base64,${plant.image_base64}`
+    console.debug('[IMG PICK] step=2 base64', plant.name)
+    return { src, step: '2-base64' }
+  }
+
+  // 3) proxy candidates from imagePath
   if (plant.imagePath) {
     const p = plant.imagePath
     const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
@@ -510,25 +507,31 @@ const getPlantImageSrc = (plant: Plant): string => {
       `${primaryUrl}/static/${p}`,
       `${primaryUrl}/media/${p}`
     ]
-    return candidates[0]
+    console.debug('[IMG PICK] step=3 imagePath-proxy (first candidate)', plant.name, candidates[0])
+    return { src: candidates[0], step: '3-imagePath-proxy' }
   }
 
-  // Priority 5: Category-specific fallback image (sync)
+  // 4) category placeholder
   if (plant.category) {
     const c = plant.category.toLowerCase()
-    if (c === 'flower') return '/Flower.jpg'
-    if (c === 'herb') return '/Herb.jpg'
-    if (c === 'vegetable') return '/Vegetable.jpg'
+    const src = c === 'flower' ? '/Flower.jpg' : c === 'herb' ? '/Herb.jpg' : c === 'vegetable' ? '/Vegetable.jpg' : '/placeholder-plant.svg'
+    console.debug('[IMG PICK] step=4 category-placeholder', plant.name, src)
+    return { src, step: '4-category-placeholder' }
   }
 
-  // Final fallback to placeholder
-  return '/placeholder-plant.svg'
+  // 5) generic placeholder
+  console.debug('[IMG PICK] step=5 generic-placeholder', plant.name)
+  return { src: '/placeholder-plant.svg', step: '5-generic-placeholder' }
 }
 
 // Handle image loading errors - using Google Drive helper
 const handleImageError = (event: Event, plantId: string) => {
   const img = event.target as HTMLImageElement
   console.warn('[PLANTS VIEW] Failed to load plant image:', img.src)
+  const step = (img as any).dataset?.srcStep
+  if (step) {
+    console.warn('[PLANTS VIEW] Image load failed at step:', step)
+  }
 
   // Track this plant as having image error
   imageErrors.value.add(plantId)
@@ -1041,11 +1044,12 @@ onMounted(() => {
 .modal-content {
   background: white;
   border-radius: 16px;
-  max-width: 600px;
-  width: 100%;
+  max-width: 1200px;
+  width: 95%;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
 .modal-header {
@@ -1083,32 +1087,43 @@ onMounted(() => {
 }
 
 .plant-detail-image {
-  width: 100%;
-  height: 250px;
+  width: fit-content;
+  max-width: 100%;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #a7f3d0;
+  margin: 0 auto 1rem auto;
+  padding: 0.5rem;
   overflow: hidden;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
 }
 
 .plant-detail-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 250px;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 0.875rem;
+  display: block;
 }
 
 .plant-detail-image .image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-radius: 8px;
+  color: #059669;
+  text-align: center;
 }
 
-.plant-detail-image .placeholder-icon {
-  font-size: 2rem;
-}
+.plant-detail-image .placeholder-icon { font-size: 2rem; }
 
-.plant-detail-image .placeholder-text {
-  font-size: 1rem;
-}
+.plant-detail-image .placeholder-text { font-size: 1rem; }
 
 .scientific-name {
   font-style: italic;

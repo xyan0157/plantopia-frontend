@@ -12,14 +12,14 @@
 
 
       <div class="button-group">
-        <button class="btn-primary" @click="$emit('navigate-to-recommendations')">
-          <img src="@/assets/icons/leaf-2.png" alt="plant" class="btn-icon" />
-          Get Plant Recommendations
+        <button class="btn-primary" @click="$emit('navigate-to-my-impact')">
+          <img src="@/assets/icons/leaf-2.png" alt="impact" class="btn-icon" />
+          My Impact
           <ArrowRightIcon class="btn-arrow" />
         </button>
-        <button class="btn-secondary" @click="$emit('navigate-to-guides')">
+        <button class="btn-secondary" @click="$emit('navigate-to-dashboard')">
           <BookOpenIcon class="btn-icon" />
-          Browse Guides
+          Dashboard
         </button>
       </div>
     </div>
@@ -36,8 +36,8 @@
 import { BookOpenIcon, ArrowRightIcon, ChevronDownIcon } from '@heroicons/vue/24/outline'
 
 defineEmits<{
-  'navigate-to-recommendations': []
-  'navigate-to-guides': []
+  'navigate-to-my-impact': []
+  'navigate-to-dashboard': []
   'scroll-to-content': []
   'heat-toggle': [boolean]
 }>()

@@ -53,16 +53,16 @@ const loadHistory = () => {
 const getImageSource = (plant: Plant): string => {
   if (!plant) return ''
   
-  // 0) New API base64
+  // 0) Backend-provided image_url first
+  const url = (plant as any).image_url as string | undefined
+  if (url) return url
+
+  // 1) New API base64
   const imageBase64 = (plant as any).image_base64 as string | undefined
   if (imageBase64) return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
 
-  // 1) Legacy base64
+  // 2) Legacy base64
   if (plant.imageData) return plant.imageData.startsWith('data:') ? plant.imageData : `data:image/jpeg;base64,${plant.imageData}`
-
-  // 2) API image_url
-  const imageUrl = (plant as any).image_url as string | undefined
-  if (imageUrl) return imageUrl
 
   // 3) Relative path
   if (plant.imagePath) return getImageUrl(plant.imagePath)

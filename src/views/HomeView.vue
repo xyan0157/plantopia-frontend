@@ -26,8 +26,8 @@
     <Transition name="fade-in" appear>
       <HeroSection
         v-show="showContent"
-        @navigate-to-recommendations="goToRecommendations"
-        @navigate-to-guides="goToGuides"
+        @navigate-to-my-impact="goToMyImpact"
+        @navigate-to-dashboard="goToDashboard"
         @scroll-to-content="scrollToContent"
         @heat-toggle="toggleHeatMode"
       />
@@ -138,8 +138,8 @@ const goToPlants = (category: 'flowers' | 'vegetables' | 'herbs') => {
   setTimeout(() => window.scrollTo({ top: 0, behavior: 'auto' }), 0)
 }
 
-const goToGuides = () => {
-  router.push('/guides')
+const goToMyImpact = () => {
+  router.push('/my-impact')
 }
 
 const goToDashboard = () => {

@@ -763,6 +763,12 @@ export class PlantRecommendationService {
     /**
      * Get the best available image URL for /plants endpoint
      */
+    // 0) Backend-provided direct URL (highest priority if present)
+    const providedUrl = (apiPlant as any)?.media?.image_url || (apiPlant as any)?.image_url
+    if (providedUrl) {
+      return String(providedUrl)
+    }
+
     // 1) Base64 from API
     if (apiPlant.media?.image_base64) {
       return `data:image/jpeg;base64,${apiPlant.media.image_base64}`
