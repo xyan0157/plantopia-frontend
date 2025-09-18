@@ -1,28 +1,22 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
-import { useAuthStore } from './stores/auth'
+// import { useAuthStore } from './stores/auth'
 import {
   HomeIcon,
   MagnifyingGlassIcon,
   BookOpenIcon,
   ChartBarIcon,
-  TrophyIcon,
   BeakerIcon,
-  ArrowRightOnRectangleIcon,
 } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
-const router = useRouter()
-const authStore = useAuthStore()
+// auth and router not required after removing logout/my-impact
 
 const isDarkNavbar = computed(() => false)
 const showNavbar = computed(() => route.name !== 'login')
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
+// removed logout
 </script>
 
 <template>
@@ -63,18 +57,7 @@ const handleLogout = () => {
               Dashboard
             </RouterLink>
           </li>
-          <li class="nav-item">
-            <RouterLink to="/my-impact" class="nav-link">
-              <TrophyIcon class="nav-icon" />
-              My Impact
-            </RouterLink>
-          </li>
-          <li class="nav-item">
-            <button @click="handleLogout" class="nav-link logout-button">
-              <ArrowRightOnRectangleIcon class="nav-icon" />
-              Logout
-            </button>
-          </li>
+          
         </ul>
       </div>
     </nav>

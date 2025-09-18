@@ -5,7 +5,7 @@ import RecommendationsView from '../views/RecommendationsView.vue'
 import PlantsView from '../views/PlantsView.vue'
 import GuidesView from '../views/GuidesView.vue'
 import DashboardView from '../views/DashboardView.vue'
-import MyImpactView from '../views/MyImpactView.vue'
+// import MyImpactView from '../views/MyImpactView.vue'
 
 // Helper function to check authentication
 const isAuthenticated = (): boolean => {
@@ -49,12 +49,6 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardView,
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/my-impact',
-      name: 'my-impact',
-      component: MyImpactView,
       meta: { requiresAuth: true }
     },
   ],
