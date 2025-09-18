@@ -145,6 +145,46 @@ export interface ApiRecommendationRequest {
   }
 }
 
+// Quantify Plant Impact API
+export interface ApiQuantifyRequest {
+  plant_name: string
+  suburb?: string
+  climate_zone?: string
+  plant_count?: number
+  user_preferences: Record<string, unknown>
+}
+
+export interface ApiQuantifiedImpact {
+  temperature_reduction_c: number
+  air_quality_points: number
+  co2_absorption_kg_year: number
+  water_processed_l_week: number
+  pollinator_support: string
+  edible_yield: string | null
+  maintenance_time: string
+  water_requirement: string
+  risk_badge: string
+  confidence_level: string
+  why_this_plant: string
+  community_impact_potential: string | null
+}
+
+export interface ApiSuitabilityScore {
+  total_score: number
+  breakdown: Record<string, number>
+}
+
+export interface ApiQuantifyResponse {
+  plant_name: string
+  scientific_name?: string | null
+  plant_category: string
+  quantified_impact: ApiQuantifiedImpact
+  suitability_score: ApiSuitabilityScore
+  suburb: string
+  climate_zone: string
+  plant_count: number
+}
+
 // Frontend Plant interface (transformed from API response)
 export interface Plant {
   id: string
@@ -345,6 +385,29 @@ export class PlantRecommendationService {
       console.error('[ERROR] Message:', error instanceof Error ? error.message : 'Unknown error')
       console.error('[ERROR] Stack:', error instanceof Error ? error.stack : 'No stack trace')
       console.groupEnd()
+      throw error
+    }
+  }
+
+  // Quantify plant impact endpoint
+  async quantifyPlantImpact(request: ApiQuantifyRequest): Promise<ApiQuantifyResponse> {
+    try {
+      console.group('[PLANT API] Quantify Plant Impact Request')
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/quantify-plant`)
+      console.log('[REQUEST] Method:', 'POST')
+      console.log('[REQUEST] Body:', request)
+      console.groupEnd()
+
+      const response = await this.fetchWithFallback('/api/v1/quantify-plant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+
+      const data = await response.json()
+      return data as ApiQuantifyResponse
+    } catch (error) {
+      console.error('[PLANT API] quantifyPlantImpact error:', error)
       throw error
     }
   }

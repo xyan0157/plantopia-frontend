@@ -40,6 +40,7 @@
             <div class="recommendation-score" v-if="plant.score">
               <span class="score-label">Recommendation Score:</span>
               <span class="score-value">{{ plant.score.toFixed(1) }}/100</span>
+              <button class="impact-btn" @click="openImpact">View Impact</button>
             </div>
           </div>
 
@@ -213,6 +214,70 @@
       </div>
     </div>
   </div>
+
+  <!-- Impact Modal (inside detail modal) -->
+  <div v-if="showImpact" class="impact-overlay" @click.self="closeImpact">
+    <div class="impact-card" role="dialog" aria-modal="true">
+      <div class="impact-card-header">
+        <div class="impact-title">Quantified Impact</div>
+        <button class="impact-close" @click="closeImpact" aria-label="Close">&times;</button>
+      </div>
+      <div class="impact-body">
+        <div v-if="impactLoading" class="placeholder-text">Loading impact...</div>
+        <div v-else-if="impactError" class="placeholder-text">{{ impactError }}</div>
+        <div v-else-if="impactData" class="impact-grid">
+          <div class="impact-item">
+            <div class="impact-item-label">Temperature Reduction</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.temperature_reduction_c }} °C</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Air Quality Points</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.air_quality_points }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">CO2 Absorption</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.co2_absorption_kg_year }} kg/year</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Water Processed</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.water_processed_l_week }} L/week</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Confidence</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.confidence_level }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Pollinator Support</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.pollinator_support }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Maintenance Time</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.maintenance_time }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Water Requirement</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.water_requirement }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Risk</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.risk_badge }}</div>
+          </div>
+          <div class="impact-item wide">
+            <div class="impact-item-label">Why This Plant</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.why_this_plant }}</div>
+          </div>
+          <div v-if="impactData.quantified_impact.community_impact_potential" class="impact-item wide">
+            <div class="impact-item-label">Community Impact</div>
+            <div class="impact-item-value">{{ impactData.quantified_impact.community_impact_potential }}</div>
+          </div>
+          <div class="impact-item">
+            <div class="impact-item-label">Suitability Score</div>
+            <div class="impact-item-value">{{ impactData.suitability_score.total_score }}/100</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -223,6 +288,8 @@ import type { Plant } from '@/services/api'
 import { addToViewHistory } from '@/services/viewHistory'
 import ViewHistory from './ViewHistory.vue'
 import { renderMarkdown } from '@/services/markdownService'
+import { plantApiService } from '@/services/api'
+import { useRecommendationsStore } from '@/stores/recommendations'
 
 // Component props - receives plant data or null when modal is closed
 const props = defineProps<{
@@ -236,6 +303,7 @@ const emit = defineEmits<{
 }>()
 // Router for navigation to Guides
 const router = useRouter()
+const recStore = useRecommendationsStore()
 
 function goToGuides() {
   router.push('/guides')
@@ -270,6 +338,44 @@ watch(() => props.plant, (newPlant) => {
 // Handle plant selection from history
 const handleHistoryPlantSelect = (plant: Plant) => {
   emit('select-plant', plant)
+}
+
+// Impact modal state
+const showImpact = ref(false)
+const impactLoading = ref(false)
+const impactError = ref<string | null>(null)
+import type { ApiQuantifyResponse } from '@/services/api'
+const impactData = ref<ApiQuantifyResponse | null>(null)
+
+function openImpact() {
+  showImpact.value = true
+  if (!impactData.value) {
+    fetchImpact()
+  }
+}
+
+function closeImpact() {
+  showImpact.value = false
+}
+
+async function fetchImpact() {
+  if (!props.plant) return
+  impactLoading.value = true
+  impactError.value = null
+  try {
+    const res = await plantApiService.quantifyPlantImpact({
+      plant_name: props.plant.name,
+      suburb: recStore.lastParams?.location || 'Richmond',
+      climate_zone: undefined,
+      plant_count: 1,
+      user_preferences: {},
+    })
+    impactData.value = res
+  } catch (e) {
+    impactError.value = e instanceof Error ? e.message : 'Failed to load impact'
+  } finally {
+    impactLoading.value = false
+  }
 }
 
 // Function to get image source (Base64 or URL)
@@ -495,6 +601,21 @@ const formatSunlight = (sunlight: string): string => {
   border: 2px solid #a7f3d0;
 }
 
+.impact-btn {
+  margin-left: 0.5rem;
+  background: linear-gradient(135deg, #10b981, #22c55e);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.45rem 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.4);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.impact-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
+.impact-btn:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -719,6 +840,19 @@ const formatSunlight = (sunlight: string): string => {
 .guidance-video-link:hover {
   color: #065f46;
 }
+
+/* Impact modal */
+.impact-overlay { position: fixed; inset: 0; z-index: 120; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.impact-card { width: min(900px, 96%); background: #ffffff; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.35); overflow: hidden; }
+.impact-card-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+.impact-title { font-weight: 700; color: #065f46; }
+.impact-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
+.impact-body { padding: 1rem 1.25rem; }
+.impact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.impact-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; }
+.impact-item.wide { grid-column: 1 / -1; }
+.impact-item-label { font-size: 0.85rem; font-weight: 600; color: #047857; margin-bottom: 0.25rem; }
+.impact-item-value { color: #065f46; }
 
 .w-5 {
   width: 1.25rem;
