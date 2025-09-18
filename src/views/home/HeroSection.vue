@@ -50,7 +50,7 @@ defineEmits<{
   display: flex;
   align-items: flex-start; /* Change to top alignment */
   justify-content: center;
-  padding-top: 5px; /* Further reduce top spacing, move hero section up */
+  padding-top: 5px; /* Revert: do not push text down */
   z-index: 10; /* Increase z-index to ensure display above video */
 }
 
@@ -231,7 +231,7 @@ defineEmits<{
 
 @media (max-width: 768px) {
   .hero-section {
-    padding-top: 10px; /* Further reduce top spacing on mobile */
+    padding-top: 10px;
   }
   
   .main-title {

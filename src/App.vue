@@ -92,10 +92,18 @@ const handleLogout = () => {
   box-sizing: border-box;
 }
 
+/* Revert to original layout without global nav height variable */
+
 body {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background: #f9fafb;
   min-height: 100vh;
+}
+
+/* Globally disable vertical scroll when guides category page requests it */
+html.no-vertical-scroll, body.no-vertical-scroll {
+  overflow-y: hidden !important;
+  height: 100%;
 }
 
 #app {
@@ -118,6 +126,8 @@ body {
     0 1px 3px 0 rgba(0, 0, 0, 0.1),
     0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
+
+/* removed translucent overlay style; using navbar-dark when scrolled */
 
 .nav-container {
   max-width: 100%;
@@ -224,6 +234,12 @@ body {
 
 .main-content {
   min-height: calc(100vh - 80px);
+}
+
+/* Create a stacking context so content cannot visually overlap the sticky navbar when scrolled under it */
+.main-content.scrolled {
+  position: relative;
+  z-index: 0;
 }
 
 .main-content.no-navbar {

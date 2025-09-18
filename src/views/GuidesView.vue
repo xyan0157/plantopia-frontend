@@ -1,5 +1,5 @@
 <template>
-  <div class="guides-page">
+  <div class="guides-page" :class="mode === 'categories' ? 'category-mode' : 'detail-mode'">
     <div class="guides-bg"></div>
 
     <!-- Top Section: Centered Big Title -->
@@ -48,7 +48,7 @@
                     @pointerdown.stop
                     @click.stop="openCategory(c.slug)"
                   >
-                    Browse guides
+                    Browse Guides
                   </button>
                 </div>
               </div>
@@ -57,20 +57,21 @@
 
           <!-- Category detail: back + search + list -->
           <div v-else>
-            <button class="back-btn" @click="backToCategories">&larr; Back</button>
-            <div class="search-bar">
-              <div class="search-input-group">
-                <input
-                  type="text"
-                  class="form-control search-input"
-                  placeholder="Search guides..."
-                  v-model="searchQuery"
-                  @input="handleSearch"
-                >
+            <div class="narrow">
+              <button class="back-btn" @click="backToCategories">&larr; Back</button>
+              <div class="search-bar">
+                <div class="search-input-group">
+                  <input
+                    type="text"
+                    class="form-control search-input"
+                    placeholder="Search guides..."
+                    v-model="searchQuery"
+                    @input="handleSearch"
+                  >
+                </div>
               </div>
-            </div>
 
-            <div class="content-card">
+              <div class="content-card">
               <div v-if="loading" class="placeholder-text">Loading guides...</div>
               <div v-else-if="error" class="placeholder-text">{{ error }}</div>
               <ul v-else class="guide-list">
@@ -79,6 +80,7 @@
                   <div class="guide-meta">{{ f.file_path }}</div>
                 </li>
               </ul>
+              </div>
             </div>
 
             <!-- File Modal -->
@@ -103,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
 import { renderMarkdown } from '@/services/markdownService'
 import { useGuidesStore } from '@/stores/guides'
@@ -174,7 +176,16 @@ function backToCategories() {
 
 //
 
-const toLabel = (s: string) => s.replace(/-/g, ' ')
+const toLabel = (s: string) => {
+  const words = s
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  return words
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 
 // drag-to-scroll state and handlers
 const sliderRef = ref<HTMLElement | null>(null)
@@ -268,6 +279,28 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
+// Lock body scroll in categories mode
+function setGlobalScrollLock(locked: boolean) {
+  const cls = 'no-vertical-scroll'
+  const targets = [document.documentElement, document.body]
+  targets.forEach(el => {
+    if (locked) el.classList.add(cls)
+    else el.classList.remove(cls)
+  })
+}
+
+watch(mode, (m) => {
+  setGlobalScrollLock(m === 'categories')
+})
+
+onMounted(() => {
+  setGlobalScrollLock(mode.value === 'categories')
+})
+
+onUnmounted(() => {
+  setGlobalScrollLock(false)
+})
+
 // File modal state and actions
 const showModal = ref(false)
 const activeFile = ref<MarkdownFileSummary | null>(null)
@@ -311,10 +344,22 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .guides-page {
-  height: 100vh;
+  min-height: 100vh;
   position: relative;
   background: transparent !important;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* In categories (card slider) mode, lock the page height and disable vertical scroll */
+.guides-page.category-mode { height: calc(100vh - 80px); overflow: hidden; }
+
+/* In detail mode, allow vertical scrolling for long lists */
+.guides-page.detail-mode { overflow-y: auto; }
+
+@media (max-width: 768px) {
+  .guides-page.category-mode { height: calc(100vh - 120px); }
 }
 
 .guides-bg {
@@ -408,14 +453,15 @@ function onKeydown(e: KeyboardEvent) {
 .cat-title { position: absolute; top: 20px; left: 20px; color: white; font-size: 1.75rem; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .cat-cta { position: absolute; bottom: 20px; left: 20px; color: white; border: 2px solid rgba(255,255,255,0.8); padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; backdrop-filter: blur(2px); }
 
-.back-btn { margin-bottom: 1rem; background: transparent; border: 2px solid #e5e7eb; border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; color: #374151; }
+.back-btn { margin-bottom: 1rem; background: transparent; border: 2px solid rgba(255,255,255,0.9); border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; color: #ffffff; }
+.back-btn:hover { background: rgba(255,255,255,0.1); }
 .category-title { display:none; }
 
 .content-card {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
   border-radius: 1rem;
-  padding: 2rem;
+  padding: 1.5rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
@@ -477,6 +523,9 @@ function onKeydown(e: KeyboardEvent) {
 .guide-modal-title { font-weight: 700; color: #065f46; }
 .guide-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
 .guide-modal-body { padding: 1rem 1.25rem; overflow: auto; }
+
+/* Narrow container for category detail */
+.narrow { max-width: 980px; margin: 0 auto; padding: 0 1rem; }
 
 /* Basic markdown formatting inside modal */
 .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
