@@ -88,7 +88,7 @@ async function initVegetationMap() {
       ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
         <div class="legend-row">
           <span class="legend-label">${b}</span>
-          <span class="legend-color" style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}"></span>
+          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
         </div>
       `).join('')
     await loadVegetationLayer(true)
@@ -160,7 +160,7 @@ async function loadBoundaries(simplified: boolean) {
 function buildLegend(categories: Record<string, any>) {
   let entries = Object.entries(categories)
   if (!entries.length) return
-  // sort by min descending so hottest在上方
+  // sort by min descending so hottest on top
   entries = entries.sort((a: any, b: any) => {
     const am = typeof a[1]?.min === 'number' ? a[1].min : -Infinity
     const bm = typeof b[1]?.min === 'number' ? b[1].min : -Infinity
@@ -174,13 +174,13 @@ function buildLegend(categories: Record<string, any>) {
       const hi = typeof v.max === 'number' ? v.max : undefined
       let range = ''
       const fmt = (n: number) => (Number.isInteger(n) ? `${n}` : n.toFixed(1))
-      if (lo != null && hi != null && hi < 900) range = ` (${fmt(lo)}–${fmt(hi)}°C)`
-      else if (lo != null && (hi == null || hi >= 900)) range = ` (≥${fmt(lo)}°C)`
-      else if (hi != null && (lo == null)) range = ` (≤${fmt(hi)}°C)`
+      if (lo != null && hi != null && hi < 900) range = ` (${fmt(lo)}&ndash;${fmt(hi)}°C)`
+      else if (lo != null && (hi == null || hi >= 900)) range = ` (&ge;${fmt(lo)}°C)`
+      else if (hi != null && (lo == null)) range = ` (&le;${fmt(hi)}°C)`
       return `
       <div class="legend-row">
         <span class="legend-label">${v.label}${range}</span>
-        <span class="legend-color" style="background:${v.color}"></span>
+        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
       </div>
     `
     }),
@@ -280,11 +280,12 @@ onMounted(async () => {
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.2);
   font-size: 12px;
+  width: max-content;
 }
 .legend-title { font-weight: 700; margin-bottom: 6px; color: #065f46; }
-.legend-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.legend-row { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; margin: 6px 0; }
 .legend-color { width: 18px; height: 18px; display: inline-block; border-radius: 3px; border: 1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
-.legend-label { color: #374151; }
+.legend-label { color: #374151; flex: 1 1 auto; }
 
 .placeholder-text {
   color: #6b7280;
