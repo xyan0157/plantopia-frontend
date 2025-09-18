@@ -130,7 +130,7 @@ html.no-vertical-scroll, body.no-vertical-scroll {
 .nav-logo {
   position: absolute;
   left: 0rem;
-  top: 1px;
+  top: 4px;
 }
 
 .nav-brand {

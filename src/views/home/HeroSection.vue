@@ -50,7 +50,7 @@ defineEmits<{
   display: flex;
   align-items: flex-start; /* Change to top alignment */
   justify-content: center;
-  padding-top: 5px; /* Revert: do not push text down */
+  padding-top: 0; /* move further up */
   z-index: 10; /* Increase z-index to ensure display above video */
 }
 
