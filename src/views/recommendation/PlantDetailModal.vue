@@ -198,8 +198,8 @@
                   <li>Water deeply once per week in summer</li>
                   <li>Prune lightly after flowering</li>
                 </ul>
-                <!-- Link to Guidance Video -->
-                <a href="#" class="guidance-video-link"> Guidance video </a>
+                <!-- Link to Guides -->
+                <a href="#" class="guidance-video-link" @click.prevent="goToGuides"> View Guides </a>
               </div>
             </div>
           </div>
@@ -217,6 +217,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ArrowLeftIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import type { Plant } from '@/services/api'
 import { addToViewHistory } from '@/services/viewHistory'
@@ -233,6 +234,13 @@ const emit = defineEmits<{
   close: []
   'select-plant': [plant: Plant]
 }>()
+// Router for navigation to Guides
+const router = useRouter()
+
+function goToGuides() {
+  router.push('/guides')
+  emit('close')
+}
 
 // State for handling image loading errors
 const imageError = ref(false)

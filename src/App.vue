@@ -117,6 +117,8 @@ html.no-vertical-scroll, body.no-vertical-scroll {
   z-index: 1000;
   padding: 0;
   transition: all 0.3s ease;
+  backdrop-filter: blur(8px) saturate(1.1);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
 }
 
 .navbar-dark {
