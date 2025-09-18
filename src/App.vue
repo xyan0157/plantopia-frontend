@@ -122,7 +122,7 @@ html.no-vertical-scroll, body.no-vertical-scroll {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 80px;
+  height: 65px;
   position: relative;
   transform: scale(0.9);
 }
@@ -130,6 +130,7 @@ html.no-vertical-scroll, body.no-vertical-scroll {
 .nav-logo {
   position: absolute;
   left: 0rem;
+  top: 1px;
 }
 
 .nav-brand {
@@ -218,7 +219,7 @@ html.no-vertical-scroll, body.no-vertical-scroll {
 }
 
 .main-content {
-  min-height: calc(100vh - 80px);
+  min-height: calc(100vh - 72px);
 }
 
 /* Create a stacking context so content cannot visually overlap the sticky navbar when scrolled under it */
