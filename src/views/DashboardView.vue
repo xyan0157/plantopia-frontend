@@ -86,9 +86,9 @@ async function initVegetationMap() {
   try {
     vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
       ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
-        <div class="legend-row">
+        <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
           <span class="legend-label">${b}</span>
-          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
+          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
         </div>
       `).join('')
     await loadVegetationLayer(true)
@@ -178,9 +178,9 @@ function buildLegend(categories: Record<string, any>) {
       else if (lo != null && (hi == null || hi >= 900)) range = ` (&ge;${fmt(lo)}°C)`
       else if (hi != null && (lo == null)) range = ` (&le;${fmt(hi)}°C)`
       return `
-      <div class="legend-row">
+      <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
         <span class="legend-label">${v.label}${range}</span>
-        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
+        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
       </div>
     `
     }),
