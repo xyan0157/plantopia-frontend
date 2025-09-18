@@ -40,7 +40,8 @@
                 :class="{ active: idx === activeIndex, 'dim-left': idx < activeIndex, 'dim-right': idx > activeIndex }"
                 @click="openCategory(c.slug)"
               >
-                <div class="guide-card-content">
+                <div class="guide-card-image" :style="getCardBgStyle(c.name || c.slug)"></div>
+                <div class="guide-card-info" @click.stop>
                   <div class="guide-card-title">{{ toLabel(c.name || c.slug) }}</div>
                   <div class="guide-card-desc">Browse articles in {{ toLabel(c.name || c.slug) }}</div>
                   <button
@@ -185,6 +186,48 @@ const toLabel = (s: string) => {
   return words
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+// Build background image style from public/images/{slug}.jpg (or png)
+function getCardBgStyle(nameOrSlug: string) {
+  const raw = String(nameOrSlug).toLowerCase().trim()
+  // explicit remaps for special category names
+  const mapping: Record<string, string> = {
+    'pests disease': 'pests disease',
+    'pests diseases': 'pests disease',
+    'pests_diseases': 'pests disease',
+    'companion planting': 'diverse garden planting',
+  }
+  // direct url overrides (hardcode)
+  const mappingUrl: Record<string, string> = {
+    'pests disease': "/images/pests%20disease.jpg",
+    'pests diseases': "/images/pests%20disease.jpg",
+    'pests_diseases': "/images/pests%20disease.jpg",
+  }
+  if (mappingUrl[raw]) {
+    return { backgroundImage: `url('${mappingUrl[raw]}')` }
+  }
+  const mapped = mapping[raw] || raw
+  const variants = Array.from(new Set([
+    mapped,
+    mapped.replace(/\s+/g, '_'),
+    mapped.replace(/\s+/g, '-'),
+    mapped.replace(/_/g, ' '),
+    mapped.replace(/-/g, ' '),
+    mapped.replace(/[\s_-]+/g, ' '),
+  ]))
+  const exts = ['jpg', 'jpeg', 'png', 'webp']
+  const urls: string[] = []
+  variants.forEach(v => {
+    exts.forEach(ext => {
+      urls.push(`/images/${v}.${ext}`)
+    })
+  })
+  // Build multiple backgrounds; browser will use the first that loads
+  const bgList = urls.map(u => `url('${u.replace(/\s/g, '%20')}')`).join(', ')
+  return {
+    backgroundImage: bgList,
+  }
 }
 
 // drag-to-scroll state and handlers
@@ -486,13 +529,15 @@ function onKeydown(e: KeyboardEvent) {
 .slider.dragging { cursor: grabbing; user-select: none; }
 .slider::-webkit-scrollbar { height: 10px; }
 .slider::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 6px; }
-.guide-card { height: 560px; border-radius: 16px; background: #111827; color: white; position: relative; flex: 0 0 var(--card-width); min-width: var(--card-width); max-width: var(--card-width); scroll-snap-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.2); cursor: pointer; transition: opacity .2s ease, filter .2s ease, transform .2s ease, box-shadow .2s ease; }
+.guide-card { height: 560px; border-radius: 16px; background: #111827; color: white; position: relative; flex: 0 0 var(--card-width); min-width: var(--card-width); max-width: var(--card-width); scroll-snap-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.2); cursor: pointer; transition: opacity .2s ease, filter .2s ease, transform .2s ease, box-shadow .2s ease; display: flex; flex-direction: column; }
+.guide-card-image { flex: 1 1 auto; background-size: cover; background-position: center; border-top-left-radius: 16px; border-top-right-radius: 16px; }
+.guide-card-info { background: #e8f6ee; padding: 1rem; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
 .guide-card.dim-left { opacity: 0.35; filter: grayscale(100%) brightness(0.9); transform: scale(0.96); }
 .guide-card.dim-right { opacity: 0.35; filter: grayscale(100%) brightness(0.9); transform: scale(0.96); }
 .guide-card.active { opacity: 1; filter: none; transform: scale(1); box-shadow: 0 16px 32px rgba(0,0,0,0.3); }
-.guide-card-content { position: absolute; inset: 0; padding: 1.25rem; display: flex; flex-direction: column; }
-.guide-card-title { font-size: 1.5rem; font-weight: 800; color: #93c5fd; margin-bottom: 0.75rem; }
-.guide-card-desc { color: #e5e7eb; line-height: 1.5; flex: 1; }
+.guide-card-content { position: absolute; inset: 0; padding: 1.25rem; display: none; flex-direction: column; }
+.guide-card-title { font-size: 1.5rem; font-weight: 800; color: #10b981; margin-bottom: 0.75rem; }
+.guide-card-desc { color: #10b981; line-height: 1.5; flex: 1; }
 .guide-card-meta { color: #9ca3af; font-size: 0.875rem; margin-top: 0.75rem; }
 
 .guide-card-cta {
