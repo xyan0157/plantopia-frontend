@@ -1027,7 +1027,7 @@ export function buildApiRequest(formData: {
 
   const apiRequest: ApiRecommendationRequest = {
     suburb,
-    n: 5,
+    n: 9,
     climate_zone: null,
     user_preferences: {
       user_id: 'anon_mvp',

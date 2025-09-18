@@ -66,9 +66,10 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
       showResults.value = true
     } catch (err: any) {
       error.value = err?.message || 'Failed to get recommendations. Please try again.'
-      // 保留 showResults 现状，避免意外清空旧结果
+      // keep previous results state; do not clear old results here
     } finally {
       loading.value = false
+      
     }
   }
 

@@ -48,11 +48,23 @@
                 <div v-else-if="showResults && plants.length > 0" class="plant-results">
                   <div class="plant-grid">
                     <PlantCard
-                      v-for="plant in plants"
+                      v-for="plant in visiblePlants"
                       :key="plant.id"
                       :plant="plant"
                       @select="selectPlant"
                     />
+                  </div>
+                  <div v-if="!showAll && plants.length > initialCount" class="more-toggle" @click="showAll = true">
+                    <span class="more-text">Show More</span>
+                    <svg class="more-icon down" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div v-if="showAll && plants.length > initialCount" class="more-toggle" @click="showAll = false">
+                    <span class="more-text">Show Less</span>
+                    <svg class="more-icon up" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M7 14l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
                   </div>
                 </div>
 
@@ -132,6 +144,13 @@ const plants = computed(() => recStore.plants)
 const loading = computed(() => recStore.loading)
 const error = computed(() => recStore.error)
 const showResults = computed(() => recStore.showResults)
+
+// show 6 first, then reveal all 9 on click
+const initialCount = 6
+const showAll = ref(false)
+const visiblePlants = computed(() => {
+  return showAll.value ? plants.value : plants.value.slice(0, initialCount)
+})
 
 // Filter data for sidebar
 const filterData = ref({
@@ -406,9 +425,7 @@ const handleUpdateFilters = (filters: typeof filterData.value) => {
 }
 
 /* Nudge only the second row of cards slightly to the right on wide screens (3 cols) */
-.plant-grid > *:nth-child(n+4) {
-  transform: translateX(225px);
-}
+/* Keep all rows aligned; no horizontal offsets */
 
 /* Custom Alert Styles */
 .error-state .alert {
@@ -416,6 +433,46 @@ const handleUpdateFilters = (filters: typeof filterData.value) => {
   border-color: rgba(254, 202, 202, 0.6) !important;
   backdrop-filter: blur(8px);
 }
+
+.view-more-btn {
+  background: linear-gradient(135deg, #10b981, #22c55e);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.6rem 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.35);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.view-more-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
+.view-more-btn:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
+
+/* Explore-More style toggle */
+.more-toggle {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  user-select: none;
+}
+.more-text {
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.25px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+}
+.more-icon {
+  width: 28px;
+  height: 28px;
+  color: #34d399;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  transition: transform .2s ease;
+}
+.more-toggle:hover .more-icon.down { transform: translateY(2px); }
+.more-toggle:hover .more-icon.up { transform: translateY(-2px); }
 
 .no-results-state .alert {
   background: rgba(239, 246, 255, 0.8) !important;
