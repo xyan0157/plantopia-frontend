@@ -2,19 +2,60 @@
   <div class="dashboard">
     <video class="page-bg" src="/Guide%20background.mp4" autoplay muted playsinline></video>
     <div class="page-container">
-      <h1 class="page-title">Your Climate Impact Dashboard</h1>
+      <div class="hero-header">
+        <h1 class="hero-title">Urban Heat Island Dashboard</h1>
+        <p class="hero-subtitle">Explore Melbourne's heat intensity and vegetation coverage</p>
+      </div>
       <div class="content-card">
-        <div class="map-grid">
-          <div class="map-panel">
-            <div class="map-card-header">Heat Intensity</div>
-            <div id="gmap" class="map"></div>
-            <div id="uhi-legend" class="uhi-legend" v-show="legendHtml" v-html="legendHtml"></div>
+        <div class="map-toolbar">
+          <input
+            ref="searchInputRef"
+            type="text"
+            class="map-search-input"
+            placeholder="Search address or place to center map..."
+            aria-label="Search location"
+          />
+        </div>
+        <div class="layout-grid">
+          <div class="layout-left">
+            <div class="map-panel">
+              <div class="map-card-header">{{ activeLayer === 'heat' ? 'Heat Intensity' : 'Vegetation Coverage' }}</div>
+              <div id="gmap" class="map" v-show="activeLayer === 'heat'"></div>
+              <div id="vegmap" class="map" v-show="activeLayer === 'veg'"></div>
+              <div id="uhi-legend" class="uhi-legend" v-show="activeLayer === 'heat' && legendHtml" v-html="legendHtml"></div>
+              <div id="veg-legend" class="uhi-legend" v-show="activeLayer === 'veg' && vegLegendHtml" v-html="vegLegendHtml"></div>
+            </div>
           </div>
-          <div class="map-panel">
-            <div class="map-card-header">Vegetation Coverage</div>
-            <div id="vegmap" class="map"></div>
-            <div id="veg-legend" class="uhi-legend" v-show="vegLegendHtml" v-html="vegLegendHtml"></div>
-          </div>
+          <aside class="layout-right">
+            <div class="filter-card">
+              <div class="filter-title">Layer</div>
+              <select class="select-input" v-model="activeLayer" aria-label="Select layer">
+                <option value="heat">Heat</option>
+                <option value="veg">Vegetation</option>
+              </select>
+              <div class="hint-text">Pick a layer to view on the map.</div>
+            </div>
+            <div class="history-section">
+              <div class="filter-title">Recent Searches</div>
+              <div v-if="!searchHistory.length" class="hint-text">No recent searches.</div>
+              <div v-else class="history-cards">
+                <div
+                  v-for="item in searchHistory"
+                  :key="item.label"
+                  class="filter-card history-card"
+                >
+                  <div class="history-card-header">
+                    <div class="history-card-title">{{ item.label }}</div>
+                    <button class="history-remove" @click="removeHistory(item)" aria-label="remove">&times;</button>
+                  </div>
+                  <div class="history-card-actions">
+                    <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? 'Heat' : 'Vegetation' }}</span>
+                    <button class="history-go" @click="centerTo(item)">Center on map</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </div>
@@ -23,37 +64,20 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch, nextTick } from 'vue'
+import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
 
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if ((window as any).google?.maps) {
-      resolve()
-      return
-    }
-    const existing = document.querySelector<HTMLScriptElement>('script[data-gmaps-loader]')
-    if (existing) {
-      existing.addEventListener('load', () => resolve())
-      existing.addEventListener('error', () => reject(new Error('Failed to load Google Maps')))
-      return
-    }
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=visualization,places,geometry`;
-    script.async = true
-    script.defer = true
-    script.setAttribute('data-gmaps-loader', '1')
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load Google Maps'))
-    document.head.appendChild(script)
-  })
-}
+const loadGoogleMaps = ensureGoogleMapsLoaded
 
 const gmapRef = ref<any>(null)
 const vegMapRef = ref<any>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const legendHtml = ref('')
 const vegLegendHtml = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
+const activeLayer = ref<'heat' | 'veg'>('heat')
+const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }>>([])
 
 function uhiUrl(path: string) {
   const base = (import.meta as any).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
@@ -86,9 +110,9 @@ async function initVegetationMap() {
   try {
     vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
       ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
-        <div class="legend-row">
+        <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
           <span class="legend-label">${b}</span>
-          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
+          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
         </div>
       `).join('')
     await loadVegetationLayer(true)
@@ -178,9 +202,9 @@ function buildLegend(categories: Record<string, any>) {
       else if (lo != null && (hi == null || hi >= 900)) range = ` (&ge;${fmt(lo)}°C)`
       else if (hi != null && (lo == null)) range = ` (&le;${fmt(hi)}°C)`
       return `
-      <div class="legend-row">
+      <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
         <span class="legend-label">${v.label}${range}</span>
-        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);"></span>
+        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
       </div>
     `
     }),
@@ -189,30 +213,112 @@ function buildLegend(categories: Record<string, any>) {
 }
 
 onMounted(async () => {
-  const apiKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyAsxXNmYoU4g2C8QmY5BkDIHCNK-ihR5js'
   try {
-    await loadGoogleMaps(apiKey)
+    await loadGoogleMaps()
     const center = { lat: -37.8136, lng: 144.9631 }
-    gmapRef.value = new (window as any).google.maps.Map(document.getElementById('gmap'), {
+    gmapRef.value = new (window as any).google.maps.Map(document.getElementById('gmap') as HTMLElement, {
       center,
       zoom: 13,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
     })
-    vegMapRef.value = new (window as any).google.maps.Map(document.getElementById('vegmap'), {
-      center,
-      zoom: 13,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    })
+    // Create veg map if its container exists (we render both containers; veg may be hidden)
+    const vegEl = document.getElementById('vegmap')
+    if (vegEl && !vegMapRef.value) {
+      vegMapRef.value = new (window as any).google.maps.Map(vegEl as HTMLElement, {
+        center,
+        zoom: 13,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      })
+    }
     await initUhiOnMap()
-    await initVegetationMap()
+    if (vegMapRef.value) await initVegetationMap()
+
+    // Setup Google Places Autocomplete on search input
+    if (searchInputRef.value) {
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(searchInputRef.value as HTMLInputElement, {
+        fields: ['geometry', 'name', 'formatted_address'],
+        types: ['geocode']
+      })
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        const loc = place?.geometry?.location
+        if (loc) {
+          const center = { lat: loc.lat(), lng: loc.lng() }
+          if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+          if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+          // Prefer short name without state prefix; fall back to name or coords
+          let label = place.name || place.formatted_address || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`
+          if (place.formatted_address) {
+            const parts = String(place.formatted_address).split(',').map(s => s.trim())
+            // Remove leading country/state like 'Australia' or 'Victoria'
+            if (parts.length > 1) {
+              const lastTwo = parts.slice(0, -2).join(', ')
+              label = lastTwo || (place.name || parts[0])
+            }
+          }
+          addHistory({ label, center, layer: activeLayer.value })
+        }
+      })
+    }
   } catch {
     // fail silent to avoid breaking dashboard
   }
 })
+
+// Ensure vegetation map is created when user switches to it and keep instances in sync
+watch(activeLayer, async (layer) => {
+  if (layer === 'veg' && !vegMapRef.value) {
+    await nextTick()
+    const el = document.getElementById('vegmap') as HTMLElement | null
+    if (!el || !(window as any).google?.maps) return
+    const currentCenter = gmapRef.value?.getCenter?.()
+    const center = currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : { lat: -37.8136, lng: 144.9631 }
+    const zoom = gmapRef.value?.getZoom?.() || 13
+    vegMapRef.value = new (window as any).google.maps.Map(el, {
+      center,
+      zoom,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    })
+    await initVegetationMap()
+  } else if (layer === 'heat' && gmapRef.value && vegMapRef.value) {
+    // When switching back, sync center/zoom from vegetation map if available
+    const vc = vegMapRef.value.getCenter?.()
+    if (vc) {
+      gmapRef.value.setCenter({ lat: vc.lat(), lng: vc.lng() })
+    }
+    const vz = vegMapRef.value.getZoom?.()
+    if (vz) {
+      gmapRef.value.setZoom(vz)
+    }
+  }
+})
+
+function addHistory(item: { label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }) {
+  const exists = searchHistory.value.find(h => h.label === item.label)
+  if (!exists) {
+    searchHistory.value.unshift(item)
+    if (searchHistory.value.length > 8) searchHistory.value.pop()
+  }
+}
+
+function centerTo(item: { label: string; center: { lat: number; lng: number }; layer?: 'heat' | 'veg' }) {
+  const { center } = item
+  if (item.layer) activeLayer.value = item.layer
+  if (gmapRef.value) { gmapRef.value.setCenter(center) }
+  if (vegMapRef.value) { vegMapRef.value.setCenter(center) }
+}
+
+function removeHistory(item: { label: string }) {
+  searchHistory.value = searchHistory.value.filter(h => h.label !== item.label)
+}
+
+// keep for potential future UI; remove if unused elsewhere
 </script>
 
 <style scoped>
@@ -239,12 +345,9 @@ onMounted(async () => {
   padding: 0 2rem;
 }
 
-.page-title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: #111827;
-  margin-bottom: 2rem;
-}
+.hero-header { text-align: center; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3); margin-bottom: 1rem; }
+.hero-title { font-size: 3rem; font-weight: 800; margin-bottom: 0.5rem; }
+.hero-subtitle { font-size: 1.2rem; opacity: 0.9; margin: 0; }
 
 .content-card {
   background: white;
@@ -255,14 +358,45 @@ onMounted(async () => {
     0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
-.map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.map-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+.map-search-input {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.map-search-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+
+.layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
+.layout-left { min-width: 0; }
+.layout-right { position: sticky; top: 0; min-width: 0; }
+.filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+.filter-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
+.select-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
+.select-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+.history-section { margin-top: 1rem; }
+.history-cards { display: grid; grid-template-rows: repeat(4, auto); gap: 0.75rem; max-height: 384px; overflow-y: auto; padding-right: 4px; width: 100%; }
+.history-card { padding: 12px; width: 100%; max-width: 100%; margin: 0; box-sizing: border-box; }
+.history-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.history-card-title { font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-card-actions { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+.layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
+.layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
+.layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
+.history-go { background: #065f46; color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.history-go:hover { background: #047857; }
+.history-remove { background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 18px; line-height: 1; }
+.history-remove:hover { color: #6b7280; }
+.history-actions { margin-top: 8px; text-align: right; }
+.history-clear { background: transparent; border: none; color: #065f46; cursor: pointer; font-size: 12px; }
+.hint-text { color: #6b7280; font-size: 12px; margin-top: 8px; }
 .map-panel { position: relative; }
 
-.map-card-header {
-  font-weight: 700;
-  color: #065f46;
-  margin-bottom: 0.75rem;
-}
+.map-card-header { position: absolute; top: 12px; left: 12px; font-weight: 700; color: #065f46; background: #ffffff; padding: 6px 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
 
 .map {
   width: 100%;
@@ -291,4 +425,7 @@ onMounted(async () => {
   color: #6b7280;
   font-size: 1rem;
 }
+
+/* Hide Google Maps InfoWindow close (X) button inside this component */
+:deep(.gm-ui-hover-effect) { display: none !important; }
 </style>
