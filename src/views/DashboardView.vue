@@ -78,6 +78,12 @@ let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
 const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }>>([])
+// Map suburb identifiers to vegetation total (%) sourced from /data endpoint
+let vegTotalsMap: Record<string, number> = {}
+
+function normKey(v: unknown): string {
+  return String(v ?? '').toLowerCase().trim().replace(/\s+/g, '_')
+}
 
 function uhiUrl(path: string) {
   const base = (import.meta as any).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
@@ -108,6 +114,7 @@ async function initUhiOnMap() {
 
 async function initVegetationMap() {
   try {
+    // Build legend first
     vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
       ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
         <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
@@ -115,6 +122,27 @@ async function initVegetationMap() {
           <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
         </div>
       `).join('')
+
+    // Load vegetation totals from /data once
+    if (!Object.keys(vegTotalsMap).length) {
+      try {
+        const dataResp = await fetch(uhiUrl('/api/v1/uhi/data'))
+        if (dataResp.ok) {
+          const data = await dataResp.json()
+          const suburbs: Array<any> = Array.isArray(data?.suburbs) ? data.suburbs : []
+          vegTotalsMap = {}
+          suburbs.forEach((s) => {
+            const total = Number(s?.vegetation?.total)
+            if (Number.isFinite(total)) {
+              if (s?.id) vegTotalsMap[normKey(s.id)] = total
+              if (s?.name) vegTotalsMap[normKey(s.name)] = total
+            }
+          })
+        }
+      } catch {
+        // ignore network errors; map stays empty which yields default colors
+      }
+    }
     await loadVegetationLayer(true)
     vegMapRef.value!.addListener('zoom_changed', async () => {
       const z = vegMapRef.value!.getZoom()
@@ -127,7 +155,12 @@ async function initVegetationMap() {
 }
 
 function vegStyleFeature(feature: any) {
-  const pct = Number(feature.getProperty('VEG_TOTAL')) || 0
+  // Prefer mapped totals from /data; match by id or name
+  const sid = feature.getProperty('SUBURB_ID') || feature.getProperty('id')
+  const sname = feature.getProperty('SUBURB_NAME') || feature.getProperty('name')
+  const keyId = normKey(sid)
+  const keyName = normKey(sname)
+  const pct = (vegTotalsMap[keyId] ?? vegTotalsMap[keyName] ?? 0) as number
   const color = pct >= 40 ? '#059669' : pct >= 30 ? '#34d399' : pct >= 20 ? '#86efac' : pct >= 10 ? '#fde68a' : '#fef3c7'
   return {
     fillColor: color,
