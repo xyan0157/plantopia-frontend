@@ -12,6 +12,7 @@ import './assets/markdown-styles.css'
 
 import App from './App.vue'
 import router from './router'
+import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
 
 const app = createApp(App)
 
@@ -32,3 +33,8 @@ const guidesStore = useGuidesStore(pinia)
 guidesStore.ensureLoaded()
 
 app.mount('#app')
+
+// Preload Google Maps script in background (non-blocking)
+ensureGoogleMapsLoaded().catch(() => {
+  // Fail silently; page features that need Maps will attempt again
+})
