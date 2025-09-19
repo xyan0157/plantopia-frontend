@@ -18,8 +18,8 @@
         <!-- Top Section - Plant Image -->
         <div class="plant-detail-image">
           <img 
-            v-if="!imageError" 
-            :src="getImageSource()"
+            v-if="!imageError && getImageSrcComputed" 
+            :src="getImageSrcComputed"
             :alt="plant.name"
             class="plant-image"
             @error="handleImageError"
@@ -86,7 +86,7 @@
               <div class="card-content">
                 <div class="info-item">
                   <span class="info-icon">Sun:</span>
-                  <span>{{ formatSunlight(plant.sunlight) }}</span>
+                  <span>{{ formatSunlight(plant.sunlight || '') }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">Water:</span>
@@ -124,46 +124,46 @@
               <div class="card-content benefits-grid">
                 <!-- Positive Benefits (Green checkmarks) -->
                 <div
-                  v-if="plant.benefits.petSafe"
+                  v-if="plant?.benefits?.petSafe"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
                   <span>Pet Safe</span>
                 </div>
                 <div
-                  v-if="plant.benefits.fragrant"
+                  v-if="plant?.benefits?.fragrant"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
                   <span>Attracts Birds</span>
                 </div>
                 <div
-                  v-if="plant.benefits.airPurifying"
+                  v-if="plant?.benefits?.airPurifying"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
                   <span>Air Purifying</span>
                 </div>
-                <div v-if="plant.benefits.edible" class="benefit-item benefit-positive">
+                <div v-if="plant?.benefits?.edible" class="benefit-item benefit-positive">
                   <span class="benefit-icon">+</span>
                   <span>Edible</span>
                 </div>
                 <div
-                  v-if="plant.benefits.droughtResistant"
+                  v-if="plant?.benefits?.droughtResistant"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
                   <span>Drought Resistant</span>
                 </div>
                 <div
-                  v-if="plant.benefits.containerFriendly"
+                  v-if="plant?.benefits?.containerFriendly"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
                   <span>Container Friendly</span>
                 </div>
                 <div
-                  v-if="plant.benefits.indoorSuitable"
+                  v-if="plant?.benefits?.indoorSuitable"
                   class="benefit-item benefit-positive"
                 >
                   <span class="benefit-icon">+</span>
@@ -172,7 +172,7 @@
                 
                 <!-- Negative Benefits (Red X marks) -->
                 <div
-                  v-if="!plant.benefits.edible"
+                  v-if="!plant?.benefits?.edible"
                   class="benefit-item benefit-negative"
                 >
                   <span class="benefit-icon">-</span>
@@ -181,7 +181,7 @@
                 
                 <!-- Warning Benefits (Yellow triangle) -->
                 <div
-                  v-if="!plant.benefits.petSafe"
+                  v-if="!plant?.benefits?.petSafe"
                   class="benefit-item benefit-warning"
                 >
                   <ExclamationTriangleIcon class="w-4 h-4" />
@@ -225,54 +225,58 @@
       <div class="impact-body">
         <div v-if="impactLoading" class="placeholder-text">Loading impact...</div>
         <div v-else-if="impactError" class="placeholder-text">{{ impactError }}</div>
-        <div v-else-if="impactData" class="impact-grid">
-          <div class="impact-item">
-            <div class="impact-item-label">Temperature Reduction</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.temperature_reduction_c }} °C</div>
+        <div v-else-if="impactData" class="impact-proto">
+          <!-- Top: gauge + bars + callout -->
+          <div class="impact-top">
+            <div class="gauge-card">
+              <svg class="gauge" viewBox="0 0 200 110" aria-label="CO2 absorption gauge">
+                <path d="M10,100 A90,90 0 0,1 190,100" fill="none" stroke="#e5e7eb" stroke-width="14" />
+                <g v-for="t in 9" :key="'tick-'+t" :transform="tickTransform(t)">
+                  <line x1="0" y1="0" x2="0" y2="10" stroke="#9ca3af" stroke-width="2" />
+                </g>
+                <g :transform="needleTransform">
+                  <line x1="100" y1="100" x2="100" y2="26" stroke="#065f46" stroke-width="4" />
+                  <circle cx="100" cy="100" r="7" fill="#065f46" />
+                </g>
+              </svg>
+              <div class="gauge-label">CO2 absorption capacity</div>
+              <div class="gauge-value">{{ co2Absorption.toFixed(1) }} kg/year</div>
+            </div>
+
+            <div class="bars-callout">
+              <div class="bars">
+                <div class="bar-row">
+                  <div class="bar-label">Cooling Effect</div>
+                  <div class="bar"><div class="bar-fill cooling" :style="{ width: coolingEffectPercent + '%' }"></div></div>
+                  <div class="bar-value">{{ temperatureReduction.toFixed(1) }} °C</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label">Air Quality</div>
+                  <div class="bar"><div class="bar-fill air" :style="{ width: airPointsPercent + '%' }"></div></div>
+                  <div class="bar-value">{{ airQualityPoints }}</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label">Water Processed</div>
+                  <div class="bar"><div class="bar-fill water" :style="{ width: waterProcessedPercent + '%' }"></div></div>
+                  <div class="bar-value">{{ waterProcessed.toFixed(1) }} L/week</div>
+                </div>
+              </div>
+
+              <div class="callout">
+                <div class="callout-title">Supports pollinators</div>
+                <div class="callout-text">Helps filter dust/pollution and boosts local biodiversity.</div>
+              </div>
+            </div>
           </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Air Quality Points</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.air_quality_points }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">CO2 Absorption</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.co2_absorption_kg_year }} kg/year</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Water Processed</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.water_processed_l_week }} L/week</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Confidence</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.confidence_level }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Pollinator Support</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.pollinator_support }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Maintenance Time</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.maintenance_time }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Water Requirement</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.water_requirement }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Risk</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.risk_badge }}</div>
-          </div>
-          <div class="impact-item wide">
-            <div class="impact-item-label">Why This Plant</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.why_this_plant }}</div>
-          </div>
-          <div v-if="impactData.quantified_impact.community_impact_potential" class="impact-item wide">
-            <div class="impact-item-label">Community Impact</div>
-            <div class="impact-item-value">{{ impactData.quantified_impact.community_impact_potential }}</div>
-          </div>
-          <div class="impact-item">
-            <div class="impact-item-label">Suitability Score</div>
-            <div class="impact-item-value">{{ impactData.suitability_score.total_score }}/100</div>
+
+          <!-- KPI grid -->
+          <div class="kpi-grid">
+            <div class="kpi"><div class="kpi-title">Temperature Reduction</div><div class="kpi-value">{{ temperatureReduction.toFixed(1) }} °C</div></div>
+            <div class="kpi"><div class="kpi-title">Air Quality Points</div><div class="kpi-value">{{ airQualityPoints }}</div></div>
+            <div class="kpi"><div class="kpi-title">CO2 Absorption</div><div class="kpi-value">{{ co2Absorption.toFixed(1) }} kg/year</div></div>
+            <div class="kpi"><div class="kpi-title">Water Processed</div><div class="kpi-value">{{ waterProcessed.toFixed(1) }} L/week</div></div>
+            <div class="kpi"><div class="kpi-title">Pollinator Support</div><div class="kpi-value">{{ pollinatorSupport }}</div></div>
+            <div class="kpi"><div class="kpi-title">Confidence</div><div class="kpi-value">{{ confidence }}</div></div>
           </div>
         </div>
       </div>
@@ -347,6 +351,35 @@ const impactError = ref<string | null>(null)
 import type { ApiQuantifyResponse } from '@/services/api'
 const impactData = ref<ApiQuantifyResponse | null>(null)
 
+// Derived values for prototype visuals (fallback to 0 if missing)
+const temperatureReduction = computed(() => Number(impactData.value?.quantified_impact.temperature_reduction_c || 0))
+const airQualityPoints = computed<number>(() => Number(impactData.value?.quantified_impact.air_quality_points || 0))
+const co2Absorption = computed<number>(() => Number(impactData.value?.quantified_impact.co2_absorption_kg_year || 0))
+const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
+const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
+const confidence = computed<string>(() => String(impactData.value?.quantified_impact.confidence_level || 'Unknown'))
+
+// Gauge helpers
+const co2Max = 50
+const angle = computed(() => {
+  const v = Math.max(0, Math.min(co2Absorption.value, co2Max))
+  return -90 + (v / co2Max) * 180
+})
+const needleTransform = computed(() => `rotate(${angle.value} 100 100)`)
+function tickTransform(t: number) {
+  const a = -90 + (t / 9) * 180
+  const rad = (a * Math.PI) / 180
+  const r = 80
+  const cx = 100 + Math.cos(rad) * r
+  const cy = 100 + Math.sin(rad) * r
+  return `translate(${cx} ${cy}) rotate(${a})`
+}
+
+// Bars percentages
+const coolingEffectPercent = computed(() => Math.min(100, Math.max(0, (temperatureReduction.value / 2) * 100)))
+const airPointsPercent = computed(() => Math.min(100, (airQualityPoints.value / 10) * 100))
+const waterProcessedPercent = computed(() => Math.min(100, (waterProcessed.value / 10) * 100))
+
 function openImpact() {
   showImpact.value = true
   if (!impactData.value) {
@@ -383,14 +416,14 @@ const getImageSource = (): string => {
   if (!props.plant) return ''
 
   // 0) New API base64 field
-  const imageBase64 = (props.plant as any).image_base64 as string | undefined
+  const imageBase64 = (props.plant as unknown as { image_base64?: string }).image_base64
   if (imageBase64) return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
 
   // 1) Legacy base64 field
   if (props.plant.imageData) return props.plant.imageData.startsWith('data:') ? props.plant.imageData : `data:image/jpeg;base64,${props.plant.imageData}`
 
   // 2) API-provided image_url (backend now provides; prefer any host)
-  const imageUrl = (props.plant as any).image_url as string | undefined
+  const imageUrl = (props.plant as unknown as { image_url?: string }).image_url
   if (imageUrl) return imageUrl
 
   // 3) Relative image path served by backend (proxy endpoints)
@@ -399,6 +432,11 @@ const getImageSource = (): string => {
   // 4) Category placeholder image (default image)
   return getCategoryPlaceholder()
 }
+
+const getImageSrcComputed = computed<string | null>(() => {
+  const s = getImageSource()
+  return s && typeof s === 'string' ? s : null
+})
 
 // Function to construct full image URL (fallback method)
 const getImageUrl = (imagePath: string): string => {
@@ -848,11 +886,34 @@ const formatSunlight = (sunlight: string): string => {
 .impact-title { font-weight: 700; color: #065f46; }
 .impact-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
 .impact-body { padding: 1rem 1.25rem; }
-.impact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
-.impact-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; }
-.impact-item.wide { grid-column: 1 / -1; }
-.impact-item-label { font-size: 0.85rem; font-weight: 600; color: #047857; margin-bottom: 0.25rem; }
-.impact-item-value { color: #065f46; }
+
+/* Prototype-style layout */
+.impact-proto { display: grid; gap: 1rem; }
+.impact-top { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; align-items: center; }
+.gauge-card { display: flex; flex-direction: column; align-items: center; }
+.gauge { width: 100%; max-width: 320px; height: auto; }
+.gauge-label { margin-top: 4px; color: #374151; font-weight: 600; }
+.gauge-value { color: #065f46; font-weight: 700; }
+
+.bars-callout { display: grid; grid-template-columns: 1fr 260px; gap: 1rem; align-items: start; }
+.bars { display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 140px 1fr 80px; align-items: center; gap: 8px; }
+.bar-label { color: #374151; font-size: 12px; }
+.bar { height: 10px; background: #eef2f7; border-radius: 8px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 8px; }
+.bar-fill.cooling { background: #60a5fa; }
+.bar-fill.air { background: #34d399; }
+.bar-fill.water { background: #93c5fd; }
+.bar-value { text-align: right; color: #374151; font-size: 12px; }
+
+.callout { background: #d1fae5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 12px; }
+.callout-title { font-weight: 700; color: #065f46; margin-bottom: 4px; }
+.callout-text { color: #065f46; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.kpi { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; }
+.kpi-title { color: #065f46; font-weight: 700; margin-bottom: 4px; font-size: 0.9rem; }
+.kpi-value { color: #111827; font-weight: 700; }
 
 .w-5 {
   width: 1.25rem;
