@@ -390,7 +390,7 @@ export class PlantRecommendationService {
   }
 
   // Quantify plant impact endpoint
-  async quantifyPlantImpact(request: ApiQuantifyRequest): Promise<ApiQuantifyResponse> {
+  async quantifyPlantImpact(request: ApiQuantifyRequest, signal?: AbortSignal): Promise<ApiQuantifyResponse> {
     try {
       console.group('[PLANT API] Quantify Plant Impact Request')
       console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/quantify-plant`)
@@ -402,12 +402,29 @@ export class PlantRecommendationService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        signal, // Add abort signal support
       })
 
       const data = await response.json()
       return data as ApiQuantifyResponse
     } catch (error) {
       console.error('[PLANT API] quantifyPlantImpact error:', error)
+      throw error
+    }
+  }
+
+  // Batch quantify endpoint
+  async batchQuantifyImpact(requests: ApiQuantifyRequest[]): Promise<ApiQuantifyResponse[]> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/batch-quantify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requests),
+      })
+      const data = await response.json()
+      return data as ApiQuantifyResponse[]
+    } catch (error) {
+      console.error('[PLANT API] batchQuantifyImpact error:', error)
       throw error
     }
   }

@@ -146,6 +146,11 @@ async function initUhiOnMap() {
 }
 
 async function initVegetationMap() {
+  if (!vegMapRef.value) {
+    console.error('Vegetation map not initialized')
+    return
+  }
+  
   try {
     // Build legend first
     vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
@@ -171,17 +176,25 @@ async function initVegetationMap() {
               if (s?.name) vegTotalsMap[normKey(s.name)] = total
             }
           })
+          console.log('Vegetation totals loaded:', Object.keys(vegTotalsMap).length, 'suburbs')
         }
-      } catch {
-        // ignore network errors; map stays empty which yields default colors
+      } catch (error) {
+        console.error('Failed to load vegetation data:', error)
       }
     }
+    
+    // Load the vegetation layer
     await loadVegetationLayer(true)
-    vegMapRef.value!.addListener('zoom_changed', async () => {
-      const z = vegMapRef.value!.getZoom()
-      const wantSimplified = !(z >= 12)
-      await loadVegetationLayer(wantSimplified)
-    })
+    
+    // Add zoom listener if not already added
+    if (!vegMapRef.value._zoomListenerAdded) {
+      vegMapRef.value.addListener('zoom_changed', async () => {
+        const z = vegMapRef.value!.getZoom()
+        const wantSimplified = !(z >= 12)
+        await loadVegetationLayer(wantSimplified)
+      })
+      vegMapRef.value._zoomListenerAdded = true
+    }
   } catch (err) {
     console.error('Vegetation init failed', err)
   }
@@ -206,12 +219,32 @@ function vegStyleFeature(feature: any) {
 
 async function loadVegetationLayer(simplified: boolean) {
   if (!vegMapRef.value) return
-  vegMapRef.value!.data.forEach((f: any) => vegMapRef.value!.data.remove(f))
-  const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
-  const { url } = await resp.json()
-  const geo = await fetch(url).then(r => r.json())
-  vegMapRef.value!.data.addGeoJson(geo)
-  vegMapRef.value!.data.setStyle(vegStyleFeature)
+  
+  // Clear existing data
+  if (vegMapRef.value.data) {
+    vegMapRef.value.data.forEach((f: any) => vegMapRef.value.data.remove(f))
+  }
+  
+  try {
+    const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
+    if (!resp.ok) {
+      console.error('Failed to fetch boundaries:', resp.status)
+      return
+    }
+    
+    const { url } = await resp.json()
+    const geo = await fetch(url).then(r => r.json())
+    
+    // Add data to map
+    vegMapRef.value.data.addGeoJson(geo)
+    
+    // Set style after data is loaded
+    vegMapRef.value.data.setStyle(vegStyleFeature)
+    
+    console.log('Vegetation layer loaded successfully')
+  } catch (error) {
+    console.error('Error loading vegetation layer:', error)
+  }
 }
 
 function styleFeature(feature: any) {
@@ -341,20 +374,26 @@ onMounted(async () => {
 
 // Ensure vegetation map is created when user switches to it and keep instances in sync
 watch(activeLayer, async (layer) => {
-  if (layer === 'veg' && !vegMapRef.value) {
+  if (layer === 'veg') {
     await nextTick()
-    const el = document.getElementById('vegmap') as HTMLElement | null
-    if (!el || !(window as any).google?.maps) return
-    const currentCenter = gmapRef.value?.getCenter?.()
-    const center = currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : { lat: -37.8136, lng: 144.9631 }
-    const zoom = gmapRef.value?.getZoom?.() || 13
-    vegMapRef.value = new (window as any).google.maps.Map(el, {
-      center,
-      zoom,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    })
+    
+    // Create veg map if it doesn't exist
+    if (!vegMapRef.value) {
+      const el = document.getElementById('vegmap') as HTMLElement | null
+      if (!el || !(window as any).google?.maps) return
+      const currentCenter = gmapRef.value?.getCenter?.()
+      const center = currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : { lat: -37.8136, lng: 144.9631 }
+      const zoom = gmapRef.value?.getZoom?.() || 13
+      vegMapRef.value = new (window as any).google.maps.Map(el, {
+        center,
+        zoom,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      })
+    }
+    
+    // Always reload vegetation data when switching to veg layer
     await initVegetationMap()
   } else if (layer === 'heat' && gmapRef.value && vegMapRef.value) {
     // When switching back, sync center/zoom from vegetation map if available
