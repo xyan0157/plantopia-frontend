@@ -164,8 +164,9 @@ function vegStyleFeature(feature: any) {
   const color = pct >= 40 ? '#059669' : pct >= 30 ? '#34d399' : pct >= 20 ? '#86efac' : pct >= 10 ? '#fde68a' : '#fef3c7'
   return {
     fillColor: color,
-    fillOpacity: 0.6,
-    strokeWeight: 1,
+    fillOpacity: 0.35,
+    strokeWeight: 0.8,
+    strokeOpacity: 0.7,
     strokeColor: '#ffffff',
   }
 }
