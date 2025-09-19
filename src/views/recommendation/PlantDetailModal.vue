@@ -365,7 +365,7 @@ const airQualityPoints = computed<number>(() => Number(impactData.value?.quantif
 const co2Absorption = computed<number>(() => {
   const apiVal = Number(impactData.value?.quantified_impact.co2_absorption_kg_year)
   const base = Number.isFinite(apiVal) && apiVal > 0 ? apiVal : co2Random.value
-  return base * Math.max(1, plantCount.value)
+  return base // keep plant count fixed at 1
 })
 const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
@@ -394,9 +394,10 @@ const waterProcessedPercent = computed(() => Math.min(100, (waterProcessed.value
 
 function openImpact() {
   showImpact.value = true
-  if (!impactData.value) {
-    fetchImpact()
-  }
+  // Always refresh on every open
+  impactData.value = null
+  impactError.value = null
+  fetchImpact()
   co2Random.value = Math.round(Math.random() * 500) / 10
 }
 
@@ -409,11 +410,14 @@ async function fetchImpact() {
   impactLoading.value = true
   impactError.value = null
   try {
+    // Sanitize strings to avoid backend 500 on special chars
+    const safeName = (props.plant.name || '').toString().replace(/[^\w\s\-]/g, '').trim() || (props.plant.scientific_name || '').toString()
+    const safeSuburb = (recStore.lastParams?.location || 'Richmond').toString().replace(/[^\w\s\-]/g, '').trim() || 'Richmond'
     const res = await plantApiService.quantifyPlantImpact({
-      plant_name: props.plant.name,
-      suburb: recStore.lastParams?.location || 'Richmond',
+      plant_name: safeName,
+      suburb: safeSuburb,
       climate_zone: undefined,
-      plant_count: plantCount.value,
+      plant_count: 1,
       user_preferences: {},
     })
     impactData.value = res
@@ -434,6 +438,8 @@ watch(plantCount, () => {
 // When the selected plant changes, reset impact data and refetch if modal is open
 watch(() => props.plant?.name, () => {
   impactData.value = null
+  impactError.value = null
+  co2Random.value = 0
   if (showImpact.value) {
     fetchImpact()
   }

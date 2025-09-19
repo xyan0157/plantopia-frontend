@@ -412,6 +412,22 @@ export class PlantRecommendationService {
     }
   }
 
+  // Batch quantify endpoint
+  async batchQuantifyImpact(requests: ApiQuantifyRequest[]): Promise<ApiQuantifyResponse[]> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/batch-quantify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requests),
+      })
+      const data = await response.json()
+      return data as ApiQuantifyResponse[]
+    } catch (error) {
+      console.error('[PLANT API] batchQuantifyImpact error:', error)
+      throw error
+    }
+  }
+
   // Transform All Plants API response to frontend Plant interface
   transformAllPlantsToPlants(apiResponse: ApiAllPlantsResponse): Plant[] {
     console.group('[TRANSFORM] All Plants API Response to Plants')
