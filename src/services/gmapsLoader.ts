@@ -16,7 +16,8 @@ export function ensureGoogleMapsLoaded(apiKey?: string): Promise<void> {
       return
     }
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=visualization,places,geometry`
+    // Force English labels and AU regional bias
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=visualization,places,geometry&language=en&region=AU`
     script.async = true
     script.defer = true
     script.setAttribute('data-gmaps-loader', '1')

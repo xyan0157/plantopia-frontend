@@ -35,6 +35,26 @@
               </select>
               <div class="hint-text">Pick a layer to view on the map.</div>
             </div>
+            <div class="history-section">
+              <div class="filter-title">Recent Searches</div>
+              <div v-if="!searchHistory.length" class="hint-text">No recent searches.</div>
+              <div v-else class="history-cards">
+                <div
+                  v-for="item in searchHistory"
+                  :key="item.label"
+                  class="filter-card history-card"
+                >
+                  <div class="history-card-header">
+                    <div class="history-card-title">{{ item.label }}</div>
+                    <button class="history-remove" @click="removeHistory(item)" aria-label="remove">&times;</button>
+                  </div>
+                  <div class="history-card-actions">
+                    <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? 'Heat' : 'Vegetation' }}</span>
+                    <button class="history-go" @click="centerTo(item)">Center on map</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </aside>
         </div>
       </div>
@@ -57,6 +77,7 @@ const vegLegendHtml = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
+const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }>>([])
 
 function uhiUrl(path: string) {
   const base = (import.meta as any).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
@@ -229,6 +250,17 @@ onMounted(async () => {
           const center = { lat: loc.lat(), lng: loc.lng() }
           if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
           if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+          // Prefer short name without state prefix; fall back to name or coords
+          let label = place.name || place.formatted_address || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`
+          if (place.formatted_address) {
+            const parts = String(place.formatted_address).split(',').map(s => s.trim())
+            // Remove leading country/state like 'Australia' or 'Victoria'
+            if (parts.length > 1) {
+              const lastTwo = parts.slice(0, -2).join(', ')
+              label = lastTwo || (place.name || parts[0])
+            }
+          }
+          addHistory({ label, center, layer: activeLayer.value })
         }
       })
     }
@@ -266,6 +298,27 @@ watch(activeLayer, async (layer) => {
     }
   }
 })
+
+function addHistory(item: { label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }) {
+  const exists = searchHistory.value.find(h => h.label === item.label)
+  if (!exists) {
+    searchHistory.value.unshift(item)
+    if (searchHistory.value.length > 8) searchHistory.value.pop()
+  }
+}
+
+function centerTo(item: { label: string; center: { lat: number; lng: number }; layer?: 'heat' | 'veg' }) {
+  const { center } = item
+  if (item.layer) activeLayer.value = item.layer
+  if (gmapRef.value) { gmapRef.value.setCenter(center) }
+  if (vegMapRef.value) { vegMapRef.value.setCenter(center) }
+}
+
+function removeHistory(item: { label: string }) {
+  searchHistory.value = searchHistory.value.filter(h => h.label !== item.label)
+}
+
+// keep for potential future UI; remove if unused elsewhere
 </script>
 
 <style scoped>
@@ -320,11 +373,26 @@ watch(activeLayer, async (layer) => {
 
 .layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
 .layout-left { min-width: 0; }
-.layout-right { position: sticky; top: 0; }
-.filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+.layout-right { position: sticky; top: 0; min-width: 0; }
+.filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
 .filter-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
 .select-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
 .select-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+.history-section { margin-top: 1rem; }
+.history-cards { display: grid; grid-template-rows: repeat(4, auto); gap: 0.75rem; max-height: 384px; overflow-y: auto; padding-right: 4px; width: 100%; }
+.history-card { padding: 12px; width: 100%; max-width: 100%; margin: 0; box-sizing: border-box; }
+.history-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.history-card-title { font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-card-actions { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+.layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
+.layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
+.layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
+.history-go { background: #065f46; color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.history-go:hover { background: #047857; }
+.history-remove { background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 18px; line-height: 1; }
+.history-remove:hover { color: #6b7280; }
+.history-actions { margin-top: 8px; text-align: right; }
+.history-clear { background: transparent; border: none; color: #065f46; cursor: pointer; font-size: 12px; }
 .hint-text { color: #6b7280; font-size: 12px; margin-top: 8px; }
 .map-panel { position: relative; }
 
