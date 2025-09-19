@@ -58,6 +58,36 @@
           </aside>
         </div>
       </div>
+      <!-- Charts Card (same width as map content card) -->
+      <div class="content-card charts-card">
+        <div class="charts-section">
+          <div class="chart-card">
+            <div class="chart-title">Heat categories</div>
+            <div class="chart-rows">
+              <div class="chart-row" v-for="row in heatChartRows" :key="row.key">
+                <div class="chart-label">{{ row.label }}</div>
+                <div class="chart-bar">
+                  <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
+                </div>
+                <div class="chart-value">{{ row.count }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Vegetation (%)</div>
+            <div class="chart-rows">
+              <div class="chart-row" v-for="row in vegChartRows" :key="row.bucket">
+                <div class="chart-label">{{ row.bucket }}</div>
+                <div class="chart-bar">
+                  <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
+                </div>
+                <div class="chart-value">{{ row.count }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -80,6 +110,9 @@ const activeLayer = ref<'heat' | 'veg'>('heat')
 const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }>>([])
 // Map suburb identifiers to vegetation total (%) sourced from /data endpoint
 let vegTotalsMap: Record<string, number> = {}
+// Chart state
+const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
+const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
 
 function normKey(v: unknown): string {
   return String(v ?? '').toLowerCase().trim().replace(/\s+/g, '_')
@@ -298,6 +331,9 @@ onMounted(async () => {
         }
       })
     }
+
+    // Load chart data once
+    await buildCharts()
   } catch {
     // fail silent to avoid breaking dashboard
   }
@@ -353,6 +389,60 @@ function removeHistory(item: { label: string }) {
 }
 
 // keep for potential future UI; remove if unused elsewhere
+
+async function buildCharts() {
+  try {
+    // Use the same /data payload already fetched above where possible
+    const resp = await fetch(uhiUrl('/api/v1/uhi/data'))
+    if (!resp.ok) return
+    const payload = await resp.json()
+    const suburbs: Array<any> = Array.isArray(payload?.suburbs) ? payload.suburbs : []
+
+    // Heat categories count using metadata colors
+    const metaCats = payload?.heat_categories || categoriesMap || {}
+    const counts: Record<string, { label: string; color: string; count: number }> = {}
+    Object.entries(metaCats).forEach(([k, v]: any) => {
+      counts[k] = { label: v?.label || k, color: v?.color || '#9ca3af', count: 0 }
+    })
+    suburbs.forEach((s: any) => {
+      const catKey = String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')
+      if (counts[catKey]) counts[catKey].count += 1
+    })
+    const total = suburbs.length || 1
+    heatChartRows.value = Object.entries(counts).map(([key, v]) => ({
+      key,
+      label: v.label,
+      color: v.color,
+      count: v.count,
+      percent: Math.round((v.count / total) * 100)
+    })).sort((a, b) => b.percent - a.percent)
+
+    // Vegetation buckets (0-10,10-20,20-30,30-40,40+)
+    const buckets = [
+      { name: '0-10', min: 0, max: 10, color: '#fef3c7' },
+      { name: '10-20', min: 10, max: 20, color: '#fde68a' },
+      { name: '20-30', min: 20, max: 30, color: '#86efac' },
+      { name: '30-40', min: 30, max: 40, color: '#34d399' },
+      { name: '40+', min: 40, max: 1000, color: '#059669' },
+    ]
+    const vegCounts: Record<string, number> = {}
+    buckets.forEach(b => { vegCounts[b.name] = 0 })
+    suburbs.forEach((s: any) => {
+      const pct = Number(s?.vegetation?.total)
+      if (!Number.isFinite(pct)) return
+      const b = buckets.find(b => pct >= b.min && pct < b.max)
+      if (b) vegCounts[b.name] += 1
+    })
+    vegChartRows.value = buckets.map(b => ({
+      bucket: b.name,
+      color: b.color,
+      count: vegCounts[b.name] || 0,
+      percent: Math.round(((vegCounts[b.name] || 0) / total) * 100)
+    }))
+  } catch {
+    // ignore chart errors
+  }
+}
 </script>
 
 <style scoped>
@@ -407,7 +497,7 @@ function removeHistory(item: { label: string }) {
 
 .layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
 .layout-left { min-width: 0; }
-.layout-right { position: sticky; top: 0; min-width: 0; }
+.layout-right { position: sticky; top: 12px; min-width: 0; align-self: start; }
 .filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
 .filter-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
 .select-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
@@ -454,6 +544,18 @@ function removeHistory(item: { label: string }) {
 .legend-row { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; margin: 6px 0; }
 .legend-color { width: 18px; height: 18px; display: inline-block; border-radius: 3px; border: 1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
 .legend-label { color: #374151; flex: 1 1 auto; }
+
+/* Charts */
+.charts-card { margin-top: 1.5rem; }
+.charts-section { margin-top: 0.25rem; display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.chart-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
+.chart-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
+.chart-rows { display: grid; gap: 6px; }
+.chart-row { display: grid; grid-template-columns: 120px 1fr 48px; align-items: center; gap: 8px; }
+.chart-label { color: #374151; font-size: 12px; }
+.chart-bar { height: 10px; background: #eef2f7; border-radius: 8px; overflow: hidden; }
+.chart-bar-fill { height: 100%; border-radius: 8px; }
+.chart-value { text-align: right; font-size: 12px; color: #374151; }
 
 .placeholder-text {
   color: #6b7280;
