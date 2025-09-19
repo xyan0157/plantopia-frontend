@@ -4,6 +4,15 @@
     <div class="page-container">
       <h1 class="page-title">Your Climate Impact Dashboard</h1>
       <div class="content-card">
+      <div class="map-toolbar">
+        <input
+          ref="searchInputRef"
+          type="text"
+          class="map-search-input"
+          placeholder="Search address or place to center maps..."
+          aria-label="Search location"
+        />
+      </div>
         <div class="map-grid">
           <div class="map-panel">
             <div class="map-card-header">Heat Intensity</div>
@@ -50,6 +59,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
 
 const gmapRef = ref<any>(null)
 const vegMapRef = ref<any>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const legendHtml = ref('')
 const vegLegendHtml = ref('')
 let lastSimplified = true
@@ -209,6 +219,25 @@ onMounted(async () => {
     })
     await initUhiOnMap()
     await initVegetationMap()
+
+    // Setup Google Places Autocomplete on search input
+    if (searchInputRef.value) {
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(searchInputRef.value as HTMLInputElement, {
+        fields: ['geometry', 'name', 'formatted_address'],
+        types: ['geocode']
+      })
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        const loc = place?.geometry?.location
+        if (loc && gmapRef.value && vegMapRef.value) {
+          const center = { lat: loc.lat(), lng: loc.lng() }
+          gmapRef.value.setCenter(center)
+          vegMapRef.value.setCenter(center)
+          gmapRef.value.setZoom(13)
+          vegMapRef.value.setZoom(13)
+        }
+      })
+    }
   } catch {
     // fail silent to avoid breaking dashboard
   }
@@ -255,6 +284,19 @@ onMounted(async () => {
     0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
+.map-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+.map-search-input {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+.map-search-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+
 .map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .map-panel { position: relative; }
 
@@ -291,4 +333,7 @@ onMounted(async () => {
   color: #6b7280;
   font-size: 1rem;
 }
+
+/* Hide Google Maps InfoWindow close (X) button inside this component */
+:deep(.gm-ui-hover-effect) { display: none !important; }
 </style>
