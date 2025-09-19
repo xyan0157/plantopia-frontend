@@ -357,15 +357,14 @@ const impactError = ref<string | null>(null)
 import type { ApiQuantifyResponse } from '@/services/api'
 const impactData = ref<ApiQuantifyResponse | null>(null)
 const plantCount = ref<number>(1)
-const co2Random = ref<number>(0)
+let currentRequestController: AbortController | null = null
 
 // Derived values for prototype visuals (fallback to 0 if missing)
 const temperatureReduction = computed(() => Number(impactData.value?.quantified_impact.temperature_reduction_c || 0))
 const airQualityPoints = computed<number>(() => Number(impactData.value?.quantified_impact.air_quality_points || 0))
 const co2Absorption = computed<number>(() => {
   const apiVal = Number(impactData.value?.quantified_impact.co2_absorption_kg_year)
-  const base = Number.isFinite(apiVal) && apiVal > 0 ? apiVal : co2Random.value
-  return base // keep plant count fixed at 1
+  return Number.isFinite(apiVal) && apiVal > 0 ? apiVal : 0
 })
 const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
@@ -394,37 +393,73 @@ const waterProcessedPercent = computed(() => Math.min(100, (waterProcessed.value
 
 function openImpact() {
   showImpact.value = true
-  // Always refresh on every open
+  // Always refresh on every open - reset all state
   impactData.value = null
   impactError.value = null
+  impactLoading.value = false
+  // Cancel any ongoing request
+  if (currentRequestController) {
+    currentRequestController.abort()
+    currentRequestController = null
+  }
   fetchImpact()
-  co2Random.value = Math.round(Math.random() * 500) / 10
 }
 
 function closeImpact() {
   showImpact.value = false
+  // Cancel any ongoing request when closing
+  if (currentRequestController) {
+    currentRequestController.abort()
+    currentRequestController = null
+  }
 }
 
 async function fetchImpact() {
   if (!props.plant) return
+  
+  // Cancel any existing request
+  if (currentRequestController) {
+    currentRequestController.abort()
+  }
+  
+  // Create new abort controller for this request
+  currentRequestController = new AbortController()
+  
   impactLoading.value = true
   impactError.value = null
+  
   try {
-    // Sanitize strings to avoid backend 500 on special chars
-    const safeName = (props.plant.name || '').toString().replace(/[^\w\s\-]/g, '').trim() || (props.plant.scientific_name || '').toString()
-    const safeSuburb = (recStore.lastParams?.location || 'Richmond').toString().replace(/[^\w\s\-]/g, '').trim() || 'Richmond'
+    // More conservative string sanitization - only remove truly problematic chars
+    const safeName = (props.plant.name || '').toString().replace(/[^\w\s\-'&]/g, '').trim() || (props.plant.scientific_name || '').toString()
+    const safeSuburb = (recStore.lastParams?.location || 'Richmond').toString().replace(/[^\w\s\-'&]/g, '').trim() || 'Richmond'
+    
+    console.log('[IMPACT] Fetching impact for plant:', safeName, 'in suburb:', safeSuburb)
+    
     const res = await plantApiService.quantifyPlantImpact({
       plant_name: safeName,
       suburb: safeSuburb,
       climate_zone: undefined,
-      plant_count: 1,
+      plant_count: plantCount.value,
       user_preferences: {},
-    })
-    impactData.value = res
+    }, currentRequestController.signal)
+    
+    // Only update if this request hasn't been cancelled
+    if (!currentRequestController.signal.aborted) {
+      impactData.value = res
+      console.log('[IMPACT] Successfully loaded impact data:', res)
+    }
   } catch (e) {
-    impactError.value = e instanceof Error ? e.message : 'Failed to load impact'
+    // Only show error if this request hasn't been cancelled
+    if (!currentRequestController.signal.aborted) {
+      console.error('[IMPACT] Error fetching impact:', e)
+      impactError.value = e instanceof Error ? e.message : 'Failed to load impact'
+    }
   } finally {
-    impactLoading.value = false
+    // Only update loading state if this request hasn't been cancelled
+    if (!currentRequestController.signal.aborted) {
+      impactLoading.value = false
+    }
+    currentRequestController = null
   }
 }
 
@@ -437,9 +472,17 @@ watch(plantCount, () => {
 
 // When the selected plant changes, reset impact data and refetch if modal is open
 watch(() => props.plant?.name, () => {
+  // Cancel any ongoing request
+  if (currentRequestController) {
+    currentRequestController.abort()
+    currentRequestController = null
+  }
+  
+  // Reset all impact state
   impactData.value = null
   impactError.value = null
-  co2Random.value = 0
+  impactLoading.value = false
+  
   if (showImpact.value) {
     fetchImpact()
   }

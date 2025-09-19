@@ -390,7 +390,7 @@ export class PlantRecommendationService {
   }
 
   // Quantify plant impact endpoint
-  async quantifyPlantImpact(request: ApiQuantifyRequest): Promise<ApiQuantifyResponse> {
+  async quantifyPlantImpact(request: ApiQuantifyRequest, signal?: AbortSignal): Promise<ApiQuantifyResponse> {
     try {
       console.group('[PLANT API] Quantify Plant Impact Request')
       console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/quantify-plant`)
@@ -402,6 +402,7 @@ export class PlantRecommendationService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        signal, // Add abort signal support
       })
 
       const data = await response.json()
