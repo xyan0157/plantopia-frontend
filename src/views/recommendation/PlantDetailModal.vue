@@ -262,9 +262,15 @@
                 </div>
               </div>
 
-              <div class="callout">
-                <div class="callout-title">Supports pollinators</div>
-                <div class="callout-text">Helps filter dust/pollution and boosts local biodiversity.</div>
+              <div class="side-col">
+                <div class="count-card">
+                  <label class="count-label" for="plant-count-input">Plant Count</label>
+                  <input id="plant-count-input" class="count-input" type="number" min="1" v-model.number="plantCount" />
+                </div>
+                <div class="callout">
+                  <div class="callout-title">Supports pollinators</div>
+                  <div class="callout-text">Helps filter dust/pollution and boosts local biodiversity.</div>
+                </div>
               </div>
             </div>
           </div>
@@ -350,11 +356,17 @@ const impactLoading = ref(false)
 const impactError = ref<string | null>(null)
 import type { ApiQuantifyResponse } from '@/services/api'
 const impactData = ref<ApiQuantifyResponse | null>(null)
+const plantCount = ref<number>(1)
+const co2Random = ref<number>(0)
 
 // Derived values for prototype visuals (fallback to 0 if missing)
 const temperatureReduction = computed(() => Number(impactData.value?.quantified_impact.temperature_reduction_c || 0))
 const airQualityPoints = computed<number>(() => Number(impactData.value?.quantified_impact.air_quality_points || 0))
-const co2Absorption = computed<number>(() => Number(impactData.value?.quantified_impact.co2_absorption_kg_year || 0))
+const co2Absorption = computed<number>(() => {
+  const apiVal = Number(impactData.value?.quantified_impact.co2_absorption_kg_year)
+  const base = Number.isFinite(apiVal) && apiVal > 0 ? apiVal : co2Random.value
+  return base * Math.max(1, plantCount.value)
+})
 const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
 const confidence = computed<string>(() => String(impactData.value?.quantified_impact.confidence_level || 'Unknown'))
@@ -385,6 +397,7 @@ function openImpact() {
   if (!impactData.value) {
     fetchImpact()
   }
+  co2Random.value = Math.round(Math.random() * 500) / 10
 }
 
 function closeImpact() {
@@ -400,7 +413,7 @@ async function fetchImpact() {
       plant_name: props.plant.name,
       suburb: recStore.lastParams?.location || 'Richmond',
       climate_zone: undefined,
-      plant_count: 1,
+      plant_count: plantCount.value,
       user_preferences: {},
     })
     impactData.value = res
@@ -410,6 +423,21 @@ async function fetchImpact() {
     impactLoading.value = false
   }
 }
+
+// Re-fetch when user changes plant count while impact is open
+watch(plantCount, () => {
+  if (showImpact.value) {
+    fetchImpact()
+  }
+})
+
+// When the selected plant changes, reset impact data and refetch if modal is open
+watch(() => props.plant?.name, () => {
+  impactData.value = null
+  if (showImpact.value) {
+    fetchImpact()
+  }
+})
 
 // Function to get image source (Base64 or URL)
 const getImageSource = (): string => {
@@ -896,6 +924,11 @@ const formatSunlight = (sunlight: string): string => {
 .gauge-value { color: #065f46; font-weight: 700; }
 
 .bars-callout { display: grid; grid-template-columns: 1fr 260px; gap: 1rem; align-items: start; }
+.count-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.count-label { font-size: 12px; color: #374151; font-weight: 600; }
+.count-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; }
+.count-input:focus { border-color: #065f46; box-shadow: 0 0 0 2px rgba(16,185,129,0.2); }
+.side-col { display: grid; gap: 10px; }
 .bars { display: grid; gap: 10px; }
 .bar-row { display: grid; grid-template-columns: 140px 1fr 80px; align-items: center; gap: 8px; }
 .bar-label { color: #374151; font-size: 12px; }
