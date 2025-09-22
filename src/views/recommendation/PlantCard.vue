@@ -28,8 +28,15 @@
         </div>
       </div>
       
-      <!-- Plant Description -->
-      <div class="plant-card-description" v-html="renderedDescription"></div>
+      <!-- Plant Description with clamp/expand -->
+      <div ref="descRef" class="plant-card-description" :class="{ clamped: !isExpanded }" v-html="renderedDescription"></div>
+      <button
+        v-if="isExpanded || canClamp"
+        class="show-more-btn"
+        @click.stop="isExpanded = !isExpanded"
+      >
+        {{ isExpanded ? 'Show less' : 'Show more' }}
+      </button>
 
       <!-- Bottom group: Requirements (element) + Why + Learn More stick to bottom -->
       <div class="bottom-actions">
@@ -60,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import type { Plant } from '@/services/api'
 import { renderMarkdownInline } from '@/services/markdownService'
 import PlantRequirements from './PlantRequirements.vue'
@@ -87,6 +94,25 @@ const renderedDescription = computed(() => {
     return 'No description available.'
   }
   return renderMarkdownInline(props.plant.description)
+})
+
+// Clamp/expand state for description
+const isExpanded = ref(false)
+const descRef = ref<HTMLElement | null>(null)
+const canClamp = ref(false)
+
+onMounted(() => {
+  nextTick(() => {
+    const el = descRef.value
+    if (!el) return
+    // Temporarily apply clamp to measure overflow
+    const wasExpanded = isExpanded.value
+    isExpanded.value = false
+    nextTick(() => {
+      canClamp.value = el.scrollHeight > el.clientHeight + 4
+      isExpanded.value = wasExpanded
+    })
+  })
 })
 
 // Function to get image source with Victoria Plants Data priority
@@ -345,6 +371,32 @@ const handleImageError = (event: Event) => {
   font-size: 0.875rem;          /* Smaller font size */
   margin-bottom: 1rem;          /* Space below */
   line-height: 1.5;             /* Better line spacing */
+}
+
+.plant-card-description.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 6; /* approx half */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+}
+
+.plant-card-description.clamped::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2.25rem;
+  background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff);
+}
+
+.show-more-btn {
+  background: transparent;
+  border: none;
+  color: #065f46;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0; margin-top: -0.25rem; margin-bottom: 0.5rem;
+  align-self: flex-start;
 }
 
 /* Care requirement icons container */
