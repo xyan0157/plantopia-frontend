@@ -230,7 +230,10 @@
           <div class="impact-top">
             <div class="gauge-card">
               <svg class="gauge" viewBox="0 0 200 110" aria-label="CO2 absorption gauge">
-                <path d="M10,100 A90,90 0 0,1 190,100" fill="none" stroke="#e5e7eb" stroke-width="14" />
+              <!-- Base arc -->
+              <path d="M10,100 A90,90 0 0,1 190,100" fill="none" stroke="#e5e7eb" stroke-width="14" />
+              <!-- Filled arc up to current value -->
+              <path d="M10,100 A90,90 0 0,1 190,100" fill="none" stroke="#065f46" stroke-width="14" stroke-linecap="round" pathLength="100" :style="{ strokeDasharray: gaugeDasharray }" />
                 <g v-for="t in 9" :key="'tick-'+t" :transform="tickTransform(t)">
                   <line x1="0" y1="0" x2="0" y2="10" stroke="#9ca3af" stroke-width="2" />
                 </g>
@@ -378,11 +381,22 @@ const co2AbsorptionFormatted = computed<string>(() => {
   return `${v.toFixed(1)} kg/year`
 })
 
-// Gauge helpers
-const co2Max = 50
+// Gauge helpers - scale needle by displayed unit (g/kg/t)
+const co2Gauge = computed(() => {
+  const kg = co2Absorption.value
+  if (!Number.isFinite(kg) || kg <= 0) return { value: 0, max: 1 }
+  // For small values, switch to grams scale (0..1000 g)
+  if (kg < 1) return { value: kg * 1000, max: 1000 }
+  // For very large values, switch to tonnes scale (0..5 t)
+  if (kg >= 1000) return { value: kg / 1000, max: 5 }
+  // Default kilograms scale (0..50 kg)
+  return { value: kg, max: 50 }
+})
+
 const angle = computed(() => {
-  const v = Math.max(0, Math.min(co2Absorption.value, co2Max))
-  return -90 + (v / co2Max) * 180
+  const { value, max } = co2Gauge.value
+  const clamped = Math.max(0, Math.min(value, max))
+  return -90 + (clamped / max) * 180
 })
 const needleTransform = computed(() => `rotate(${angle.value} 100 100)`)
 function tickTransform(t: number) {
@@ -398,6 +412,13 @@ function tickTransform(t: number) {
 const coolingEffectPercent = computed(() => Math.min(100, Math.max(0, (temperatureReduction.value / 2) * 100)))
 const airPointsPercent = computed(() => Math.min(100, (airQualityPoints.value / 10) * 100))
 const waterProcessedPercent = computed(() => Math.min(100, (waterProcessed.value / 10) * 100))
+
+// Gauge arc fill percentage for green arc
+const gaugeDasharray = computed(() => {
+  const { value, max } = co2Gauge.value
+  const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
+  return `${pct} 100` // pathLength=100
+})
 
 function openImpact() {
   showImpact.value = true
