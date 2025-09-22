@@ -31,15 +31,14 @@
       <!-- Plant Description -->
       <div class="plant-card-description" v-html="renderedDescription"></div>
 
-      <!-- Plant Care Requirements (separated component) -->
-      <PlantRequirements 
-        :sunlight="plant.sunlight || ''"
-        :water="plant.water || ''"
-        :effort="plant.effort || ''"
-      />
-
-      <!-- Bottom: Why + Learn More stick to bottom together -->
+      <!-- Bottom group: Requirements (element) + Why + Learn More stick to bottom -->
       <div class="bottom-actions">
+        <!-- Plant Care Requirements (separated component) placed right above Why -->
+        <PlantRequirements 
+          :sunlight="plant.sunlight || ''"
+          :water="plant.water || ''"
+          :effort="plant.effort || ''"
+        />
         <!-- Why This Plant is Recommended Section -->
         <div class="why-recommended">
           <strong>Why Recommended:</strong> 
@@ -306,7 +305,7 @@ const handleImageError = (event: Event) => {
 .bottom-actions {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;                  /* tighter gaps between element and why */
   margin-top: auto;             /* push to bottom */
 }
 
@@ -382,6 +381,7 @@ const handleImageError = (event: Event) => {
 .why-recommended {
   font-size: 0.875rem;                               /* Smaller font */
   color: #1c3d21;                                     /* Dark green text */
+  margin-top: 0.5rem;                                 /* small top gap from requirements */
   margin-bottom: 1rem;                                /* Space below */
   padding: 0.75rem;                                   /* Inner padding */
   background: linear-gradient(135deg, #f0fdf4, #dcfce7); /* Light green gradient */

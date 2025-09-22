@@ -55,7 +55,7 @@ function formatEffort(e: string): string {
 .plant-card-requirements {
   display: flex;
   gap: 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0; /* stick to the block below (Why) */
   justify-content: space-between;
 }
 
