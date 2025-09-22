@@ -31,37 +31,31 @@
       <!-- Plant Description -->
       <div class="plant-card-description" v-html="renderedDescription"></div>
 
-      <!-- Plant Care Requirements -->
-      <div class="plant-card-requirements">
-        <div class="requirement-item">
-          <span class="requirement-label">Sun:</span>
-          <span class="requirement-value">{{ getSunIcon(plant.sunlight || '') }}</span>
-        </div>
-        <div class="requirement-item">
-          <span class="requirement-label">Water:</span>
-          <span class="requirement-value">{{ getWaterIcon(plant.water || '') }}</span>
-        </div>
-        <div class="requirement-item">
-          <span class="requirement-label">Care:</span>
-          <span class="requirement-value">{{ getEffortIcon(plant.effort || '') }}</span>
-        </div>
-      </div>
+      <!-- Plant Care Requirements (separated component) -->
+      <PlantRequirements 
+        :sunlight="plant.sunlight || ''"
+        :water="plant.water || ''"
+        :effort="plant.effort || ''"
+      />
 
-      <!-- Why This Plant is Recommended Section -->
-      <div class="why-recommended">
-        <strong>Why Recommended:</strong> 
-        <span v-if="Array.isArray(plant.whyRecommended)">
-          {{ plant.whyRecommended.join(' ') }}
-        </span>
-        <span v-else>
-          {{ plant.whyRecommended }}
-        </span>
-      </div>
+      <!-- Bottom: Why + Learn More stick to bottom together -->
+      <div class="bottom-actions">
+        <!-- Why This Plant is Recommended Section -->
+        <div class="why-recommended">
+          <strong>Why Recommended:</strong> 
+          <span v-if="Array.isArray(plant.whyRecommended)">
+            {{ plant.whyRecommended.join(' ') }}
+          </span>
+          <span v-else>
+            {{ plant.whyRecommended }}
+          </span>
+        </div>
 
-      <!-- Action Button to View Plant Details -->
-      <button class="learn-more-button" @click.stop="$emit('select', plant)">
-        Learn More
-      </button>
+        <!-- Action Button to View Plant Details -->
+        <button class="learn-more-button" @click.stop="$emit('select', plant)">
+          Learn More
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -70,6 +64,7 @@
 import { ref, computed } from 'vue'
 import type { Plant } from '@/services/api'
 import { renderMarkdownInline } from '@/services/markdownService'
+import PlantRequirements from './PlantRequirements.vue'
 
 // Component props - receives plant data
 const props = defineProps<{
@@ -246,35 +241,7 @@ const handleImageError = (event: Event) => {
   }
 }
 
-// Helper function to get appropriate sun icon based on sunlight requirement
-const getSunIcon = (sunlight: string): string => {
-  switch (sunlight) {
-    case 'full': return 'Full Sun'     // Full sun
-    case 'partial': return 'Partial'   // Partial sun/shade
-    case 'shade': return 'Shade'     // Shade
-    default: return 'Full Sun'
-  }
-}
-
-// Helper function to get appropriate water icon based on watering needs
-const getWaterIcon = (water: string): string => {
-  switch (water) {
-    case 'low': return 'Low'           // Low water needs
-    case 'medium': return 'Medium'      // Medium water needs
-    case 'high': return 'High'      // High water needs
-    default: return 'Low'
-  }
-}
-
-// Helper function to get appropriate effort icon based on maintenance level
-const getEffortIcon = (effort: string): string => {
-  switch (effort) {
-    case 'low': return 'Low'      // Low maintenance
-    case 'medium': return 'Medium'   // Medium maintenance
-    case 'high': return 'High'     // High maintenance
-    default: return 'Low'
-  }
-}
+// requirement helpers moved to PlantRequirements component
 </script>
 
 <style scoped>
@@ -286,6 +253,8 @@ const getEffortIcon = (effort: string): string => {
   overflow: hidden;               /* Hide overflow content */
   transition: all 0.3s ease;     /* Smooth hover transition */
   cursor: pointer;                /* Show pointer cursor */
+  display: flex;                  /* Stack image + content vertically */
+  flex-direction: column;
 }
 
 /* Hover effect for plant card */
@@ -330,6 +299,15 @@ const getEffortIcon = (effort: string): string => {
 /* Plant card content container */
 .plant-card-content {
   padding: 1.5rem;              /* Inner spacing */
+  display: flex;                /* Allow bottom block to push to bottom */
+  flex-direction: column;
+  flex: 1;                      /* Fill remaining height under image */
+}
+.bottom-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;             /* push to bottom */
 }
 
 /* Plant header with title and score */

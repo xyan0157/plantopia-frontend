@@ -240,7 +240,7 @@
                 </g>
               </svg>
               <div class="gauge-label">CO2 absorption capacity</div>
-              <div class="gauge-value">{{ co2Absorption.toFixed(1) }} kg/year</div>
+              <div class="gauge-value">{{ co2AbsorptionFormatted }}</div>
             </div>
 
             <div class="bars-callout">
@@ -263,10 +263,6 @@
               </div>
 
               <div class="side-col">
-                <div class="count-card">
-                  <label class="count-label" for="plant-count-input">Plant Count</label>
-                  <input id="plant-count-input" class="count-input" type="number" min="1" v-model.number="plantCount" />
-                </div>
                 <div class="callout">
                   <div class="callout-title">Supports pollinators</div>
                   <div class="callout-text">Helps filter dust/pollution and boosts local biodiversity.</div>
@@ -279,7 +275,7 @@
           <div class="kpi-grid">
             <div class="kpi"><div class="kpi-title">Temperature Reduction</div><div class="kpi-value">{{ temperatureReduction.toFixed(1) }} °C</div></div>
             <div class="kpi"><div class="kpi-title">Air Quality Points</div><div class="kpi-value">{{ airQualityPoints }}</div></div>
-            <div class="kpi"><div class="kpi-title">CO2 Absorption</div><div class="kpi-value">{{ co2Absorption.toFixed(1) }} kg/year</div></div>
+            <div class="kpi"><div class="kpi-title">CO2 Absorption</div><div class="kpi-value">{{ co2AbsorptionFormatted }}</div></div>
             <div class="kpi"><div class="kpi-title">Water Processed</div><div class="kpi-value">{{ waterProcessed.toFixed(1) }} L/week</div></div>
             <div class="kpi"><div class="kpi-title">Pollinator Support</div><div class="kpi-value">{{ pollinatorSupport }}</div></div>
             <div class="kpi"><div class="kpi-title">Confidence</div><div class="kpi-value">{{ confidence }}</div></div>
@@ -356,7 +352,7 @@ const impactLoading = ref(false)
 const impactError = ref<string | null>(null)
 import type { ApiQuantifyResponse } from '@/services/api'
 const impactData = ref<ApiQuantifyResponse | null>(null)
-const plantCount = ref<number>(1)
+// Removed plant count UI; backend quantifies per plant by default
 let currentRequestController: AbortController | null = null
 
 // Derived values for prototype visuals (fallback to 0 if missing)
@@ -369,6 +365,18 @@ const co2Absorption = computed<number>(() => {
 const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
 const confidence = computed<string>(() => String(impactData.value?.quantified_impact.confidence_level || 'Unknown'))
+
+// Format CO2 units dynamically based on value: g/kg/t per year
+const co2AbsorptionFormatted = computed<string>(() => {
+  const v = co2Absorption.value
+  if (!Number.isFinite(v)) return '0.0 kg/year'
+  if (v >= 1000) {
+    return `${(v / 1000).toFixed(2)} t/year`
+  } else if (v < 1) {
+    return `${(v * 1000).toFixed(0)} g/year`
+  }
+  return `${v.toFixed(1)} kg/year`
+})
 
 // Gauge helpers
 const co2Max = 50
@@ -439,7 +447,7 @@ async function fetchImpact() {
       plant_name: safeName,
       suburb: safeSuburb,
       climate_zone: undefined,
-      plant_count: plantCount.value,
+      // quantify per plant
       user_preferences: {},
     }, currentRequestController.signal)
     
@@ -463,12 +471,7 @@ async function fetchImpact() {
   }
 }
 
-// Re-fetch when user changes plant count while impact is open
-watch(plantCount, () => {
-  if (showImpact.value) {
-    fetchImpact()
-  }
-})
+// Removed plantCount watcher
 
 // When the selected plant changes, reset impact data and refetch if modal is open
 watch(() => props.plant?.name, () => {
