@@ -28,48 +28,49 @@
         </div>
       </div>
       
-      <!-- Plant Description -->
-      <div class="plant-card-description" v-html="renderedDescription"></div>
-
-      <!-- Plant Care Requirements -->
-      <div class="plant-card-requirements">
-        <div class="requirement-item">
-          <span class="requirement-label">Sun:</span>
-          <span class="requirement-value">{{ getSunIcon(plant.sunlight || '') }}</span>
-        </div>
-        <div class="requirement-item">
-          <span class="requirement-label">Water:</span>
-          <span class="requirement-value">{{ getWaterIcon(plant.water || '') }}</span>
-        </div>
-        <div class="requirement-item">
-          <span class="requirement-label">Care:</span>
-          <span class="requirement-value">{{ getEffortIcon(plant.effort || '') }}</span>
-        </div>
-      </div>
-
-      <!-- Why This Plant is Recommended Section -->
-      <div class="why-recommended">
-        <strong>Why Recommended:</strong> 
-        <span v-if="Array.isArray(plant.whyRecommended)">
-          {{ plant.whyRecommended.join(' ') }}
-        </span>
-        <span v-else>
-          {{ plant.whyRecommended }}
-        </span>
-      </div>
-
-      <!-- Action Button to View Plant Details -->
-      <button class="learn-more-button" @click.stop="$emit('select', plant)">
-        Learn More
+      <!-- Plant Description with clamp/expand -->
+      <div ref="descRef" class="plant-card-description" :class="{ clamped: !isExpanded }" v-html="renderedDescription"></div>
+      <button
+        v-if="isExpanded || canClamp"
+        class="show-more-btn"
+        @click.stop="isExpanded = !isExpanded"
+      >
+        {{ isExpanded ? 'Show less' : 'Show more' }}
       </button>
+
+      <!-- Bottom group: Requirements (element) + Why + Learn More stick to bottom -->
+      <div class="bottom-actions">
+        <!-- Plant Care Requirements (separated component) placed right above Why -->
+        <PlantRequirements 
+          :sunlight="plant.sunlight || ''"
+          :water="plant.water || ''"
+          :effort="plant.effort || ''"
+        />
+        <!-- Why This Plant is Recommended Section -->
+        <div class="why-recommended">
+          <strong>Why Recommended:</strong> 
+          <span v-if="Array.isArray(plant.whyRecommended)">
+            {{ plant.whyRecommended.join(' ') }}
+          </span>
+          <span v-else>
+            {{ plant.whyRecommended }}
+          </span>
+        </div>
+
+        <!-- Action Button to View Plant Details -->
+        <button class="learn-more-button" @click.stop="$emit('select', plant)">
+          Learn More
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import type { Plant } from '@/services/api'
 import { renderMarkdownInline } from '@/services/markdownService'
+import PlantRequirements from './PlantRequirements.vue'
 
 // Component props - receives plant data
 const props = defineProps<{
@@ -93,6 +94,25 @@ const renderedDescription = computed(() => {
     return 'No description available.'
   }
   return renderMarkdownInline(props.plant.description)
+})
+
+// Clamp/expand state for description
+const isExpanded = ref(false)
+const descRef = ref<HTMLElement | null>(null)
+const canClamp = ref(false)
+
+onMounted(() => {
+  nextTick(() => {
+    const el = descRef.value
+    if (!el) return
+    // Temporarily apply clamp to measure overflow
+    const wasExpanded = isExpanded.value
+    isExpanded.value = false
+    nextTick(() => {
+      canClamp.value = el.scrollHeight > el.clientHeight + 4
+      isExpanded.value = wasExpanded
+    })
+  })
 })
 
 // Function to get image source with Victoria Plants Data priority
@@ -246,35 +266,7 @@ const handleImageError = (event: Event) => {
   }
 }
 
-// Helper function to get appropriate sun icon based on sunlight requirement
-const getSunIcon = (sunlight: string): string => {
-  switch (sunlight) {
-    case 'full': return 'Full Sun'     // Full sun
-    case 'partial': return 'Partial'   // Partial sun/shade
-    case 'shade': return 'Shade'     // Shade
-    default: return 'Full Sun'
-  }
-}
-
-// Helper function to get appropriate water icon based on watering needs
-const getWaterIcon = (water: string): string => {
-  switch (water) {
-    case 'low': return 'Low'           // Low water needs
-    case 'medium': return 'Medium'      // Medium water needs
-    case 'high': return 'High'      // High water needs
-    default: return 'Low'
-  }
-}
-
-// Helper function to get appropriate effort icon based on maintenance level
-const getEffortIcon = (effort: string): string => {
-  switch (effort) {
-    case 'low': return 'Low'      // Low maintenance
-    case 'medium': return 'Medium'   // Medium maintenance
-    case 'high': return 'High'     // High maintenance
-    default: return 'Low'
-  }
-}
+// requirement helpers moved to PlantRequirements component
 </script>
 
 <style scoped>
@@ -286,6 +278,8 @@ const getEffortIcon = (effort: string): string => {
   overflow: hidden;               /* Hide overflow content */
   transition: all 0.3s ease;     /* Smooth hover transition */
   cursor: pointer;                /* Show pointer cursor */
+  display: flex;                  /* Stack image + content vertically */
+  flex-direction: column;
 }
 
 /* Hover effect for plant card */
@@ -330,6 +324,15 @@ const getEffortIcon = (effort: string): string => {
 /* Plant card content container */
 .plant-card-content {
   padding: 1.5rem;              /* Inner spacing */
+  display: flex;                /* Allow bottom block to push to bottom */
+  flex-direction: column;
+  flex: 1;                      /* Fill remaining height under image */
+}
+.bottom-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;                  /* tighter gaps between element and why */
+  margin-top: auto;             /* push to bottom */
 }
 
 /* Plant header with title and score */
@@ -370,6 +373,32 @@ const getEffortIcon = (effort: string): string => {
   line-height: 1.5;             /* Better line spacing */
 }
 
+.plant-card-description.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 6; /* approx half */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+}
+
+.plant-card-description.clamped::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2.25rem;
+  background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff);
+}
+
+.show-more-btn {
+  background: transparent;
+  border: none;
+  color: #065f46;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0; margin-top: -0.25rem; margin-bottom: 0.5rem;
+  align-self: flex-start;
+}
+
 /* Care requirement icons container */
 .plant-card-requirements {
   display: flex;
@@ -404,6 +433,7 @@ const getEffortIcon = (effort: string): string => {
 .why-recommended {
   font-size: 0.875rem;                               /* Smaller font */
   color: #1c3d21;                                     /* Dark green text */
+  margin-top: 0.5rem;                                 /* small top gap from requirements */
   margin-bottom: 1rem;                                /* Space below */
   padding: 0.75rem;                                   /* Inner padding */
   background: linear-gradient(135deg, #f0fdf4, #dcfce7); /* Light green gradient */

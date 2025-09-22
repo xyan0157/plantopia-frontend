@@ -6,6 +6,7 @@
   <div class="search-form-container">
     <div class="card border-0 shadow-sm">
       <div class="card-body">
+        <form @submit.prevent="handleFindPlants">
         <!-- Page Title -->
         <h1 class="h3 mb-4 text-center fw-bold" style="color: white; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);">Plant Recommendations</h1>
 
@@ -58,7 +59,7 @@
 
           <!-- Search Button -->
           <div class="col-lg-2 col-md-12">
-            <button class="btn btn-success btn-equal w-100 d-flex align-items-center justify-content-center" @click="handleFindPlants" style="position: relative; z-index: 3;">
+            <button type="submit" class="btn btn-success btn-equal w-100 d-flex align-items-center justify-content-center" style="position: relative; z-index: 3;">
               <ArrowRightIcon class="me-2" style="width: 1rem; height: 1rem;" />
               Search
             </button>
@@ -105,6 +106,7 @@
           <ExclamationTriangleIcon class="me-2" style="width: 1.25rem; height: 1.25rem;" />
           {{ error }}
         </div>
+        </form>
       </div>
     </div>
 
