@@ -59,7 +59,9 @@
                       v-else
                       class="value-badge veg"
                     >{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
-                    <button class="history-go" @click="centerTo(item)">Center on map</button>
+                    <button class="history-go" @click="centerTo(item)" aria-label="Center on map">
+                      <MapPinIcon />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -105,6 +107,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { onMounted, ref, watch, nextTick } from 'vue'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
+import { MapPinIcon } from '@heroicons/vue/24/solid'
 
 const loadGoogleMaps = ensureGoogleMapsLoaded
 
@@ -118,6 +121,7 @@ let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
 const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string }>>([])
+const HISTORY_STORAGE_KEY = 'uhi_recent_searches_v1'
 // Standardized out-of-coverage message in English only
 const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
 // Map suburb identifiers to vegetation total (%) sourced from /data endpoint
@@ -133,6 +137,36 @@ let uhiByName: Record<string, any> = {}
 // Chart state
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
 const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
+
+// Persist/restore history so it survives page reloads
+function loadHistoryFromStorage() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return
+    // Basic schema validation and clamp size
+    const cleaned = parsed
+      .filter((it: any) => it && typeof it.label === 'string' && it.center && typeof it.center.lat === 'number' && typeof it.center.lng === 'number')
+      .map((it: any) => ({
+        label: String(it.label),
+        center: { lat: Number(it.center.lat), lng: Number(it.center.lng) },
+        layer: (it.layer === 'veg' ? 'veg' : 'heat') as 'heat' | 'veg',
+        key: String(it.key || (String(it.label).toLowerCase().replace(/\s+/g, '_'))),
+        heat: typeof it.heat === 'number' ? (it.heat as number) : undefined,
+        veg: typeof it.veg === 'number' ? (it.veg as number) : undefined,
+        heatCategory: typeof it.heatCategory === 'string' ? (it.heatCategory as string) : undefined,
+      }))
+      .slice(0, 8)
+    searchHistory.value = cleaned
+  } catch {}
+}
+
+function saveHistoryToStorage() {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(searchHistory.value))
+  } catch {}
+}
 
 function normKey(v: unknown): string {
   return String(v ?? '').toLowerCase().trim().replace(/\s+/g, '_')
@@ -588,6 +622,9 @@ onMounted(async () => {
         fullscreenControl: false,
       })
     }
+    // Load saved history first so UI is populated quickly
+    loadHistoryFromStorage()
+
     // Load heat/vegetation stats once so history card can show values
     await loadUhiDataOnce()
     refreshHistoryStats()
@@ -637,6 +674,7 @@ onMounted(async () => {
           searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
+          saveHistoryToStorage()
         } else {
           // Vegetation: detect polygon name then map to veg percentage
           const liveHeat = getHeatAtLatLng(center.lat, center.lng)
@@ -653,6 +691,7 @@ onMounted(async () => {
           searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
+          saveHistoryToStorage()
         }
         }
       })
@@ -697,6 +736,7 @@ onMounted(async () => {
               searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
+              saveHistoryToStorage()
             } else {
               const liveHeat = getHeatAtLatLng(center.lat, center.lng)
               const suburbName = liveHeat.name
@@ -711,6 +751,7 @@ onMounted(async () => {
               searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
+              saveHistoryToStorage()
             }
           }
         })
@@ -773,6 +814,7 @@ function centerTo(item: { label: string; center: { lat: number; lng: number }; l
 
 function removeHistory(item: { label: string }) {
   searchHistory.value = searchHistory.value.filter(h => h.label !== item.label)
+  saveHistoryToStorage()
 }
 
 // keep for potential future UI; remove if unused elsewhere
@@ -885,7 +927,8 @@ async function buildCharts() {
 
 .layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
 .layout-left { min-width: 0; }
-.layout-right { position: sticky; top: 12px; min-width: 0; align-self: start; }
+.layout-right { position: relative; min-width: 0; align-self: start; }
+.layer-fixed { position: sticky; top: 12px; z-index: 2; }
 .filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
 .filter-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
 .select-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
@@ -903,8 +946,9 @@ async function buildCharts() {
 .layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
 .layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
 .layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
-.history-go { background: #065f46; color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.history-go { background: #065f46; color: white; border: none; border-radius: 999px; padding: 6px; font-size: 12px; cursor: pointer; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
 .history-go:hover { background: #047857; }
+.history-go svg { width: 16px; height: 16px; }
 .history-remove { background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 18px; line-height: 1; }
 .history-remove:hover { color: #6b7280; }
 .history-actions { margin-top: 8px; text-align: right; }
