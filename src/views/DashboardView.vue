@@ -51,8 +51,14 @@
                   </div>
                   <div class="history-card-actions">
                     <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? (item.heatCategory || 'Heat') : 'Vegetation' }}</span>
-                    <span class="layer-value" v-if="item.layer==='heat'">{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
-                    <span class="layer-value" v-else>{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
+                    <span
+                      v-if="item.layer==='heat'"
+                      class="value-badge heat"
+                    >{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
+                    <span
+                      v-else
+                      class="value-badge veg"
+                    >{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
                     <button class="history-go" @click="centerTo(item)">Center on map</button>
                   </div>
                 </div>
@@ -205,11 +211,14 @@ function refreshHistoryStats() {
   searchHistory.value = searchHistory.value.map((it) => {
     const r = uhiByName[it.label]
     const live = getHeatFromMapByLabel(it.label)
-    const heatVal = live.avg ?? r?.heat?.avg ?? findMapValue(it.label, heatAvgMap)
-    const vegVal = r?.vegetation?.total ?? findMapValue(it.label, vegTotalsMap)
+    // Prefer the already stored precise value if present; otherwise recompute.
+    const computedHeat = live.avg ?? r?.heat?.avg ?? findMapValue(it.label, heatAvgMap)
+    const heatVal = Number.isFinite(Number(it.heat)) ? Number(it.heat) : (Number.isFinite(Number(computedHeat)) ? Number(computedHeat) : undefined)
+    const computedVeg = r?.vegetation?.total ?? findMapValue(it.label, vegTotalsMap)
+    const vegVal = Number.isFinite(Number(it.veg)) ? Number(it.veg) : (Number.isFinite(Number(computedVeg)) ? Number(computedVeg) : undefined)
     const heatCatRaw = live.category || r?.heat?.category
     const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(it.label, heatCategoryMap) as string | undefined)
-    return { ...it, heat: Number(heatVal), veg: Number(vegVal), heatCategory: heatCat }
+    return { ...it, heat: heatVal, veg: vegVal, heatCategory: heatCat }
   })
 }
 
@@ -624,6 +633,7 @@ onMounted(async () => {
           if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
           const heatVal = liveHeat.avg
           const heatCat = liveHeat.category
+          // Store precise map-derived value immediately
           searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
@@ -683,6 +693,7 @@ onMounted(async () => {
               errorMsg.value = ''
               if (liveHeat.name) label = liveHeat.name
               if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+              // Store precise map-derived value immediately
               searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
@@ -886,6 +897,9 @@ async function buildCharts() {
 .history-card-title { font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-card-actions { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
 .layer-value { font-size: 12px; color: #065f46; font-weight: 700; margin-left: 8px; margin-right: auto; }
+.value-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; margin-left: 8px; margin-right: auto; font-weight: 700; }
+.value-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
+.value-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
 .layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
 .layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
 .layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
