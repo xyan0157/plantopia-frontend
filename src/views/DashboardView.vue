@@ -15,6 +15,7 @@
             placeholder="Search address or place to center map..."
             aria-label="Search location"
           />
+          <div v-if="errorMsg" class="inline-error">{{ errorMsg }}</div>
         </div>
         <div class="layout-grid">
           <div class="layout-left">
@@ -106,10 +107,13 @@ const vegMapRef = ref<any>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const legendHtml = ref('')
 const vegLegendHtml = ref('')
+const errorMsg = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
 const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string }>>([])
+// Standardized out-of-coverage message in English only
+const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
 // Map suburb identifiers to vegetation total (%) sourced from /data endpoint
 let vegTotalsMap: Record<string, number> = {}
 let heatAvgMap: Record<string, number> = {}
@@ -117,6 +121,8 @@ let heatCategoryMap: Record<string, string> = {}
 // Built from the currently loaded heat boundaries on the map
 let heatAvgByName: Record<string, number> = {}
 let heatCatByName: Record<string, string> = {}
+let heatAvgByNameNorm: Record<string, number> = {}
+let heatCatByNameNorm: Record<string, string> = {}
 let uhiByName: Record<string, any> = {}
 // Chart state
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
@@ -131,6 +137,23 @@ function uhiUrl(path: string) {
   return `${base}${path}`
 }
 
+// Prefer geocoding results that are in Victoria (VIC)
+function isVicGeocodeResult(r: any): boolean {
+  try {
+    const comps = r?.address_components || []
+    return comps.some((c: any) => {
+      const types: string[] = c?.types || []
+      if (!Array.isArray(types)) return false
+      const isLvl1 = types.includes('administrative_area_level_1')
+      const shortName = String(c?.short_name || '').toUpperCase()
+      const longName = String(c?.long_name || '').toLowerCase()
+      return isLvl1 && (shortName === 'VIC' || longName.includes('victoria'))
+    })
+  } catch {
+    return false
+  }
+}
+
 function formatVeg(n: unknown): string {
   const v = Number(n)
   if (!Number.isFinite(v)) return 'N/A'
@@ -140,7 +163,7 @@ function formatVeg(n: unknown): string {
 function formatHeat(n: unknown): string {
   const v = Number(n)
   if (!Number.isFinite(v)) return 'N/A'
-  return Number.isInteger(v) ? `${v} C` : `${v.toFixed(1)} C`
+  return `${v.toFixed(1)} C`
 }
 
 // Load UHI data (/data) once for both heat and vegetation stats
@@ -239,15 +262,58 @@ function getHeatFromMapByLabel(label: string): { avg?: number; category?: string
       .replace(/\(|\)/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-    const target = normKey(base.split(' ')[0] || base)
-    // Fast lookup using maps built during boundaries load
-    for (const [name, val] of Object.entries(heatAvgByName)) {
-      const nk = normKey(name)
+    const target = normKey(base)
+    // Fast lookup using normalized keys built during boundaries load
+    for (const [nk, val] of Object.entries(heatAvgByNameNorm)) {
       if (nk === target || nk.startsWith(target) || target.startsWith(nk) || nk.includes(target)) {
-        return { avg: val, category: heatCatByName[name] }
+        const originalName = Object.keys(heatAvgByName).find(k => normKey(k) === nk) || ''
+        return { avg: val, category: heatCatByNameNorm[nk] || heatCatByName[originalName] }
       }
     }
     return {}
+  } catch {
+    return {}
+  }
+}
+
+// Read heat directly from the polygon that contains the given point
+function getHeatAtLatLng(lat: number, lng: number): { avg?: number; category?: string; name?: string } {
+  try {
+    if (!gmapRef.value || !(window as any).google?.maps?.geometry?.poly) return {}
+    const google = (window as any).google
+    const point = new google.maps.LatLng(lat, lng)
+    let found: { avg?: number; category?: string; name?: string } | undefined
+    gmapRef.value.data.forEach((f: any) => {
+      if (found) return
+      const geom = f.getGeometry && f.getGeometry()
+      if (!geom) return
+
+      // Recursively test MultiPolygon/Polygon
+      const contains = (g: any): boolean => {
+        const t = g.getType && g.getType()
+        if (t === 'Polygon') {
+          const rings = g.getArray()
+          if (!rings || !rings.length) return false
+          const outer = rings[0]
+          const path = outer.getArray()
+          const poly = new google.maps.Polygon({ paths: path })
+          return google.maps.geometry.poly.containsLocation(point, poly)
+        } else if (t === 'MultiPolygon') {
+          const polys = g.getArray()
+          for (const pg of polys) { if (contains(pg)) return true }
+          return false
+        }
+        return false
+      }
+
+      if (contains(geom)) {
+        const avg = Number(f.getProperty('AVG_HEAT'))
+        const cat = String(f.getProperty('HEAT_CATEGORY') || '')
+        const name = String(f.getProperty('SUBURB_NAME') || '')
+        found = { avg: Number.isFinite(avg) ? avg : undefined, category: cat || undefined, name }
+      }
+    })
+    return found || {}
   } catch {
     return {}
   }
@@ -446,12 +512,17 @@ async function loadBoundaries(simplified: boolean) {
   // Also sync our quick lookup maps for history display
   heatAvgByName = {}
   heatCatByName = {}
+  heatAvgByNameNorm = {}
+  heatCatByNameNorm = {}
   gmapRef.value!.data.forEach((f: any) => {
     const n = String(f.getProperty('SUBURB_NAME') || '')
     const a = Number(f.getProperty('AVG_HEAT'))
     const c = String(f.getProperty('HEAT_CATEGORY') || '')
     if (n && Number.isFinite(a)) heatAvgByName[n] = a
     if (n && c) heatCatByName[n] = c
+    const nk = normKey(n)
+    if (nk && Number.isFinite(a)) heatAvgByNameNorm[nk] = a
+    if (nk && c) heatCatByNameNorm[nk] = c
   })
 }
 
@@ -520,14 +591,14 @@ onMounted(async () => {
       fields: ['geometry', 'name', 'formatted_address'],
       types: ['geocode'],
       componentRestrictions: { country: 'au' },
+      bounds: gmapRef.value?.getBounds?.(),
+      strictBounds: true,
     })
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace()
         const loc = place?.geometry?.location
         if (loc) {
           const center = { lat: loc.lat(), lng: loc.lng() }
-          if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
-          if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
           // Prefer short name without state prefix; fall back to name or coords
           let label = place.name || place.formatted_address || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`
           if (place.formatted_address) {
@@ -538,8 +609,41 @@ onMounted(async () => {
               label = lastTwo || (place.name || parts[0])
             }
           }
-          addHistory({ label, center, layer: activeLayer.value })
+        // Only accept results that lie within our suburb polygons
+        if (activeLayer.value === 'heat') {
+          const liveHeat = getHeatAtLatLng(center.lat, center.lng)
+          if (liveHeat.avg == null) {
+            errorMsg.value = OUT_OF_COVERAGE_MSG
+            return
+          }
+          // Clear any previous error on successful match within dataset
+          errorMsg.value = ''
+          // Use polygon suburb name as canonical label (case-insensitive, consistent)
+          if (liveHeat.name) label = liveHeat.name
+          // center only after validating within dataset
+          if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+          const heatVal = liveHeat.avg
+          const heatCat = liveHeat.category
+          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined })
+          if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
+        } else {
+          // Vegetation: detect polygon name then map to veg percentage
+          const liveHeat = getHeatAtLatLng(center.lat, center.lng)
+          const suburbName = liveHeat.name
+          const vegVal = suburbName ? vegTotalsMap[normKey(suburbName)] : undefined
+          if (vegVal == null) {
+            errorMsg.value = OUT_OF_COVERAGE_MSG
+            return
+          }
+          // Clear any previous error on successful match within dataset
+          errorMsg.value = ''
+          if (suburbName) label = suburbName
+          if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
+          if (searchHistory.value.length > 8) searchHistory.value.pop()
+          refreshHistoryStats()
+        }
         }
       })
 
@@ -550,29 +654,53 @@ onMounted(async () => {
         const q = (searchInputRef.value as HTMLInputElement).value?.trim()
         if (!q) return
         const geocoder = new (window as any).google.maps.Geocoder()
-        geocoder.geocode({ address: q, componentRestrictions: { country: 'au' } }, (results: any, status: string) => {
+        const req: any = {
+          address: q,
+          region: 'AU',
+          componentRestrictions: { country: 'AU', administrativeArea: 'VIC' },
+        }
+        const b = gmapRef.value?.getBounds?.()
+        if (b) req.bounds = b
+        geocoder.geocode(req, (results: any, status: string) => {
           if (status === 'OK' && results && results[0]) {
-            const r = results[0]
+            const vicPreferred = Array.isArray(results) ? (results.find((r: any) => isVicGeocodeResult(r)) || results[0]) : results[0]
+            const r = vicPreferred
             const loc = r.geometry?.location
             if (!loc) return
             const center = { lat: loc.lat(), lng: loc.lng() }
-            if (gmapRef.value) {
-              gmapRef.value.setCenter(center); gmapRef.value.setZoom(13)
-              // Ensure heat boundaries reloaded according to zoom simplification
-              const wantSimplified = !(gmapRef.value.getZoom() >= 12)
-              loadBoundaries(wantSimplified)
-            }
-            if (vegMapRef.value) {
-              vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13)
-              const wantSimplifiedVeg = !(vegMapRef.value.getZoom() >= 12)
-              loadVegetationLayer(wantSimplifiedVeg)
-            }
 
             // Build a concise label: prefer the first segment before comma
             let label = String(r.formatted_address || q)
             if (label.includes(',')) label = label.split(',')[0].trim()
-            addHistory({ label, center, layer: activeLayer.value })
-            refreshHistoryStats()
+            // Only accept if inside our dataset polygon
+            if (activeLayer.value === 'heat') {
+              const liveHeat = getHeatAtLatLng(center.lat, center.lng)
+              if (liveHeat.avg == null) {
+                errorMsg.value = OUT_OF_COVERAGE_MSG
+                return
+              }
+              // Clear any previous error on successful match within dataset
+              errorMsg.value = ''
+              if (liveHeat.name) label = liveHeat.name
+              if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined })
+              if (searchHistory.value.length > 8) searchHistory.value.pop()
+              refreshHistoryStats()
+            } else {
+              const liveHeat = getHeatAtLatLng(center.lat, center.lng)
+              const suburbName = liveHeat.name
+              const vegVal = suburbName ? vegTotalsMap[normKey(suburbName)] : undefined
+              if (vegVal == null) {
+                errorMsg.value = OUT_OF_COVERAGE_MSG
+                return
+              }
+              errorMsg.value = ''
+              if (suburbName) label = suburbName
+              if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
+              if (searchHistory.value.length > 8) searchHistory.value.pop()
+              refreshHistoryStats()
+            }
           }
         })
       }
@@ -622,23 +750,8 @@ watch(activeLayer, async (layer) => {
   }
 })
 
-function addHistory(item: { label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }) {
-  const key = normKey(item.label)
-  const exists = searchHistory.value.find(h => h.label === item.label && h.layer === item.layer)
-  if (!exists) {
-    // Prefer direct lookup by suburb name from /data payload
-    const r = uhiByName[item.label]
-    // 0) try reading from current map layer (most reliable visual source)
-    const live = getHeatFromMapByLabel(item.label)
-    // 1) payload values
-    const heatVal = live.avg ?? r?.heat?.avg ?? findMapValue(item.label, heatAvgMap)
-    const vegVal = r?.vegetation?.total ?? findMapValue(item.label, vegTotalsMap)
-    const heatCatRaw = live.category || r?.heat?.category
-    const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(item.label, heatCategoryMap) as string | undefined)
-    searchHistory.value.unshift({ ...item, key, heat: Number(heatVal), veg: Number(vegVal), heatCategory: heatCat })
-    if (searchHistory.value.length > 8) searchHistory.value.pop()
-  }
-}
+// legacy helper (kept for potential future use)
+// function addHistory(...) deprecated; inlined into search handlers to ensure fresh data
 
 function centerTo(item: { label: string; center: { lat: number; lng: number }; layer?: 'heat' | 'veg' }) {
   const { center } = item
@@ -757,6 +870,7 @@ async function buildCharts() {
   outline: none;
 }
 .map-search-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+.inline-error { color: #b91c1c; font-size: 12px; background: #fee2e2; border: 1px solid #fecaca; padding: 6px 8px; border-radius: 6px; }
 
 .layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
 .layout-left { min-width: 0; }
