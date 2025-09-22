@@ -51,14 +51,18 @@
                   </div>
                   <div class="history-card-actions">
                     <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? (item.heatCategory || 'Heat') : 'Vegetation' }}</span>
-                    <span
-                      v-if="item.layer==='heat'"
-                      class="value-badge heat"
-                    >{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
-                    <span
-                      v-else
-                      class="value-badge veg"
-                    >{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
+                    <template v-if="item.layer==='heat'">
+                      <div class="value-group">
+                        <span class="value-badge heat">{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
+                        <span v-if="item.rank != null" class="rank-badge heat">rank: {{ item.rank }}</span>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="value-group">
+                        <span class="value-badge veg">{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
+                        <span v-if="item.rank != null" class="rank-badge veg">rank: {{ item.rank }}</span>
+                      </div>
+                    </template>
                     <button class="history-go" @click="centerTo(item)" aria-label="Center on map">
                       <MapPinIcon />
                     </button>
@@ -120,7 +124,7 @@ const errorMsg = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
-const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string }>>([])
+const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string; rank?: number }>>([])
 const HISTORY_STORAGE_KEY = 'uhi_recent_searches_v1'
 // Standardized out-of-coverage message in English only
 const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
@@ -128,6 +132,8 @@ const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
 let vegTotalsMap: Record<string, number> = {}
 let heatAvgMap: Record<string, number> = {}
 let heatCategoryMap: Record<string, string> = {}
+const heatRankMap: Record<string, number> = {}
+const vegRankMap: Record<string, number> = {}
 // Built from the currently loaded heat boundaries on the map
 let heatAvgByName: Record<string, number> = {}
 let heatCatByName: Record<string, string> = {}
@@ -156,6 +162,7 @@ function loadHistoryFromStorage() {
         heat: typeof it.heat === 'number' ? (it.heat as number) : undefined,
         veg: typeof it.veg === 'number' ? (it.veg as number) : undefined,
         heatCategory: typeof it.heatCategory === 'string' ? (it.heatCategory as string) : undefined,
+        rank: typeof it.rank === 'number' ? (it.rank as number) : undefined,
       }))
       .slice(0, 8)
     searchHistory.value = cleaned
@@ -232,6 +239,16 @@ async function loadUhiDataOnce() {
         if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
         if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
       }
+      const heatRank = Number(s?.heat?.rank)
+      if (Number.isFinite(heatRank)) {
+        if (s?.id) heatRankMap[normKey(s.id)] = heatRank
+        if (s?.name) heatRankMap[normKey(s.name)] = heatRank
+      }
+      const vegRank = Number(s?.vegetation?.rank)
+      if (Number.isFinite(vegRank)) {
+        if (s?.id) vegRankMap[normKey(s.id)] = vegRank
+        if (s?.name) vegRankMap[normKey(s.name)] = vegRank
+      }
       const catKey = String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')
       const label = metaCats?.[catKey]?.label || (catKey ? catKey : '')
       if (s?.id) heatCategoryMap[normKey(s.id)] = label
@@ -252,7 +269,10 @@ function refreshHistoryStats() {
     const vegVal = Number.isFinite(Number(it.veg)) ? Number(it.veg) : (Number.isFinite(Number(computedVeg)) ? Number(computedVeg) : undefined)
     const heatCatRaw = live.category || r?.heat?.category
     const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(it.label, heatCategoryMap) as string | undefined)
-    return { ...it, heat: heatVal, veg: vegVal, heatCategory: heatCat }
+    const rankHeat = findMapValue(it.label, heatRankMap) as number | undefined
+    const rankVeg = findMapValue(it.label, vegRankMap) as number | undefined
+    const rank = it.layer === 'heat' ? (Number(rankHeat)) : (Number(rankVeg))
+    return { ...it, heat: heatVal, veg: vegVal, heatCategory: heatCat, rank: Number.isFinite(rank) ? rank : it.rank }
   })
 }
 
@@ -671,7 +691,8 @@ onMounted(async () => {
           const heatVal = liveHeat.avg
           const heatCat = liveHeat.category
           // Store precise map-derived value immediately
-          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined })
+          const heatRank = findMapValue(label, heatRankMap) as number | undefined
+          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined, rank: heatRank })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
           saveHistoryToStorage()
@@ -688,7 +709,8 @@ onMounted(async () => {
           errorMsg.value = ''
           if (suburbName) label = suburbName
           if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
-          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
+          const vegRank = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
+          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
           saveHistoryToStorage()
@@ -733,7 +755,8 @@ onMounted(async () => {
               if (liveHeat.name) label = liveHeat.name
               if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
               // Store precise map-derived value immediately
-              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined })
+              const heatRank2 = findMapValue(label, heatRankMap) as number | undefined
+              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined, rank: heatRank2 })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
               saveHistoryToStorage()
@@ -748,7 +771,8 @@ onMounted(async () => {
               errorMsg.value = ''
               if (suburbName) label = suburbName
               if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
-              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined })
+              const vegRank2 = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
+              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank2 })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
               saveHistoryToStorage()
@@ -943,6 +967,10 @@ async function buildCharts() {
 .value-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; margin-left: 8px; margin-right: auto; font-weight: 700; }
 .value-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
 .value-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
+.rank-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; background: #ffffff; }
+.rank-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
+.rank-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
+.value-group { display: flex; align-items: center; gap: 8px; margin-left: 8px; margin-right: auto; }
 .layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
 .layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
 .layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
