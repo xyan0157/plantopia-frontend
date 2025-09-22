@@ -49,7 +49,9 @@
                     <button class="history-remove" @click="removeHistory(item)" aria-label="remove">&times;</button>
                   </div>
                   <div class="history-card-actions">
-                    <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? 'Heat' : 'Vegetation' }}</span>
+                    <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? (item.heatCategory || 'Heat') : 'Vegetation' }}</span>
+                    <span class="layer-value" v-if="item.layer==='heat'">{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
+                    <span class="layer-value" v-else>{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
                     <button class="history-go" @click="centerTo(item)">Center on map</button>
                   </div>
                 </div>
@@ -107,9 +109,15 @@ const vegLegendHtml = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
-const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }>>([])
+const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string }>>([])
 // Map suburb identifiers to vegetation total (%) sourced from /data endpoint
 let vegTotalsMap: Record<string, number> = {}
+let heatAvgMap: Record<string, number> = {}
+let heatCategoryMap: Record<string, string> = {}
+// Built from the currently loaded heat boundaries on the map
+let heatAvgByName: Record<string, number> = {}
+let heatCatByName: Record<string, string> = {}
+let uhiByName: Record<string, any> = {}
 // Chart state
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
 const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
@@ -121,6 +129,128 @@ function normKey(v: unknown): string {
 function uhiUrl(path: string) {
   const base = (import.meta as any).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
   return `${base}${path}`
+}
+
+function formatVeg(n: unknown): string {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return 'N/A'
+  return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`
+}
+
+function formatHeat(n: unknown): string {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return 'N/A'
+  return Number.isInteger(v) ? `${v} C` : `${v.toFixed(1)} C`
+}
+
+// Load UHI data (/data) once for both heat and vegetation stats
+let uhiDataLoaded = false
+async function loadUhiDataOnce() {
+  if (uhiDataLoaded) return
+  try {
+    const resp = await fetch(uhiUrl('/api/v1/uhi/data'))
+    if (!resp.ok) return
+    const payload = await resp.json()
+    const suburbs: Array<any> = Array.isArray(payload?.suburbs) ? payload.suburbs : []
+    const metaCats = payload?.heat_categories || {}
+    vegTotalsMap = {}
+    heatAvgMap = {}
+    heatCategoryMap = {}
+    uhiByName = {}
+    suburbs.forEach((s) => {
+      if (s?.name) uhiByName[String(s.name)] = s
+      const total = Number(s?.vegetation?.total)
+      if (Number.isFinite(total)) {
+        if (s?.id) vegTotalsMap[normKey(s.id)] = total
+        if (s?.name) vegTotalsMap[normKey(s.name)] = total
+      }
+      const avgHeat = Number(s?.heat?.avg)
+      if (Number.isFinite(avgHeat)) {
+        if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
+        if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
+      }
+      const catKey = String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')
+      const label = metaCats?.[catKey]?.label || (catKey ? catKey : '')
+      if (s?.id) heatCategoryMap[normKey(s.id)] = label
+      if (s?.name) heatCategoryMap[normKey(s.name)] = label
+    })
+    uhiDataLoaded = true
+  } catch {}
+}
+
+function refreshHistoryStats() {
+  searchHistory.value = searchHistory.value.map((it) => {
+    const r = uhiByName[it.label]
+    const live = getHeatFromMapByLabel(it.label)
+    const heatVal = live.avg ?? r?.heat?.avg ?? findMapValue(it.label, heatAvgMap)
+    const vegVal = r?.vegetation?.total ?? findMapValue(it.label, vegTotalsMap)
+    const heatCatRaw = live.category || r?.heat?.category
+    const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(it.label, heatCategoryMap) as string | undefined)
+    return { ...it, heat: Number(heatVal), veg: Number(vegVal), heatCategory: heatCat }
+  })
+}
+
+// Try to resolve a suburb label to our stats maps using multiple variants
+function findMapValue<T = number | string>(label: string, map: Record<string, T>): T | undefined {
+  const raw = String(label || '')
+  const candidates: string[] = []
+  const lower = raw.toLowerCase().trim()
+  const cleaned = lower
+    .replace(/,.*$/, '')               // drop after first comma
+    .replace(/\b(\d{3,4})\b/g, '')   // drop postcode numbers
+    .replace(/\b(australia|victoria|vic|state of victoria)\b/g, '')
+    .replace(/\(|\)/g, '')
+    .replace(/\s+/g, ' ')             // collapse spaces
+    .trim()
+  const firstWord = cleaned.split(' ')[0] || cleaned
+  const lastWord = cleaned.split(' ').slice(-1)[0] || cleaned
+
+  const push = (s?: string) => { if (s) candidates.push(normKey(s)) }
+  push(raw)
+  push(cleaned)
+  push(firstWord)
+  push(lastWord)
+
+  // 1) exact key match
+  for (const k of candidates) {
+    if (map[k] != null) return map[k]
+  }
+  // 2) include/startsWith match over existing keys
+  const keys = Object.keys(map)
+  for (const cand of candidates) {
+    const exact = keys.find(k => k === cand)
+    if (exact) return map[exact]
+    const starts = keys.find(k => k.startsWith(cand))
+    if (starts) return map[starts]
+    const contains = keys.find(k => k.includes(cand))
+    if (contains) return map[contains]
+  }
+  return undefined
+}
+
+// Prefer reading heat directly from the current map data layer
+function getHeatFromMapByLabel(label: string): { avg?: number; category?: string } {
+  try {
+    const base = String(label || '')
+      .toLowerCase()
+      .replace(/,.*$/, '')
+      .replace(/\b(\d{3,4})\b/g, '')
+      .replace(/\b(australia|victoria|vic|state of victoria)\b/g, '')
+      .replace(/\(|\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const target = normKey(base.split(' ')[0] || base)
+    // Fast lookup using maps built during boundaries load
+    for (const [name, val] of Object.entries(heatAvgByName)) {
+      const nk = normKey(name)
+      if (nk === target || nk.startsWith(target) || target.startsWith(nk) || nk.includes(target)) {
+        return { avg: val, category: heatCatByName[name] }
+      }
+    }
+    return {}
+  } catch {
+    return {}
+  }
 }
 
 async function initUhiOnMap() {
@@ -162,18 +292,24 @@ async function initVegetationMap() {
       `).join('')
 
     // Load vegetation totals from /data once
-    if (!Object.keys(vegTotalsMap).length) {
+    if (!Object.keys(vegTotalsMap).length || !Object.keys(heatAvgMap).length) {
       try {
         const dataResp = await fetch(uhiUrl('/api/v1/uhi/data'))
         if (dataResp.ok) {
           const data = await dataResp.json()
           const suburbs: Array<any> = Array.isArray(data?.suburbs) ? data.suburbs : []
           vegTotalsMap = {}
+          heatAvgMap = {}
           suburbs.forEach((s) => {
             const total = Number(s?.vegetation?.total)
             if (Number.isFinite(total)) {
               if (s?.id) vegTotalsMap[normKey(s.id)] = total
               if (s?.name) vegTotalsMap[normKey(s.name)] = total
+            }
+            const avgHeat = Number(s?.heat?.avg)
+            if (Number.isFinite(avgHeat)) {
+              if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
+              if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
             }
           })
           console.log('Vegetation totals loaded:', Object.keys(vegTotalsMap).length, 'suburbs')
@@ -195,6 +331,29 @@ async function initVegetationMap() {
       })
       vegMapRef.value._zoomListenerAdded = true
     }
+
+    // Show suburb vegetation percent on hover (like heat layer)
+    try {
+      const vegInfo = new (window as any).google.maps.InfoWindow()
+      vegMapRef.value!.data.addListener('mouseover', (e: any) => {
+        const name = e.feature.getProperty('SUBURB_NAME') || e.feature.getProperty('name') || ''
+        const sid = e.feature.getProperty('SUBURB_ID') || e.feature.getProperty('id')
+        const keyId = normKey(sid)
+        const keyName = normKey(name)
+        const pct = vegTotalsMap[keyId] ?? vegTotalsMap[keyName]
+        const fmt = (n: any) => {
+          const v = Number(n)
+          if (!Number.isFinite(v)) return 'N/A'
+          return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`
+        }
+        vegInfo.setContent(`<div style="font-weight:600">${name}</div><div>Vegetation: ${fmt(pct)}</div>`)
+        vegInfo.setPosition(e.latLng)
+        vegInfo.open(vegMapRef.value)
+      })
+      vegMapRef.value!.data.addListener('mouseout', () => {
+        vegInfo.close()
+      })
+    } catch {}
   } catch (err) {
     console.error('Vegetation init failed', err)
   }
@@ -220,9 +379,11 @@ function vegStyleFeature(feature: any) {
 async function loadVegetationLayer(simplified: boolean) {
   if (!vegMapRef.value) return
   
-  // Clear existing data
+  // Clear existing data (no duplicates)
   if (vegMapRef.value.data) {
-    vegMapRef.value.data.forEach((f: any) => vegMapRef.value.data.remove(f))
+    const toRemove: any[] = []
+    vegMapRef.value.data.forEach((f: any) => toRemove.push(f))
+    toRemove.forEach((f: any) => vegMapRef.value.data.remove(f))
   }
   
   try {
@@ -260,7 +421,9 @@ function styleFeature(feature: any) {
 
 async function loadBoundaries(simplified: boolean) {
   if (!gmapRef.value) return
-  gmapRef.value!.data.forEach((f: any) => gmapRef.value!.data.remove(f))
+  const toRemove: any[] = []
+  gmapRef.value!.data.forEach((f: any) => toRemove.push(f))
+  toRemove.forEach((f: any) => gmapRef.value!.data.remove(f))
   const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
   const { url } = await resp.json()
   const geo = await fetch(url).then(r => r.json())
@@ -278,6 +441,17 @@ async function loadBoundaries(simplified: boolean) {
   })
   gmapRef.value!.data.addListener('mouseout', () => {
     infowindow.close()
+  })
+
+  // Also sync our quick lookup maps for history display
+  heatAvgByName = {}
+  heatCatByName = {}
+  gmapRef.value!.data.forEach((f: any) => {
+    const n = String(f.getProperty('SUBURB_NAME') || '')
+    const a = Number(f.getProperty('AVG_HEAT'))
+    const c = String(f.getProperty('HEAT_CATEGORY') || '')
+    if (n && Number.isFinite(a)) heatAvgByName[n] = a
+    if (n && c) heatCatByName[n] = c
   })
 }
 
@@ -334,15 +508,19 @@ onMounted(async () => {
         fullscreenControl: false,
       })
     }
+    // Load heat/vegetation stats once so history card can show values
+    await loadUhiDataOnce()
+    refreshHistoryStats()
     await initUhiOnMap()
     if (vegMapRef.value) await initVegetationMap()
 
     // Setup Google Places Autocomplete on search input
     if (searchInputRef.value) {
-      const autocomplete = new (window as any).google.maps.places.Autocomplete(searchInputRef.value as HTMLInputElement, {
-        fields: ['geometry', 'name', 'formatted_address'],
-        types: ['geocode']
-      })
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(searchInputRef.value as HTMLInputElement, {
+      fields: ['geometry', 'name', 'formatted_address'],
+      types: ['geocode'],
+      componentRestrictions: { country: 'au' },
+    })
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace()
         const loc = place?.geometry?.location
@@ -361,8 +539,44 @@ onMounted(async () => {
             }
           }
           addHistory({ label, center, layer: activeLayer.value })
+          refreshHistoryStats()
         }
       })
+
+    // Support pressing Enter to search by free text using Geocoder
+    searchInputRef.value.addEventListener('keydown', (e: any) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const q = (searchInputRef.value as HTMLInputElement).value?.trim()
+        if (!q) return
+        const geocoder = new (window as any).google.maps.Geocoder()
+        geocoder.geocode({ address: q, componentRestrictions: { country: 'au' } }, (results: any, status: string) => {
+          if (status === 'OK' && results && results[0]) {
+            const r = results[0]
+            const loc = r.geometry?.location
+            if (!loc) return
+            const center = { lat: loc.lat(), lng: loc.lng() }
+            if (gmapRef.value) {
+              gmapRef.value.setCenter(center); gmapRef.value.setZoom(13)
+              // Ensure heat boundaries reloaded according to zoom simplification
+              const wantSimplified = !(gmapRef.value.getZoom() >= 12)
+              loadBoundaries(wantSimplified)
+            }
+            if (vegMapRef.value) {
+              vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13)
+              const wantSimplifiedVeg = !(vegMapRef.value.getZoom() >= 12)
+              loadVegetationLayer(wantSimplifiedVeg)
+            }
+
+            // Build a concise label: prefer the first segment before comma
+            let label = String(r.formatted_address || q)
+            if (label.includes(',')) label = label.split(',')[0].trim()
+            addHistory({ label, center, layer: activeLayer.value })
+            refreshHistoryStats()
+          }
+        })
+      }
+    })
     }
 
     // Load chart data once
@@ -409,9 +623,19 @@ watch(activeLayer, async (layer) => {
 })
 
 function addHistory(item: { label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg' }) {
-  const exists = searchHistory.value.find(h => h.label === item.label)
+  const key = normKey(item.label)
+  const exists = searchHistory.value.find(h => h.label === item.label && h.layer === item.layer)
   if (!exists) {
-    searchHistory.value.unshift(item)
+    // Prefer direct lookup by suburb name from /data payload
+    const r = uhiByName[item.label]
+    // 0) try reading from current map layer (most reliable visual source)
+    const live = getHeatFromMapByLabel(item.label)
+    // 1) payload values
+    const heatVal = live.avg ?? r?.heat?.avg ?? findMapValue(item.label, heatAvgMap)
+    const vegVal = r?.vegetation?.total ?? findMapValue(item.label, vegTotalsMap)
+    const heatCatRaw = live.category || r?.heat?.category
+    const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(item.label, heatCategoryMap) as string | undefined)
+    searchHistory.value.unshift({ ...item, key, heat: Number(heatVal), veg: Number(vegVal), heatCategory: heatCat })
     if (searchHistory.value.length > 8) searchHistory.value.pop()
   }
 }
@@ -547,6 +771,7 @@ async function buildCharts() {
 .history-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .history-card-title { font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-card-actions { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+.layer-value { font-size: 12px; color: #065f46; font-weight: 700; margin-left: 8px; margin-right: auto; }
 .layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
 .layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
 .layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
