@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
 import { renderMarkdown } from '@/services/markdownService'
 import { useGuidesStore } from '@/stores/guides'
@@ -322,27 +322,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
-// Lock body scroll in categories mode
-function setGlobalScrollLock(locked: boolean) {
-  const cls = 'no-vertical-scroll'
-  const targets = [document.documentElement, document.body]
-  targets.forEach(el => {
-    if (locked) el.classList.add(cls)
-    else el.classList.remove(cls)
-  })
-}
-
-watch(mode, (m) => {
-  setGlobalScrollLock(m === 'categories')
-})
-
-onMounted(() => {
-  setGlobalScrollLock(mode.value === 'categories')
-})
-
-onUnmounted(() => {
-  setGlobalScrollLock(false)
-})
+// Removed global scroll locking to allow vertical scrolling on Guides page
 
 // File modal state and actions
 const showModal = ref(false)
@@ -396,14 +376,13 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 /* In categories (card slider) mode, lock the page height and disable vertical scroll */
-.guides-page.category-mode { height: calc(100vh - 80px); overflow: hidden; }
+/* Allow vertical scrolling in categories mode */
+.guides-page.category-mode { height: auto; overflow: visible; }
 
 /* In detail mode, allow vertical scrolling for long lists */
 .guides-page.detail-mode { overflow-y: auto; }
 
-@media (max-width: 768px) {
-  .guides-page.category-mode { height: calc(100vh - 120px); }
-}
+@media (max-width: 768px) {}
 
 .guides-bg {
   position: fixed;
@@ -454,6 +433,7 @@ function onKeydown(e: KeyboardEvent) {
   background: transparent;
   min-height: calc(100vh - 200px);
 }
+
 
 /* Make slider area full-bleed so first card can center to the page */
 .container-xl { max-width: 100%; padding-left: 0; padding-right: 0; }
