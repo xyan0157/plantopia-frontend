@@ -2,7 +2,7 @@
   <div class="hero-section">
     <div class="hero-container">
       <h1 class="main-title">
-        <span class="highlight heal-text" @click="$emit('heat-toggle', false)">Heal</span> or <span class="heat-text" @click="$emit('heat-toggle', true)">Heat</span>
+        <span class="highlight heal-text" @click="$emit('heat-toggle', false)">Heal</span> or <span class="heat-text">Heat</span>
       </h1>
       <p class="subtitle">
         Get personalized, climate-smart plant recommendations to reduce your carbon footprint
@@ -14,7 +14,7 @@
       <div class="button-group">
         <button class="btn-primary" @click="$emit('navigate-to-my-impact')">
           <img src="@/assets/icons/leaf-2.png" alt="impact" class="btn-icon" />
-          My Impact
+          Recommendation
           <ArrowRightIcon class="btn-arrow" />
         </button>
         <button class="btn-secondary" @click="$emit('navigate-to-dashboard')">
@@ -81,7 +81,7 @@ defineEmits<{
 .heat-text {
   color: #9ca3af; /* Gray color */
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-  cursor: pointer;
+  cursor: default; /* Make non-clickable */
 }
 
 .heal-text { cursor: pointer; }

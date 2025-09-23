@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
-import { plantApiService, type Plant, type ApiAllPlantsResponse } from '@/services/api'
+import { plantApiService, type Plant } from '@/services/api'
 
 interface PlantsState {
   plants: Plant[]
   loading: boolean
   error: string | null
   initialized: boolean
+  totalCount: number
+  lastKey: string | null
+  firstPageShown: boolean
 }
 
 export const usePlantsStore = defineStore('plants', {
@@ -14,50 +17,79 @@ export const usePlantsStore = defineStore('plants', {
     loading: false,
     error: null,
     initialized: false,
+    totalCount: 0,
+    lastKey: null,
+    firstPageShown: false,
   }),
   actions: {
     async ensureLoaded(): Promise<void> {
-      if (this.initialized || this.loading) return
-      await this.preloadAll()
+      if (this.initialized) return
+      // Preload default dataset on app startup (all categories, empty search)
+      try {
+        await this.preloadAllPaginated(12)
+      } catch {
+        // swallow errors to not block app start
+      }
     },
 
-    async preloadAll(): Promise<void> {
+    async loadPage(page: number, limit: number, category?: string, search?: string): Promise<{ total: number }> {
       this.loading = true
       this.error = null
       try {
-        // Health check; let fallback logic inside the service handle base switching
-        await plantApiService.healthCheck()
+        const { plants, total_count } = await plantApiService.getPlantsPaginated({ page, limit, category, search })
+        this.plants = plants
+        this.initialized = true
+        return { total: total_count }
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to load plants'
+        throw err
+      } finally {
+        this.loading = false
+      }
+    },
 
-        const apiResponse: ApiAllPlantsResponse = await plantApiService.getAllPlants()
+    async preloadAllPaginated(limit: number): Promise<{ total: number }> {
+      // Preload once with fixed condition (all + empty search); reuse cache regardless of later condition changes
+      const key = 'global_all'
+      if (this.lastKey === key && this.initialized && this.plants.length >= Math.min(this.totalCount, this.plants.length)) {
+        return { total: this.totalCount }
+      }
 
-        // First page immediately
-        const pageSize = 12
-        const firstBatchResponse: ApiAllPlantsResponse = {
-          ...apiResponse,
-          plants: apiResponse.plants.slice(0, pageSize),
-          total_count: apiResponse.total_count,
-          categories: apiResponse.categories,
-        }
-        const firstBatch = plantApiService.transformAllPlantsToPlants(firstBatchResponse)
-        this.plants = firstBatch
+      this.loading = true
+      this.error = null
+      try {
+        // First page
+        const first = await plantApiService.getPlantsPaginated({ page: 1, limit })
+        this.plants = first.plants
+        // Hide loading after first page is ready; continue background preloading silently
+        this.loading = false
+        this.firstPageShown = true
 
-        // Remaining in background
-        for (let i = pageSize; i < (apiResponse.plants?.length || 0); i += pageSize) {
-          const nextBatchResponse: ApiAllPlantsResponse = {
-            ...apiResponse,
-            plants: apiResponse.plants.slice(i, i + pageSize),
-            total_count: apiResponse.total_count,
-            categories: apiResponse.categories,
+        const total = first.total_count || 0
+        this.totalCount = total
+        this.lastKey = key
+        const totalPages = Math.max(1, Math.ceil(total / limit))
+
+        // Load remaining pages progressively
+        for (let p = 2; p <= totalPages; p++) {
+          try {
+            const next = await plantApiService.getPlantsPaginated({ page: p, limit })
+            this.plants = [...this.plants, ...next.plants]
+          } catch (e) {
+            // Capture error but continue attempting subsequent pages
+            console.warn('[plants store] preload page failed:', p, e)
           }
-          const nextBatch = plantApiService.transformAllPlantsToPlants(nextBatchResponse)
-          this.plants = [...this.plants, ...nextBatch]
+          // Yield to UI thread
           await new Promise(resolve => setTimeout(resolve, 0))
         }
 
         this.initialized = true
+        return { total }
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load plants'
+        throw err
       } finally {
+        // Ensure loading cleared in any path (already false after first page)
         this.loading = false
       }
     },

@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
 import { renderMarkdown } from '@/services/markdownService'
 import { useGuidesStore } from '@/stores/guides'
@@ -322,27 +322,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
-// Lock body scroll in categories mode
-function setGlobalScrollLock(locked: boolean) {
-  const cls = 'no-vertical-scroll'
-  const targets = [document.documentElement, document.body]
-  targets.forEach(el => {
-    if (locked) el.classList.add(cls)
-    else el.classList.remove(cls)
-  })
-}
-
-watch(mode, (m) => {
-  setGlobalScrollLock(m === 'categories')
-})
-
-onMounted(() => {
-  setGlobalScrollLock(mode.value === 'categories')
-})
-
-onUnmounted(() => {
-  setGlobalScrollLock(false)
-})
+// Removed global scroll locking to allow vertical scrolling on Guides page
 
 // File modal state and actions
 const showModal = ref(false)
@@ -396,14 +376,13 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 /* In categories (card slider) mode, lock the page height and disable vertical scroll */
-.guides-page.category-mode { height: calc(100vh - 80px); overflow: hidden; }
+/* Allow vertical scrolling in categories mode */
+.guides-page.category-mode { height: auto; overflow: visible; }
 
 /* In detail mode, allow vertical scrolling for long lists */
 .guides-page.detail-mode { overflow-y: auto; }
 
-@media (max-width: 768px) {
-  .guides-page.category-mode { height: calc(100vh - 120px); }
-}
+@media (max-width: 768px) {}
 
 .guides-bg {
   position: fixed;
@@ -454,6 +433,7 @@ function onKeydown(e: KeyboardEvent) {
   background: transparent;
   min-height: calc(100vh - 200px);
 }
+
 
 /* Make slider area full-bleed so first card can center to the page */
 .container-xl { max-width: 100%; padding-left: 0; padding-right: 0; }
@@ -525,10 +505,15 @@ function onKeydown(e: KeyboardEvent) {
   --card-width: clamp(520px, calc((100% - 2rem) / 1.8), 1000px);
   /* Side paddings keep the first card centered in the page */
   padding: 0 calc((100% - var(--card-width)) / 2) 0.5rem;
+  /* Hide scrollbar in Firefox and old Edge */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
 }
 .slider.dragging { cursor: grabbing; user-select: none; }
-.slider::-webkit-scrollbar { height: 10px; }
-.slider::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 6px; }
+/* Hide scrollbar in WebKit browsers */
+.slider::-webkit-scrollbar { display: none; height: 0; }
+/* Keep for safety; won't show when scrollbar is hidden */
+.slider::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
 .guide-card { height: 560px; border-radius: 16px; background: #111827; color: white; position: relative; flex: 0 0 var(--card-width); min-width: var(--card-width); max-width: var(--card-width); scroll-snap-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.2); cursor: pointer; transition: opacity .2s ease, filter .2s ease, transform .2s ease, box-shadow .2s ease; display: flex; flex-direction: column; }
 .guide-card-image { flex: 1 1 auto; background-size: cover; background-position: center; border-top-left-radius: 16px; border-top-right-radius: 16px; }
 .guide-card-info { background: #e8f6ee; padding: 1rem; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }

@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 // Import components
 import HeroSection from './home/HeroSection.vue'
@@ -139,7 +139,7 @@ const goToPlants = (category: 'flowers' | 'vegetables' | 'herbs') => {
 }
 
 const goToMyImpact = () => {
-  router.push('/my-impact')
+  router.push('/recommendations')
 }
 
 const goToDashboard = () => {
@@ -207,6 +207,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
 })
+
+// Removed: global scroll lock on Home page per request
 </script>
 
 <style scoped>
