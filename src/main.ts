@@ -13,6 +13,7 @@ import './assets/markdown-styles.css'
 import App from './App.vue'
 import router from './router'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
+import { preloadUhiAll } from '@/services/uhiPreload'
 
 const app = createApp(App)
 
@@ -28,6 +29,9 @@ if (import.meta.env.DEV) {
 // Kick off preload but do not block mounting (store itself avoids duplicate work)
 const plantsStore = usePlantsStore(pinia)
 plantsStore.ensureLoaded()
+
+// Preload Dashboard assets in background
+preloadUhiAll().catch(() => {})
 
 const guidesStore = useGuidesStore(pinia)
 guidesStore.ensureLoaded()
