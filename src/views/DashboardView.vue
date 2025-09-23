@@ -111,6 +111,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { onMounted, ref, watch, nextTick } from 'vue'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
+import { getUhiMetadata, getUhiData, getBoundaryGeo } from '@/services/uhiPreload'
 import { MapPinIcon } from '@heroicons/vue/24/solid'
 
 const loadGoogleMaps = ensureGoogleMapsLoaded
@@ -384,11 +385,18 @@ function getHeatAtLatLng(lat: number, lng: number): { avg?: number; category?: s
 
 async function initUhiOnMap() {
   try {
-    const metaResp = await fetch(uhiUrl('/api/v1/uhi/metadata'))
-    if (metaResp.ok) {
-      const meta = await metaResp.json()
-      categoriesMap = meta?.heat_categories || {}
+    // Prefer preloaded metadata
+    const cachedMeta = getUhiMetadata()
+    if (cachedMeta && (cachedMeta as any).heat_categories) {
+      categoriesMap = (cachedMeta as any).heat_categories || {}
       buildLegend(categoriesMap)
+    } else {
+      const metaResp = await fetch(uhiUrl('/api/v1/uhi/metadata'))
+      if (metaResp.ok) {
+        const meta = await metaResp.json()
+        categoriesMap = meta?.heat_categories || {}
+        buildLegend(categoriesMap)
+      }
     }
     await loadBoundaries(true)
     gmapRef.value!.addListener('zoom_changed', async () => {
@@ -409,9 +417,9 @@ async function initVegetationMap() {
     console.error('Vegetation map not initialized')
     return
   }
-  
+
   try {
-    // Build legend first
+    // Build legend once
     vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
       ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
         <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
@@ -420,9 +428,26 @@ async function initVegetationMap() {
         </div>
       `).join('')
 
-    // Load vegetation totals from /data once
+    // Load vegetation totals (prefer preloaded)
     if (!Object.keys(vegTotalsMap).length || !Object.keys(heatAvgMap).length) {
-      try {
+      const pre = getUhiData()
+      if (pre && Array.isArray((pre as any).suburbs)) {
+        const suburbs: Array<any> = (pre as any).suburbs
+        vegTotalsMap = {}
+        heatAvgMap = {}
+        suburbs.forEach((s) => {
+          const total = Number(s?.vegetation?.total)
+          if (Number.isFinite(total)) {
+            if (s?.id) vegTotalsMap[normKey(s.id)] = total
+            if (s?.name) vegTotalsMap[normKey(s.name)] = total
+          }
+          const avgHeat = Number(s?.heat?.avg)
+          if (Number.isFinite(avgHeat)) {
+            if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
+            if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
+          }
+        })
+      } else {
         const dataResp = await fetch(uhiUrl('/api/v1/uhi/data'))
         if (dataResp.ok) {
           const data = await dataResp.json()
@@ -441,48 +466,20 @@ async function initVegetationMap() {
               if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
             }
           })
-          console.log('Vegetation totals loaded:', Object.keys(vegTotalsMap).length, 'suburbs')
         }
-      } catch (error) {
-        console.error('Failed to load vegetation data:', error)
+      }
+
+      // Load the vegetation layer and attach zoom listener
+      await loadVegetationLayer(true)
+      if (!vegMapRef.value._zoomListenerAdded) {
+        vegMapRef.value.addListener('zoom_changed', async () => {
+          const z = vegMapRef.value!.getZoom()
+          const wantSimplified = !(z >= 12)
+          await loadVegetationLayer(wantSimplified)
+        })
+        vegMapRef.value._zoomListenerAdded = true
       }
     }
-    
-    // Load the vegetation layer
-    await loadVegetationLayer(true)
-    
-    // Add zoom listener if not already added
-    if (!vegMapRef.value._zoomListenerAdded) {
-      vegMapRef.value.addListener('zoom_changed', async () => {
-        const z = vegMapRef.value!.getZoom()
-        const wantSimplified = !(z >= 12)
-        await loadVegetationLayer(wantSimplified)
-      })
-      vegMapRef.value._zoomListenerAdded = true
-    }
-
-    // Show suburb vegetation percent on hover (like heat layer)
-    try {
-      const vegInfo = new (window as any).google.maps.InfoWindow()
-      vegMapRef.value!.data.addListener('mouseover', (e: any) => {
-        const name = e.feature.getProperty('SUBURB_NAME') || e.feature.getProperty('name') || ''
-        const sid = e.feature.getProperty('SUBURB_ID') || e.feature.getProperty('id')
-        const keyId = normKey(sid)
-        const keyName = normKey(name)
-        const pct = vegTotalsMap[keyId] ?? vegTotalsMap[keyName]
-        const fmt = (n: any) => {
-          const v = Number(n)
-          if (!Number.isFinite(v)) return 'N/A'
-          return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`
-        }
-        vegInfo.setContent(`<div style="font-weight:600">${name}</div><div>Vegetation: ${fmt(pct)}</div>`)
-        vegInfo.setPosition(e.latLng)
-        vegInfo.open(vegMapRef.value)
-      })
-      vegMapRef.value!.data.addListener('mouseout', () => {
-        vegInfo.close()
-      })
-    } catch {}
   } catch (err) {
     console.error('Vegetation init failed', err)
   }
@@ -516,14 +513,16 @@ async function loadVegetationLayer(simplified: boolean) {
   }
   
   try {
-    const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
-    if (!resp.ok) {
-      console.error('Failed to fetch boundaries:', resp.status)
-      return
-    }
-    
-    const { url } = await resp.json()
-    const geo = await fetch(url).then(r => r.json())
+    const pre = getBoundaryGeo(simplified)
+    const geo = pre || (await (async () => {
+      const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
+      if (!resp.ok) {
+        console.error('Failed to fetch boundaries:', resp.status)
+        return {} as any
+      }
+      const { url } = await resp.json()
+      return await fetch(url).then(r => r.json())
+    })())
     
     // Add data to map
     vegMapRef.value.data.addGeoJson(geo)
@@ -555,7 +554,8 @@ async function loadBoundaries(simplified: boolean) {
   toRemove.forEach((f: any) => gmapRef.value!.data.remove(f))
   const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
   const { url } = await resp.json()
-  const geo = await fetch(url).then(r => r.json())
+  const pre = getBoundaryGeo(simplified)
+  const geo = pre || (await fetch(url).then(r => r.json()))
   gmapRef.value!.data.addGeoJson(geo)
   gmapRef.value!.data.setStyle(styleFeature)
 
