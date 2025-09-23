@@ -56,6 +56,12 @@ export interface ApiAllPlantsResponse {
   }
 }
 
+// Paginated plants response (server-side pagination)
+export interface ApiPaginatedPlantsResponse extends ApiAllPlantsResponse {
+  page?: number
+  limit?: number
+}
+
 // Individual plant data from /plants endpoint
 export interface ApiPlantData {
   plant_name: string
@@ -63,6 +69,7 @@ export interface ApiPlantData {
   plant_category: 'vegetable' | 'herb' | 'flower'
   plant_type: string
   description: string
+  image_url?: string
   additional_information?: string
   days_to_maturity: number
   plant_spacing: string
@@ -86,6 +93,7 @@ export interface ApiPlantData {
   maintainability_score: number
   media: {
     image_path: string
+    image_url?: string
     image_base64?: string
     drive_url?: string
     drive_thumbnail?: string
@@ -264,7 +272,9 @@ export class PlantRecommendationService {
     this.fallbackUrl = fallbackUrl
     this.currentBaseUrl = primaryUrl
     // Prefer env override if provided; otherwise use the shared bucket base
-    this.gcsPlantImagesBaseUrl = (import.meta as any).env?.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
+    // import.meta typing workaround without using any
+    const envObj = (import.meta as unknown as { env?: Record<string, string> }).env || {}
+    this.gcsPlantImagesBaseUrl = envObj.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   }
 
   // Helper method to try API call with fallback
@@ -340,6 +350,51 @@ export class PlantRecommendationService {
       console.error('[ERROR] Details:', error)
       console.error('[ERROR] Message:', error instanceof Error ? error.message : 'Unknown error')
       console.groupEnd()
+      throw error
+    }
+  }
+
+  // Get plants with server-side pagination
+  async getPlantsPaginated(params: { page: number; limit: number; category?: string; search?: string }): Promise<{ plants: Plant[]; total_count: number; page: number; limit: number }> {
+    const { page, limit, category, search } = params
+    try {
+      const qp = new URLSearchParams({ page: String(page), limit: String(Math.min(Math.max(limit, 1), 100)) })
+      if (category && category !== 'all') qp.set('category', category)
+      if (search && search.trim()) qp.set('search', search.trim())
+
+      console.group('[PLANTS API] Get Plants Paginated Request')
+      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/plants/paginated?${qp.toString()}`)
+      console.log('[REQUEST] Method:', 'GET')
+      console.groupEnd()
+
+      const response = await this.fetchWithFallback(`/api/v1/plants/paginated?${qp.toString()}`)
+
+      const responseData: unknown = await response.json()
+      const data = responseData as Partial<ApiPaginatedPlantsResponse> & { pagination?: { total?: number; total_count?: number; page?: number; limit?: number } }
+
+      const totalFromApi =
+        data.total_count ??
+        data.pagination?.total_count ??
+        data.pagination?.total ??
+        (data as { total?: number }).total ?? 0
+
+      const pageFromApi = data.page ?? data.pagination?.page ?? page
+      const limitFromApi = data.limit ?? data.pagination?.limit ?? limit
+
+      const plants = this.transformAllPlantsToPlants({
+        plants: data.plants || [],
+        total_count: totalFromApi || 0,
+        categories: data.categories || { vegetable: 0, herb: 0, flower: 0 },
+      })
+
+      return {
+        plants,
+        total_count: Number(totalFromApi || 0),
+        page: Number(pageFromApi),
+        limit: Number(limitFromApi),
+      }
+    } catch (error) {
+      console.error('[PLANTS API] getPlantsPaginated error:', error)
       throw error
     }
   }
@@ -788,7 +843,7 @@ export class PlantRecommendationService {
     add(ssh ? `${psh}_${ssh}` : undefined)
     add(psh)
 
-    const indexCandidates = ['1','2','3','4']
+    const indexCandidates: string[] = ['1','2','3','4']
     for (const pattern of patterns) {
       if (!pattern) continue
       const encoded = encodeURIComponent(pattern)
@@ -851,7 +906,7 @@ export class PlantRecommendationService {
      * Get the best available image URL for /plants endpoint
      */
     // 0) Backend-provided direct URL (highest priority if present)
-    const providedUrl = (apiPlant as any)?.media?.image_url || (apiPlant as any)?.image_url
+    const providedUrl = (apiPlant as Partial<ApiPlantData>)?.media?.image_url || (apiPlant as Partial<ApiPlantData>)?.image_url
     if (providedUrl) {
       return String(providedUrl)
     }

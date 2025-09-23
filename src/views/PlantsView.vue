@@ -1,4 +1,4 @@
-画<template>
+<template>
   <!--
     Plants Page
     Display all available plants in the system
@@ -63,8 +63,8 @@
               </div>
             </div>
 
-            <!-- Loading State (keeps showing while pages progressively render) -->
-            <div v-if="loading" class="loading-state text-center py-5">
+            <!-- Loading State: only before first page is visible -->
+            <div v-if="loading && !firstPageLoaded" class="loading-state text-center py-5">
               <div class="loading-spinner mx-auto mb-3"></div>
               <p class="mb-0 loading-text">Loading plants...</p>
             </div>
@@ -79,13 +79,6 @@
 
             <!-- Plants Grid (render even when loading is true) -->
             <div v-if="filteredPlants.length > 0" class="plants-results">
-              <div class="plants-count">
-                <p class="mb-3">
-                  Showing {{ ((currentPage - 1) * plantsPerPage) + 1 }}-{{ Math.min(currentPage * plantsPerPage, totalPlants) }}
-                  of {{ totalPlants }} plants
-                  <span v-if="totalPages > 1">(Page {{ currentPage }} of {{ totalPages }})</span>
-                </p>
-              </div>
               <div class="plants-grid">
                 <div
                   v-for="plant in paginatedPlants"
@@ -352,30 +345,32 @@ const searchQuery = ref('')
 const selectedCategory = ref<'all' | 'vegetable' | 'herb' | 'flower'>('all')
 const selectedPlant = ref<Plant | null>(null)
 const imageErrors = ref<Set<string>>(new Set())
+const firstPageLoaded = computed(() => store.firstPageShown)
 
 // Pagination state
 const currentPage = ref(1)
 const plantsPerPage = 12
+const totalFromServer = ref(0)
 
-// API integration for loading plants
+// API integration for loading plants (server-side pagination)
 
 // Computed properties
 const filteredPlants = computed(() => {
   let filtered = plants.value
 
-  // Filter by category
+  // Client-side category filter
   if (selectedCategory.value !== 'all') {
-    filtered = filtered.filter(plant => plant.category === selectedCategory.value)
+    filtered = filtered.filter(p => p.category === selectedCategory.value)
   }
 
-  // Filter by search query
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase().trim()
-    filtered = filtered.filter(plant => {
-      const name = (plant.name || '').toLowerCase()
-      const sci = (plant.scientific_name || '').toLowerCase()
-      const tags = (plant.tags || []).map(t => (t || '').toLowerCase())
-      return name.includes(query) || sci.includes(query) || tags.some(t => t.includes(query))
+  // Client-side search filter
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    filtered = filtered.filter(p => {
+      const name = (p.name || '').toLowerCase()
+      const sci = (p.scientific_name || '').toLowerCase()
+      const tags = (p.tags || []).map(t => (t || '').toLowerCase())
+      return name.includes(q) || sci.includes(q) || tags.some(t => t.includes(q))
     })
   }
 
@@ -383,8 +378,8 @@ const filteredPlants = computed(() => {
 })
 
 // Pagination computed properties
-const totalPlants = computed(() => filteredPlants.value.length)
-const totalPages = computed(() => Math.ceil(totalPlants.value / plantsPerPage))
+const totalPlants = computed(() => totalFromServer.value || filteredPlants.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalPlants.value / plantsPerPage)))
 
 // Markdown rendering computed property
 const renderedDescription = computed(() => {
@@ -424,10 +419,9 @@ const pageNumbers = computed(() => {
 
 // Methods
 const loadPlants = async () => {
-  // Use store to ensure data loaded; it keeps loading true until all batches done
-  await store.ensureLoaded()
-
-  // Keep existing scroll and pagination behaviours
+  // Preload the full dataset once; later condition changes are filtered locally
+  const { total } = await store.preloadAllPaginated(plantsPerPage)
+  totalFromServer.value = total
 }
 
 const handleSearch = () => {

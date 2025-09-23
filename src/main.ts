@@ -25,7 +25,7 @@ if (import.meta.env.DEV) {
   import('@/utils/missingImages')
 }
 
-// Kick off preload but do not block mounting
+// Kick off preload but do not block mounting (store itself avoids duplicate work)
 const plantsStore = usePlantsStore(pinia)
 plantsStore.ensureLoaded()
 
