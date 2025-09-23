@@ -505,10 +505,15 @@ function onKeydown(e: KeyboardEvent) {
   --card-width: clamp(520px, calc((100% - 2rem) / 1.8), 1000px);
   /* Side paddings keep the first card centered in the page */
   padding: 0 calc((100% - var(--card-width)) / 2) 0.5rem;
+  /* Hide scrollbar in Firefox and old Edge */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
 }
 .slider.dragging { cursor: grabbing; user-select: none; }
-.slider::-webkit-scrollbar { height: 10px; }
-.slider::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 6px; }
+/* Hide scrollbar in WebKit browsers */
+.slider::-webkit-scrollbar { display: none; height: 0; }
+/* Keep for safety; won't show when scrollbar is hidden */
+.slider::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
 .guide-card { height: 560px; border-radius: 16px; background: #111827; color: white; position: relative; flex: 0 0 var(--card-width); min-width: var(--card-width); max-width: var(--card-width); scroll-snap-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.2); cursor: pointer; transition: opacity .2s ease, filter .2s ease, transform .2s ease, box-shadow .2s ease; display: flex; flex-direction: column; }
 .guide-card-image { flex: 1 1 auto; background-size: cover; background-position: center; border-top-left-radius: 16px; border-top-right-radius: 16px; }
 .guide-card-info { background: #e8f6ee; padding: 1rem; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
