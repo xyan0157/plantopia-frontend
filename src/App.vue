@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
-// import { useAuthStore } from './stores/auth'
+import { useAuthStore } from './stores/auth'
 import {
   HomeIcon,
   MagnifyingGlassIcon,
@@ -9,9 +9,10 @@ import {
   ChartBarIcon,
   BeakerIcon,
 } from '@heroicons/vue/24/outline'
+import { UserCircleIcon } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
-// auth and router not required after removing logout/my-impact
+useAuthStore()
 
 const isDarkNavbar = computed(() => false)
 const showNavbar = computed(() => route.name !== 'login')
@@ -57,7 +58,12 @@ const showNavbar = computed(() => route.name !== 'login')
               Dashboard
             </RouterLink>
           </li>
-          
+          <li class="nav-item">
+            <RouterLink to="/profile" class="nav-link">
+              <UserCircleIcon class="nav-icon" />
+              Profile
+            </RouterLink>
+          </li>
         </ul>
       </div>
     </nav>
@@ -171,6 +177,14 @@ html.no-vertical-scroll, body.no-vertical-scroll {
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+.profile-item { margin-left: 0.5rem; }
+.profile { display:flex; align-items:center; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,0.9); }
+.navbar-dark .avatar { box-shadow: 0 0 0 2px rgba(17,24,39,0.85); }
+.avatar.placeholder { display:flex; align-items:center; justify-content:center; background:#065f46; color:#fff; font-weight:700; }
+.login-link { background:#10b981; color:#fff; }
+.login-link:hover { background:#059669; color:#fff; }
 
 .nav-item {
   position: relative;
