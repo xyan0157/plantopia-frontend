@@ -13,9 +13,9 @@
             <div class="profile-fields">
               <h3>User Profile</h3>
               <div v-if="!editing">
-                <div>Name: {{ username || 'User' }}</div>
-                <div>Preferences: {{ preferences }}</div>
-                <div>Climate Goal: {{ climateGoal }}</div>
+                <div>Name: {{ displayName }}</div>
+                <div>Preferences: {{ preferences || 'None' }}</div>
+                <div>Climate Goal: {{ climateGoal || 'None' }}</div>
               </div>
               <div v-else class="edit-grid">
                 <label>
@@ -23,12 +23,16 @@
                   <input class="input" v-model="editName" />
                 </label>
                 <label>
-                  <span class="label">Preferences</span>
-                  <input class="input" v-model="editPref" />
+                  <span class="label">Gardening Preference</span>
+                  <select class="select" v-model="editPref">
+                    <option v-for="opt in preferenceOptions" :key="opt" :value="opt">{{ opt }}</option>
+                  </select>
                 </label>
                 <label>
                   <span class="label">Climate Goal</span>
-                  <input class="input" v-model="editGoal" />
+                  <select class="select" v-model="editGoal">
+                    <option v-for="opt in climateGoalOptions" :key="opt" :value="opt">{{ opt }}</option>
+                  </select>
                 </label>
               </div>
               <div class="edit-actions">
@@ -73,7 +77,7 @@
                 @pointerleave="onPlantPointerUp"
                 @pointercancel="onPlantPointerUp"
               >
-                <div v-for="p in filteredPlants" :key="p.id" class="plant-item" @click="openPlant(p)" style="cursor:pointer;">
+                <div v-for="p in filteredPlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
                   <div class="plant-thumb">
                     <img :src="getPlantPreviewImage(p)" alt="thumb" />
                   </div>
@@ -142,12 +146,25 @@ const avatarUrl = computed(() => auth.userAvatarUrl)
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
 
 // Demo profile fields; later wire to real user prefs
-const preferences = ref('Balcony gardening')
-const climateGoal = ref('Reduce heat')
+const preferences = ref('')
+const climateGoal = ref('')
 const editing = ref(false)
 const editName = ref('')
 const editPref = ref('')
 const editGoal = ref('')
+
+// Select options for profile editing
+const preferenceOptions = ['None', 'Balcony', 'Outdoor', 'Indoor']
+const climateGoalOptions = ['None', 'Reduce Heat', 'Save Water', 'Increase Green Cover', 'Biodiversity']
+
+function getEmailPrefix(): string {
+  try {
+    const email = localStorage.getItem('plantopia_user_email') || ''
+    return email.includes('@') ? email.split('@')[0] : email
+  } catch { return '' }
+}
+
+const displayName = computed(() => (username.value || getEmailPrefix() || 'None'))
 
 // Plants store for a small personal list preview (use first items as placeholder)
 const plantsStore = usePlantsStore()
@@ -214,8 +231,9 @@ onMounted(async () => {
     client_id: cid,
     callback: (resp: any) => {
       const info = parseJwtCredential(resp?.credential || '')
-      const display = info.name || 'Google User'
+      const display = (info.email && String(info.email).split('@')[0]) || info.name || 'Google User'
       const pic = info.picture || ''
+      if (info.email) try { localStorage.setItem('plantopia_user_email', String(info.email)) } catch {}
       auth.userLogin(display, pic)
     },
     auto_select: false,
@@ -280,11 +298,12 @@ const plantScrollRef = ref<HTMLElement | null>(null)
 const plantDragging = ref(false)
 let plantDragStartX = 0
 let plantStartScrollLeft = 0
+let plantDragMoved = false
 
 function onPlantPointerDown(e: PointerEvent) {
   if (!plantScrollRef.value) return
   plantDragging.value = true
-  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  plantDragMoved = false
   plantDragStartX = e.clientX
   plantStartScrollLeft = plantScrollRef.value.scrollLeft
 }
@@ -292,6 +311,7 @@ function onPlantPointerDown(e: PointerEvent) {
 function onPlantPointerMove(e: PointerEvent) {
   if (!plantDragging.value || !plantScrollRef.value) return
   const dx = e.clientX - plantDragStartX
+  if (Math.abs(dx) > 3) plantDragMoved = true
   plantScrollRef.value.scrollLeft = plantStartScrollLeft - dx
 }
 
@@ -324,6 +344,8 @@ function onPlantPointerUp(e: PointerEvent) {
 .label { display:block; font-weight:600; color:#065f46; margin-bottom:2px; }
 .input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:14px; }
 .input:focus { outline:none; border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
+.select { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:14px; background:#fff; }
+.select:focus { outline:none; border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
 .edit-actions { margin-top:8px; display:flex; gap:8px; }
 .btn { background:#e5e7eb; color:#111827; border:none; padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700; }
 .btn.primary { background:#10b981; color:#fff; }
