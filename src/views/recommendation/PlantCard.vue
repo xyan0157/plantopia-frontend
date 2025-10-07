@@ -28,7 +28,7 @@
         </div>
       </div>
       
-      <!-- Plant Description with clamp/expand -->
+      <!-- Plant Description with clamp/expand + favourite star -->
       <div ref="descRef" class="plant-card-description" :class="{ clamped: !isExpanded }" v-html="renderedDescription"></div>
       <button
         v-if="isExpanded || canClamp"
@@ -100,6 +100,7 @@ const renderedDescription = computed(() => {
 const isExpanded = ref(false)
 const descRef = ref<HTMLElement | null>(null)
 const canClamp = ref(false)
+
 
 onMounted(() => {
   nextTick(() => {
@@ -173,7 +174,7 @@ const findVictoriaPlantImage = (): string | null => {
   searchPatterns.push(props.plant.name)
   
   // Alternative patterns with normalized names (remove special chars)
-  const normalizedPlant = props.plant.name.replace(/[^\w\s-]/g, '').trim()
+  const normalizedPlant: string = String(props.plant.name).replace(/[^\w\s-]/g, '').trim()
   if (normalizedPlant !== props.plant.name) {
     searchPatterns.push(normalizedPlant)
     if (props.plant.scientificName) {
@@ -182,7 +183,7 @@ const findVictoriaPlantImage = (): string | null => {
     }
   }
 
-  const gcsBase = (import.meta as any).env?.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
+  const gcsBase = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   // Try each pattern to construct the image URL
   for (const pattern of searchPatterns) {
     if (!pattern) continue
@@ -372,6 +373,7 @@ const handleImageError = (event: Event) => {
   margin-bottom: 1rem;          /* Space below */
   line-height: 1.5;             /* Better line spacing */
 }
+
 
 .plant-card-description.clamped {
   display: -webkit-box;

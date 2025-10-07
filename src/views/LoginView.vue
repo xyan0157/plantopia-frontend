@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <h1 class="login-title">Plantopia</h1>
+        <h1 class="login-title">Plantopiaa</h1>
         <p class="login-subtitle">Welcome to your plant recommendation platform</p>
       </div>
       
@@ -40,14 +40,8 @@
           <span v-else>Login</span>
         </button>
       </form>
+
       
-      <div class="login-footer">
-        <p class="default-credentials">
-          <strong>Default Credentials:</strong><br>
-          Username: Plantopia<br>
-          Password: FIT5120
-        </p>
-      </div>
     </div>
   </div>
 </template>
@@ -63,7 +57,7 @@ const password = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 
-const DEFAULT_USERNAME = 'Plantopia'
+const DEFAULT_USERNAME = 'Plantopiaa'
 const DEFAULT_PASSWORD = 'FIT5120'
 
 const handleLogin = async () => {
@@ -129,9 +123,6 @@ const handleLogin = async () => {
   font-size: 0.875rem;
 }
 
-.login-form {
-  space-y: 1.5rem;
-}
 
 .form-group {
   margin-bottom: 1.5rem;
@@ -158,8 +149,7 @@ const handleLogin = async () => {
 .form-input:focus {
   outline: none;
   border-color: #10b981;
-  ring: 2px;
-  ring-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
   background: white;
 }
 
@@ -203,26 +193,7 @@ const handleLogin = async () => {
   transform: none;
 }
 
-.login-footer {
-  text-align: center;
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-
-.default-credentials {
-  font-size: 0.75rem;
-  color: #6b7280;
-  background: #f3f4f6;
-  padding: 1rem;
-  border-radius: 8px;
-  margin: 0;
-}
-
-.default-credentials strong {
-  color: #374151;
-}
+ 
 
 /* Responsive adjustments */
 @media (max-width: 480px) {

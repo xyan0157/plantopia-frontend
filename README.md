@@ -1,6 +1,6 @@
-# Plantopia Frontend
+# Plantopiaa Frontend
 
-Vue.js frontend for Plantopia - Climate-adaptive plant recommendation application for Melbourne suburbs.
+Vue.js frontend for Plantopiaa - Climate-adaptive plant recommendation application for Melbourne suburbs.
 
 ## Tech Stack
 - Vue 3 + TypeScript
@@ -51,13 +51,13 @@ API Documentation available at: http://34.70.141.84/docs
 
 ```
 src/
-├── components/       # Reusable Vue components
-├── views/           # Page components
-│   ├── recommendation/  # Recommendation system components
-│   └── ...
-├── services/        # API and utility services
-├── router/         # Vue Router configuration
-└── assets/         # Static assets
+  components/        # Reusable Vue components
+  views/             # Page components
+    recommendation/  # Recommendation system components
+    ...
+  services/          # API and utility services
+  router/            # Vue Router configuration
+  assets/            # Static assets
 ```
 
 ## Available Scripts

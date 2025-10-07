@@ -48,7 +48,17 @@
           <div class="info-grid">
             <!-- Description Section -->
             <div class="info-card">
-              <h3 class="card-title">Description:</h3>
+              <div class="card-title-row">
+                <h3 class="card-title">Description:</h3>
+                <button class="fav-btn" :class="{ active: isFav }" @click.stop="toggleFav" aria-label="favourite">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.64-7.03L22 9.24z"
+                      :fill="isFav ? 'currentColor' : 'none'"
+                      :stroke="isFav ? 'none' : 'currentColor'"
+                      stroke-width="2"/>
+                  </svg>
+                </button>
+              </div>
               <div class="card-content plant-description" v-html="renderedDescription"></div>
               <div class="recommendation-reasons" v-if="plant.whyRecommended?.length">
                 <p v-for="reason in plant.whyRecommended" :key="reason" class="reason-item">
@@ -299,6 +309,7 @@ import ViewHistory from './ViewHistory.vue'
 import { renderMarkdown } from '@/services/markdownService'
 import { plantApiService } from '@/services/api'
 import { useRecommendationsStore } from '@/stores/recommendations'
+import { usePlantsStore } from '@/stores/plants'
 
 // Component props - receives plant data or null when modal is closed
 const props = defineProps<{
@@ -313,6 +324,7 @@ const emit = defineEmits<{
 // Router for navigation to Guides
 const router = useRouter()
 const recStore = useRecommendationsStore()
+const plantStore = usePlantsStore()
 
 function goToGuides() {
   router.push('/guides')
@@ -329,6 +341,9 @@ const renderedDescription = computed(() => {
   }
   return renderMarkdown(props.plant.description)
 })
+
+const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
+function toggleFav() { if (props.plant) plantStore.toggleFavourite(String(props.plant.id)) }
 
 // Reference to ViewHistory component
 const viewHistoryRef = ref<InstanceType<typeof ViewHistory> | null>(null)
@@ -779,10 +794,13 @@ const formatSunlight = (sunlight: string): string => {
   font-size: 1.125rem;
   font-weight: 600;
   color: #047857;
-  margin: 0 0 1rem 0;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 0.5rem;
+  margin: 0;
 }
+
+.card-title-row { display:flex; align-items:baseline; gap:8px; justify-content:space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+.fav-btn { margin-left:auto; border:none; background:transparent; line-height:1; cursor:pointer; color:#9ca3af; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+.fav-btn svg { width:18px; height:18px; }
+.fav-btn.active { color:#10b981; }
 
 .card-content {
   display: flex;

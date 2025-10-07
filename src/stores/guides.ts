@@ -8,6 +8,7 @@ interface GuidesState {
   loading: boolean
   error: string | null
   initialized: boolean
+  favourites: Set<string>
 }
 
 function makeFileKey(category: string, filename: string): string {
@@ -22,6 +23,7 @@ export const useGuidesStore = defineStore('guides', {
     loading: false,
     error: null,
     initialized: false,
+    favourites: new Set<string>(),
   }),
   getters: {
     getCategoryFiles: (state) => (category: string): MarkdownFileSummary[] => {
@@ -32,8 +34,42 @@ export const useGuidesStore = defineStore('guides', {
     },
   },
   actions: {
+    loadFavourites() {
+      try {
+        const raw = localStorage.getItem('plantopia_guide_favourites')
+        if (raw) {
+          const list = JSON.parse(raw)
+          if (Array.isArray(list)) this.favourites = new Set(list.map(String))
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load guide favourites', e)
+      }
+    },
+
+    saveFavourites() {
+      try {
+        localStorage.setItem('plantopia_guide_favourites', JSON.stringify(Array.from(this.favourites)))
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to save guide favourites', e)
+      }
+    },
+
+    toggleFavouriteGuide(categorySlug: string, filename: string) {
+      const key = makeFileKey(categorySlug, filename)
+      if (this.favourites.has(key)) this.favourites.delete(key)
+      else this.favourites.add(key)
+      this.saveFavourites()
+    },
+
+    isFavouriteGuide(categorySlug: string, filename: string): boolean {
+      return this.favourites.has(makeFileKey(categorySlug, filename))
+    },
+
     async ensureLoaded(): Promise<void> {
       if (this.initialized || this.loading) return
+      this.loadFavourites()
       await this.preloadAll()
     },
 
