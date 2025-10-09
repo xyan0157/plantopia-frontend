@@ -109,6 +109,41 @@
               </div>
             </div>
 
+            <!-- Companion Planting Card -->
+            <div class="info-card">
+              <h3 class="card-title">Companion Planting:</h3>
+              <div class="card-content">
+                <div class="companion-row">
+                  <div class="companion-col">
+                    <div class="companion-title good">Plant With</div>
+                    <div class="tag-list">
+                      <span v-for="c in beneficialCompanions" :key="'b-'+c" class="tag good">{{ c }}</span>
+                      <span v-if="beneficialCompanions.length === 0" class="tag none">None</span>
+                    </div>
+                  </div>
+                  <div class="companion-col">
+                    <div class="companion-title bad">Keep Away</div>
+                    <div class="tag-list">
+                      <span v-for="c in harmfulCompanions" :key="'h-'+c" class="tag bad">{{ c }}</span>
+                      <span v-if="harmfulCompanions.length === 0" class="tag none">None</span>
+                    </div>
+                  </div>
+                  <div class="companion-col">
+                    <div class="companion-title neutral">Neutral</div>
+                    <div class="tag-list">
+                      <span v-for="c in neutralCompanions" :key="'n-'+c" class="tag neutral">{{ c }}</span>
+                      <span v-if="neutralCompanions.length === 0" class="tag none">None</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="reason-hint" v-if="beneficialCompanions.length || harmfulCompanions.length">
+                  <strong>Why this plant?</strong>
+                  <span v-if="beneficialCompanions.length"> · Companion synergy with {{ beneficialCompanions.slice(0,3).join(', ') }}.</span>
+                  <span v-if="harmfulCompanions.length"> · Avoid mixing with {{ harmfulCompanions.slice(0,3).join(', ') }}.</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Sustainability Impact Card -->
             <div class="info-card">
               <h3 class="card-title">Sustainability Impact:</h3>
@@ -345,6 +380,49 @@ const renderedDescription = computed(() => {
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
 function toggleFav() { if (props.plant) plantStore.toggleFavourite(String(props.plant.id)) }
 
+// Companion planting parsing (fields provided in plant API responses as comma-separated strings)
+const parseCompanions = (s?: string): string[] => {
+  if (!s) return []
+  return String(s)
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+}
+type PlantWithCompanions = Plant & {
+  beneficial_companions?: string
+  harmful_companions?: string
+  neutral_companions?: string
+}
+const plantWithCompanions = computed<PlantWithCompanions | null>(() => (props.plant ? (props.plant as PlantWithCompanions) : null))
+// Fallback: try to match from the global plantsStore (data from /plants) by name/scientific name
+const matchedFromAll = computed<PlantWithCompanions | null>(() => {
+  if (!props.plant) return null
+  const n = String(props.plant.name || '').toLowerCase()
+  const s = String((props.plant as PlantWithCompanions).scientific_name || '').toLowerCase()
+  const found = plantStore.plants.find(p => {
+    const pn = String(p.name || '').toLowerCase()
+    const ps = String((p as PlantWithCompanions).scientific_name || '').toLowerCase()
+    return (n && pn === n) || (s && ps === s)
+  }) as PlantWithCompanions | undefined
+  return found || null
+})
+
+const beneficialCompanions = computed<string[]>(() => {
+  const own = parseCompanions(plantWithCompanions.value?.beneficial_companions)
+  if (own.length) return own
+  return parseCompanions(matchedFromAll.value?.beneficial_companions)
+})
+const harmfulCompanions = computed<string[]>(() => {
+  const own = parseCompanions(plantWithCompanions.value?.harmful_companions)
+  if (own.length) return own
+  return parseCompanions(matchedFromAll.value?.harmful_companions)
+})
+const neutralCompanions = computed<string[]>(() => {
+  const own = parseCompanions(plantWithCompanions.value?.neutral_companions)
+  if (own.length) return own
+  return parseCompanions(matchedFromAll.value?.neutral_companions)
+})
+
 // Reference to ViewHistory component
 const viewHistoryRef = ref<InstanceType<typeof ViewHistory> | null>(null)
 
@@ -477,7 +555,7 @@ async function fetchImpact() {
     const safeName = (props.plant.name || '').toString().replace(/[^\w\s\-'&]/g, '').trim() || (props.plant.scientific_name || '').toString()
     const safeSuburb = (recStore.lastParams?.location || 'Richmond').toString().replace(/[^\w\s\-'&]/g, '').trim() || 'Richmond'
     
-    console.log('[IMPACT] Fetching impact for plant:', safeName, 'in suburb:', safeSuburb)
+    // console.debug('[IMPACT] Fetching impact for plant:', safeName, 'in suburb:', safeSuburb)
     
     const res = await plantApiService.quantifyPlantImpact({
       plant_name: safeName,
@@ -490,12 +568,12 @@ async function fetchImpact() {
     // Only update if this request hasn't been cancelled
     if (!currentRequestController.signal.aborted) {
       impactData.value = res
-      console.log('[IMPACT] Successfully loaded impact data:', res)
+      // console.debug('[IMPACT] Successfully loaded impact data')
     }
   } catch (e) {
     // Only show error if this request hasn't been cancelled
     if (!currentRequestController.signal.aborted) {
-      console.error('[IMPACT] Error fetching impact:', e)
+      // console.error('[IMPACT] Error fetching impact:', e)
       impactError.value = e instanceof Error ? e.message : 'Failed to load impact'
     }
   } finally {
@@ -843,6 +921,21 @@ const formatSunlight = (sunlight: string): string => {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.5rem;
 }
+
+/* Companion planting styles */
+.companion-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.companion-col { background:#ffffff; border:1px solid #e5e7eb; border-radius:10px; padding:10px; }
+.companion-title { font-weight:800; margin-bottom:6px; }
+.companion-title.good { color:#065f46; }
+.companion-title.bad { color:#991b1b; }
+.companion-title.neutral { color:#374151; }
+.tag-list { display:flex; flex-wrap:wrap; gap:6px; }
+.tag { padding:2px 8px; border-radius:9999px; font-size:12px; }
+.tag.good { background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; }
+.tag.bad { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+.tag.neutral { background:#e5e7eb; color:#374151; border:1px solid #d1d5db; }
+.tag.none { background:#f3f4f6; color:#6b7280; border:1px dashed #d1d5db; }
+.reason-hint { margin-top:8px; color:#374151; font-size:12px; }
 
 .plant-basic-info {
   display: flex;

@@ -258,6 +258,10 @@ export interface Plant {
   }
   imagePath?: string
   imageData?: string
+  // Companion planting (comma-separated from API)
+  beneficial_companions?: string
+  harmful_companions?: string
+  neutral_companions?: string
 }
 
 // API Service class
@@ -279,21 +283,21 @@ export class PlantRecommendationService {
 
   // Helper method to try API call with fallback
   private async fetchWithFallback(endpoint: string, options?: RequestInit): Promise<Response> {
-    console.log(`[API] Attempting to connect to ${this.currentBaseUrl}${endpoint}`)
+    // console.debug(`[API] Attempting to connect to ${this.currentBaseUrl}${endpoint}`)
     
     try {
       const response = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      console.log(`[API] Successfully connected to ${this.currentBaseUrl}`)
+      // console.debug(`[API] Successfully connected to ${this.currentBaseUrl}`)
       return response
     } catch (error) {
-      console.warn(`[API] Failed to connect to ${this.currentBaseUrl}:`, error)
+      // console.warn(`[API] Failed to connect to ${this.currentBaseUrl}:`, error)
       
       // If we're not already using fallback, try fallback URL
       if (this.currentBaseUrl !== this.fallbackUrl && process.env.NODE_ENV !== 'production') {
-        console.log(`[API] Switching to fallback URL: ${this.fallbackUrl}`)
+        // console.debug(`[API] Switching to fallback URL: ${this.fallbackUrl}`)
         this.currentBaseUrl = this.fallbackUrl
         
         try {
@@ -301,10 +305,10 @@ export class PlantRecommendationService {
           if (!fallbackResponse.ok) {
             throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackResponse.statusText}`)
           }
-          console.log(`[API] Successfully connected to fallback URL ${this.currentBaseUrl}`)
+          // console.debug(`[API] Successfully connected to fallback URL ${this.currentBaseUrl}`)
           return fallbackResponse
         } catch (fallbackError) {
-          console.error(`[API] Fallback URL also failed:`, fallbackError)
+          // console.error(`[API] Fallback URL also failed:`, fallbackError)
           this.currentBaseUrl = this.primaryUrl // Reset to primary for next attempt
           throw new Error(`Both primary (${this.primaryUrl}) and fallback (${this.fallbackUrl}) URLs failed`)
         }
@@ -328,28 +332,12 @@ export class PlantRecommendationService {
   // Get all plants endpoint
   async getAllPlants(): Promise<ApiAllPlantsResponse> {
     try {
-      console.group('[PLANTS API] Get All Plants Request')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/plants`)
-      console.log('[REQUEST] Method:', 'GET')
-
+      // console.debug('[PLANTS API] Get All Plants Request')
       const response = await this.fetchWithFallback('/api/v1/plants')
-
-      console.log('[RESPONSE] Status:', response.status)
-      console.log('[RESPONSE] Status Text:', response.statusText)
-
-
       const responseData = await response.json()
-      console.log('[RESPONSE] Data:', responseData)
-      console.log('[RESPONSE] Total plants:', responseData.total_count || 0)
-      console.log('[RESPONSE] Categories:', responseData.categories)
-      console.groupEnd()
-
       return responseData
     } catch (error) {
-      console.group('[PLANTS API] Error Debug')
-      console.error('[ERROR] Details:', error)
-      console.error('[ERROR] Message:', error instanceof Error ? error.message : 'Unknown error')
-      console.groupEnd()
+      // console.error('[PLANTS API] Error Debug', error)
       throw error
     }
   }
@@ -361,15 +349,15 @@ export class PlantRecommendationService {
       const qp = new URLSearchParams({ page: String(page), limit: String(Math.min(Math.max(limit, 1), 100)) })
       if (category && category !== 'all') qp.set('category', category)
       if (search && search.trim()) qp.set('search', search.trim())
-
-      console.group('[PLANTS API] Get Plants Paginated Request')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/plants/paginated?${qp.toString()}`)
-      console.log('[REQUEST] Method:', 'GET')
-      console.groupEnd()
-
+      // console.debug('[PLANTS API] Get Plants Paginated Request', qp.toString())
       const response = await this.fetchWithFallback(`/api/v1/plants/paginated?${qp.toString()}`)
 
       const responseData: unknown = await response.json()
+      // Show return body for search requests (debugging the search result payload only)
+      if (search && search.trim()) {
+        // eslint-disable-next-line no-console
+        console.log('[SEARCH] return body:', responseData)
+      }
       const data = responseData as Partial<ApiPaginatedPlantsResponse> & { pagination?: { total?: number; total_count?: number; page?: number; limit?: number } }
 
       const totalFromApi =
@@ -394,7 +382,7 @@ export class PlantRecommendationService {
         limit: Number(limitFromApi),
       }
     } catch (error) {
-      console.error('[PLANTS API] getPlantsPaginated error:', error)
+      // console.error('[PLANTS API] getPlantsPaginated error:', error)
       throw error
     }
   }
@@ -402,16 +390,7 @@ export class PlantRecommendationService {
   // Main recommendation endpoint
   async getRecommendations(request: ApiRecommendationRequest): Promise<ApiRecommendationResponse> {
     try {
-      console.group('[PLANT API] Request Debug')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/recommendations`)
-      console.log('[REQUEST] Method:', 'POST')
-      console.log('[REQUEST] Headers:', {
-        'Content-Type': 'application/json',
-      })
-      console.log('[REQUEST] Body:', JSON.stringify(request, null, 2))
-      console.log('[REQUEST] Raw Object:', request)
-      console.groupEnd()
-
+      // console.debug('[PLANT API] /recommendations request')
       const response = await this.fetchWithFallback('/api/v1/recommendations', {
         method: 'POST',
         headers: {
@@ -419,27 +398,13 @@ export class PlantRecommendationService {
         },
         body: JSON.stringify(request),
       })
-
-      console.group('[PLANT API] Response Debug')
-      console.log('[RESPONSE] Status:', response.status)
-      console.log('[RESPONSE] Status Text:', response.statusText)
-      console.log('[RESPONSE] Headers:', Object.fromEntries(response.headers.entries()))
-
       const responseData = await response.json()
-      console.log('[RESPONSE] Data:', responseData)
-
-      console.log('[RESPONSE] Number of recommendations:', responseData.recommendations?.length || 0)
-      console.log('[RESPONSE] Suburb detected:', responseData.suburb)
-      console.log('[RESPONSE] Climate zone:', responseData.climate_zone)
-      console.groupEnd()
-
+      // Show return body for search/recommendations result payload
+      // eslint-disable-next-line no-console
+      console.log('[SEARCH] return body:', responseData)
       return responseData
     } catch (error) {
-      console.group('[PLANT API] Error Debug')
-      console.error('[ERROR] Details:', error)
-      console.error('[ERROR] Message:', error instanceof Error ? error.message : 'Unknown error')
-      console.error('[ERROR] Stack:', error instanceof Error ? error.stack : 'No stack trace')
-      console.groupEnd()
+      // console.error('[PLANT API] recommendations error:', error)
       throw error
     }
   }
@@ -447,12 +412,7 @@ export class PlantRecommendationService {
   // Quantify plant impact endpoint
   async quantifyPlantImpact(request: ApiQuantifyRequest, signal?: AbortSignal): Promise<ApiQuantifyResponse> {
     try {
-      console.group('[PLANT API] Quantify Plant Impact Request')
-      console.log('[REQUEST] URL:', `${this.currentBaseUrl}/api/v1/quantify-plant`)
-      console.log('[REQUEST] Method:', 'POST')
-      console.log('[REQUEST] Body:', request)
-      console.groupEnd()
-
+      // console.debug('[PLANT API] Quantify Plant Impact Request')
       const response = await this.fetchWithFallback('/api/v1/quantify-plant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -463,7 +423,7 @@ export class PlantRecommendationService {
       const data = await response.json()
       return data as ApiQuantifyResponse
     } catch (error) {
-      console.error('[PLANT API] quantifyPlantImpact error:', error)
+      // console.error('[PLANT API] quantifyPlantImpact error:', error)
       throw error
     }
   }
@@ -479,19 +439,15 @@ export class PlantRecommendationService {
       const data = await response.json()
       return data as ApiQuantifyResponse[]
     } catch (error) {
-      console.error('[PLANT API] batchQuantifyImpact error:', error)
+      // console.error('[PLANT API] batchQuantifyImpact error:', error)
       throw error
     }
   }
 
   // Transform All Plants API response to frontend Plant interface
   transformAllPlantsToPlants(apiResponse: ApiAllPlantsResponse): Plant[] {
-    console.group('[TRANSFORM] All Plants API Response to Plants')
-    console.log('[TRANSFORM] Input API Response:', apiResponse)
-    console.log('[TRANSFORM] Number of plants:', apiResponse.total_count)
-
+    // console.debug('[TRANSFORM] All Plants -> Plants')
     const transformedPlants = apiResponse.plants.map((apiPlant, index) => {
-      console.log(`[TRANSFORM] Plant ${index + 1}:`, apiPlant.plant_name)
 
       const transformedPlant: Plant = {
         id: `${apiPlant.plant_name.replace(/\s+/g, '_').toLowerCase()}_${index}`,
@@ -514,6 +470,10 @@ export class PlantRecommendationService {
         image_url: this.getImageUrlForAllPlants(apiPlant),
         image_base64: apiPlant.media?.image_base64,
         has_image: apiPlant.media?.has_image || false,
+        // Companion planting (strings possibly provided by backend)
+        beneficial_companions: (apiPlant as unknown as { beneficial_companions?: string }).beneficial_companions,
+        harmful_companions: (apiPlant as unknown as { harmful_companions?: string }).harmful_companions,
+        neutral_companions: (apiPlant as unknown as { neutral_companions?: string }).neutral_companions,
         // Additional plant properties
         container_ok: apiPlant.container_ok,
         indoor_ok: apiPlant.indoor_ok,
@@ -528,25 +488,16 @@ export class PlantRecommendationService {
         care_requirements: this.generateCareRequirements(apiPlant),
       }
 
-      console.log(`[TRANSFORM] Completed plant ${index + 1} (${apiPlant.plant_name}):`, transformedPlant)
       return transformedPlant
     })
-
-    console.log('[TRANSFORM] All plants completed successfully!')
-    console.log('[TRANSFORM] Final array:', transformedPlants)
-    console.groupEnd()
-
+    // console.debug('[TRANSFORM] Completed All Plants transform')
     return transformedPlants
   }
 
   // Transform API response to frontend Plant interface
   transformApiResponseToPlants(apiResponse: ApiRecommendationResponse): Plant[] {
-    console.group('[TRANSFORM] API Response to Plants')
-    console.log('[TRANSFORM] Input API Response:', apiResponse)
-    console.log('[TRANSFORM] Number of recommendations:', apiResponse.recommendations.length)
-
+    // console.debug('[TRANSFORM] Recommendations -> Plants')
     const transformedPlants = apiResponse.recommendations.map((apiPlant, index) => {
-      console.log(`[TRANSFORM] Plant ${index + 1}:`, apiPlant.plant_name)
 
       const transformedPlant: Plant = {
         id: `${apiPlant.plant_name.replace(/\s+/g, '_').toLowerCase()}_${index}`,
@@ -586,16 +537,15 @@ export class PlantRecommendationService {
         },
         imagePath: apiPlant.media.image_path,
         imageData: apiPlant.media.image_base64, // Base64 encoded image
+        // Companion planting (strings possibly provided by backend)
+        beneficial_companions: (apiPlant as unknown as { beneficial_companions?: string }).beneficial_companions,
+        harmful_companions: (apiPlant as unknown as { harmful_companions?: string }).harmful_companions,
+        neutral_companions: (apiPlant as unknown as { neutral_companions?: string }).neutral_companions,
       }
 
-      console.log(`[TRANSFORM] Completed plant ${index + 1} (${apiPlant.plant_name}):`, transformedPlant)
       return transformedPlant
     })
-
-    console.log('[TRANSFORM] All plants completed successfully!')
-    console.log('[TRANSFORM] Final array:', transformedPlants)
-    console.groupEnd()
-
+    // console.debug('[TRANSFORM] Completed Recommendations transform')
     return transformedPlants
   }
 
