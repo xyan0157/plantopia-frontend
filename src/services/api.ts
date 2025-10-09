@@ -8,6 +8,7 @@ const FALLBACK_API_URL = 'http://localhost:8000'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
+  id: number
   plant_name: string
   scientific_name: string
   plant_category: string
@@ -64,6 +65,7 @@ export interface ApiPaginatedPlantsResponse extends ApiAllPlantsResponse {
 
 // Individual plant data from /plants endpoint
 export interface ApiPlantData {
+  id: number
   plant_name: string
   scientific_name: string
   plant_category: 'vegetable' | 'herb' | 'flower'
@@ -196,6 +198,7 @@ export interface ApiQuantifyResponse {
 // Frontend Plant interface (transformed from API response)
 export interface Plant {
   id: string
+  databaseId: number
   name: string
   scientific_name: string
   description: string
@@ -450,7 +453,8 @@ export class PlantRecommendationService {
     const transformedPlants = apiResponse.plants.map((apiPlant, index) => {
 
       const transformedPlant: Plant = {
-        id: `${apiPlant.plant_name.replace(/\s+/g, '_').toLowerCase()}_${index}`,
+        id: String(apiPlant.id),
+        databaseId: apiPlant.id,
         name: apiPlant.plant_name,
         scientific_name: apiPlant.scientific_name,
         description: apiPlant.description || 'No description available.',
@@ -500,7 +504,8 @@ export class PlantRecommendationService {
     const transformedPlants = apiResponse.recommendations.map((apiPlant, index) => {
 
       const transformedPlant: Plant = {
-        id: `${apiPlant.plant_name.replace(/\s+/g, '_').toLowerCase()}_${index}`,
+        id: String(apiPlant.id),
+        databaseId: apiPlant.id,
         name: apiPlant.plant_name,
         scientific_name: apiPlant.scientific_name,
         description: apiPlant.description || 'No description available.',
