@@ -5,6 +5,8 @@ import RecommendationsView from '../views/RecommendationsView.vue'
 import PlantsView from '../views/PlantsView.vue'
 import GuidesView from '../views/GuidesView.vue'
 import DashboardView from '../views/DashboardView.vue'
+import ProfileView from '../views/ProfileView.vue'
+import JournalView from '../views/JournalView.vue'
 // import MyImpactView from '../views/MyImpactView.vue'
 
 // Helper function to check authentication
@@ -51,6 +53,19 @@ const router = createRouter({
       component: DashboardView,
       meta: { requiresAuth: true }
     },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: ProfileView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/journal',
+      name: 'journal',
+      component: JournalView,
+      meta: { requiresAuth: true }
+    },
+    
   ],
 })
 

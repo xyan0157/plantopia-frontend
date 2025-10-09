@@ -1,4 +1,4 @@
-// API service for Plantopia Recommendation Engine
+// API service for plantopiaa Recommendation Engine
 // Handles all communication with the backend recommendation API
 
 // Configuration - Now using Cloudflare Tunnel for HTTPS

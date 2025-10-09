@@ -214,7 +214,17 @@
           <div class="plant-detail-info">
             <p class="scientific-name">{{ selectedPlant.scientific_name }}</p>
             <div class="description">
-              <h4>Description</h4>
+              <div class="desc-title-row">
+                <h4 class="desc-head">Description</h4>
+                <button class="fav-btn" :class="{ active: isFavourite(selectedPlant as Plant) }" @click.stop="toggleFav(selectedPlant as Plant)" aria-label="favourite">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.64-7.03L22 9.24z"
+                      :fill="isFavourite(selectedPlant as Plant) ? 'currentColor' : 'none'"
+                      :stroke="isFavourite(selectedPlant as Plant) ? 'none' : 'currentColor'"
+                      stroke-width="2"/>
+                  </svg>
+                </button>
+              </div>
               <div class="plant-description" v-html="renderedDescription"></div>
             </div>
             <div class="plant-type" v-if="selectedPlant.plant_type">
@@ -388,6 +398,10 @@ const renderedDescription = computed(() => {
   }
   return renderMarkdown(selectedPlant.value.description)
 })
+
+// favourites for grid cards
+const toggleFav = (p: Plant) => store.toggleFavourite(String(p.id))
+const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
 const paginatedPlants = computed(() => {
   const start = (currentPage.value - 1) * plantsPerPage
@@ -854,6 +868,12 @@ onMounted(() => {
 .plant-info {
   padding: 1.25rem;
 }
+
+.desc-head { display:flex; align-items:center; gap:8px; }
+.desc-title-row { display:flex; align-items:baseline; justify-content:space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
+.fav-btn { border:none; background:transparent; line-height:1; cursor:pointer; color:#9ca3af; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+.fav-btn svg { width:18px; height:18px; }
+.fav-btn.active { color:#10b981; }
 
 .plant-name {
   font-size: 1.25rem;

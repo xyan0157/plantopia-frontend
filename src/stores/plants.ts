@@ -9,6 +9,7 @@ interface PlantsState {
   totalCount: number
   lastKey: string | null
   firstPageShown: boolean
+  favourites: Set<string>
 }
 
 export const usePlantsStore = defineStore('plants', {
@@ -20,8 +21,15 @@ export const usePlantsStore = defineStore('plants', {
     totalCount: 0,
     lastKey: null,
     firstPageShown: false,
+    favourites: new Set<string>(JSON.parse(localStorage.getItem('favourite_plants') || '[]')),
   }),
   actions: {
+    toggleFavourite(id: string) {
+      if (this.favourites.has(id)) this.favourites.delete(id)
+      else this.favourites.add(id)
+      localStorage.setItem('favourite_plants', JSON.stringify(Array.from(this.favourites)))
+    },
+    isFavourite(id: string): boolean { return this.favourites.has(id) },
     async ensureLoaded(): Promise<void> {
       if (this.initialized) return
       // Preload default dataset on app startup (all categories, empty search)

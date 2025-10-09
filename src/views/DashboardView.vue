@@ -125,6 +125,8 @@ const errorMsg = ref('')
 let lastSimplified = true
 let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
+// Reusable marker to indicate the precise centered location
+const centerMarkerRef = ref<any>(null)
 const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string; rank?: number }>>([])
 const HISTORY_STORAGE_KEY = 'uhi_recent_searches_v1'
 // Standardized out-of-coverage message in English only
@@ -212,6 +214,67 @@ function formatHeat(n: unknown): string {
   const v = Number(n)
   if (!Number.isFinite(v)) return 'N/A'
   return `${v.toFixed(1)} C`
+}
+
+// Create or update the centered marker on the currently visible map
+function getCenterMarkerIcon(google: any) {
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="30" height="44" viewBox="0 0 30 44">
+  <defs>
+    <linearGradient id="pinWhite" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e5e7eb"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="30%" cy="28%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.65"/>
+      <stop offset="80%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ds" x="-50%" y="-50%" width="200%" height="200%">
+      <feOffset in="SourceAlpha" dy="1" result="o"/>
+      <feGaussianBlur in="o" stdDeviation="1.2" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 0.35 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- ground shadow -->
+  <ellipse cx="15" cy="42" rx="7" ry="2.2" fill="#000000" opacity="0.22"/>
+  <g filter="url(#ds)">
+    <!-- pin body -->
+    <path d="M15 2c-7.18 0-13 5.82-13 13 0 10.5 13 27 13 27s13-16.5 13-27c0-7.18-5.82-13-13-13z" fill="url(#pinWhite)" stroke="#065f46" stroke-width="1.5"/>
+    <!-- glossy highlight -->
+    <ellipse cx="11" cy="10" rx="7.5" ry="5" fill="url(#gloss)"/>
+    <!-- inner hole -->
+    <circle cx="15" cy="15" r="4" fill="#065f46"/>
+  </g>
+</svg>`
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(28, 41),
+    anchor: new google.maps.Point(14, 40),
+  }
+}
+
+function placeCenterMarker(center: { lat: number; lng: number }, layer?: 'heat' | 'veg') {
+  const g = (window as any).google
+  if (!g?.maps) return
+  const map = (layer || activeLayer.value) === 'veg' ? vegMapRef.value : gmapRef.value
+  if (!map) return
+  if (!centerMarkerRef.value) {
+    centerMarkerRef.value = new g.maps.Marker({
+      position: center,
+      map,
+      clickable: false,
+      zIndex: 9999,
+      icon: getCenterMarkerIcon(g),
+    })
+  } else {
+    centerMarkerRef.value.setIcon(getCenterMarkerIcon(g))
+    centerMarkerRef.value.setMap(map)
+    centerMarkerRef.value.setPosition(center)
+  }
 }
 
 // Load UHI data (/data) once for both heat and vegetation stats
@@ -688,6 +751,7 @@ onMounted(async () => {
           if (liveHeat.name) label = liveHeat.name
           // center only after validating within dataset
           if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+          placeCenterMarker(center, 'heat')
           const heatVal = liveHeat.avg
           const heatCat = liveHeat.category
           // Store precise map-derived value immediately
@@ -709,6 +773,7 @@ onMounted(async () => {
           errorMsg.value = ''
           if (suburbName) label = suburbName
           if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+          placeCenterMarker(center, 'veg')
           const vegRank = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
           searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
@@ -754,6 +819,7 @@ onMounted(async () => {
               errorMsg.value = ''
               if (liveHeat.name) label = liveHeat.name
               if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
+              placeCenterMarker(center, 'heat')
               // Store precise map-derived value immediately
               const heatRank2 = findMapValue(label, heatRankMap) as number | undefined
               searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined, rank: heatRank2 })
@@ -771,6 +837,7 @@ onMounted(async () => {
               errorMsg.value = ''
               if (suburbName) label = suburbName
               if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
+              placeCenterMarker(center, 'veg')
               const vegRank2 = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
               searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank2 })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
@@ -813,6 +880,9 @@ watch(activeLayer, async (layer) => {
     
     // Always reload vegetation data when switching to veg layer
     await initVegetationMap()
+    // Move marker to vegetation map if present
+    const vc2 = vegMapRef.value?.getCenter?.()
+    if (vc2) placeCenterMarker({ lat: vc2.lat(), lng: vc2.lng() }, 'veg')
   } else if (layer === 'heat' && gmapRef.value && vegMapRef.value) {
     // When switching back, sync center/zoom from vegetation map if available
     const vc = vegMapRef.value.getCenter?.()
@@ -823,6 +893,8 @@ watch(activeLayer, async (layer) => {
     if (vz) {
       gmapRef.value.setZoom(vz)
     }
+    const hc = gmapRef.value?.getCenter?.()
+    if (hc) placeCenterMarker({ lat: hc.lat(), lng: hc.lng() }, 'heat')
   }
 })
 
@@ -834,6 +906,7 @@ function centerTo(item: { label: string; center: { lat: number; lng: number }; l
   if (item.layer) activeLayer.value = item.layer
   if (gmapRef.value) { gmapRef.value.setCenter(center) }
   if (vegMapRef.value) { vegMapRef.value.setCenter(center) }
+  placeCenterMarker(center, item.layer)
 }
 
 function removeHistory(item: { label: string }) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
-// import { useAuthStore } from './stores/auth'
+import { useAuthStore } from './stores/auth'
 import {
   HomeIcon,
   MagnifyingGlassIcon,
@@ -9,9 +9,10 @@ import {
   ChartBarIcon,
   BeakerIcon,
 } from '@heroicons/vue/24/outline'
+import { UserCircleIcon } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
-// auth and router not required after removing logout/my-impact
+useAuthStore()
 
 const isDarkNavbar = computed(() => false)
 const showNavbar = computed(() => route.name !== 'login')
@@ -24,7 +25,7 @@ const showNavbar = computed(() => route.name !== 'login')
     <nav v-if="showNavbar" class="navbar" :class="{ 'navbar-dark': isDarkNavbar }">
       <div class="nav-container">
         <div class="nav-logo">
-          <RouterLink to="/" class="nav-brand"> Plantopia </RouterLink>
+                 <RouterLink to="/" class="nav-brand"> Plantopiaa </RouterLink>
         </div>
         <ul class="nav-menu">
           <li class="nav-item">
@@ -57,13 +58,28 @@ const showNavbar = computed(() => route.name !== 'login')
               Dashboard
             </RouterLink>
           </li>
-          
+          <li class="nav-item">
+            <RouterLink to="/profile" class="nav-link">
+              <UserCircleIcon class="nav-icon" />
+              Profile
+            </RouterLink>
+          </li>
+                 <li class="nav-item">
+                   <RouterLink to="/journal" class="nav-link">
+                     <UserCircleIcon class="nav-icon" />
+                     Journal
+                   </RouterLink>
+                 </li>
         </ul>
       </div>
     </nav>
 
     <main class="main-content" :class="{ 'no-navbar': !showNavbar }">
       <RouterView />
+      <footer class="site-footer">
+        <div class="footer-brand">Monash University</div>
+        <div class="footer-copy">© 2025 TP34 - All rights reserved.</div>
+      </footer>
     </main>
   </div>
 </template>
@@ -172,6 +188,14 @@ html.no-vertical-scroll, body.no-vertical-scroll {
   white-space: nowrap;
 }
 
+.profile-item { margin-left: 0.5rem; }
+.profile { display:flex; align-items:center; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,0.9); }
+.navbar-dark .avatar { box-shadow: 0 0 0 2px rgba(17,24,39,0.85); }
+.avatar.placeholder { display:flex; align-items:center; justify-content:center; background:#065f46; color:#fff; font-weight:700; }
+.login-link { background:#10b981; color:#fff; }
+.login-link:hover { background:#059669; color:#fff; }
+
 .nav-item {
   position: relative;
 }
@@ -240,6 +264,10 @@ html.no-vertical-scroll, body.no-vertical-scroll {
   font-size: inherit;
   font-weight: inherit;
 }
+
+.site-footer { margin-top: 3rem; padding: 2rem 1rem; text-align: center; color: #ffffff; position: relative; z-index: 3; }
+.footer-brand { font-weight: 800; font-size: 1.25rem; color: #ffffff; margin-bottom: 0.25rem; }
+.footer-copy { font-size: 0.875rem; color: #ffffff; }
 
 /* Responsive adjustments for smaller screens */
 @media (max-width: 1200px) {

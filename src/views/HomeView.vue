@@ -336,7 +336,7 @@ onUnmounted(() => {
 .home-container {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 4rem 2rem 4rem;
+  padding: 4rem 2rem 8rem; /* extra bottom padding so global footer is visible over video */
   text-align: center;
   position: relative;
   z-index: 2;
