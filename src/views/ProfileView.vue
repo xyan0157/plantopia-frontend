@@ -100,10 +100,39 @@
           </ul>
         </div>
 
-          <!-- Growth Timeline (no hardcoded data) -->
+          <!-- Growth Timeline replaced by Journey Visualization -->
           <div class="section-card timeline">
-            <h3>Growth Timeline</h3>
-            <ul class="timeline-list"></ul>
+            <h3>Journey Visualization</h3>
+            <div class="journey">
+              <div class="stages">
+                <div v-for="(s, idx) in journeyStages" :key="s.id" class="stage">
+                  <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
+                  <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
+                  <div class="stage-actions">
+                    <button class="badge-btn" :class="{ done: isStageCompleted(s.id) }" @click="toggleStageCompleted(s.id)">{{ idx + 1 }}</button>
+                    <button class="btn">See Detail</button>
+                  </div>
+                </div>
+              </div>
+              <div class="progress-row">
+                <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercent + '%' }"></div></div>
+                <div class="progress-text">You have completed {{ completedStages }}/{{ totalStages }} of the stages</div>
+              </div>
+              <div class="impact-grid compact">
+                <div class="impact-card">
+                  <div class="impact-title">CO2 absorption capacity</div>
+                  <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
+                </div>
+                <div class="impact-card">
+                  <div class="impact-title">Cooling effect</div>
+                  <div class="impact-text">Local temperature drops by approximately 2°C</div>
+                </div>
+                <div class="impact-card">
+                  <div class="impact-title">Air quality & biodiversity</div>
+                  <div class="impact-text">Providing habitats for bees and birds</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           
@@ -171,6 +200,44 @@ const plantsStore = usePlantsStore()
 // Guides favourites preview
 const guidesStore = useGuidesStore()
 const guideFavs = computed(() => Array.from(guidesStore.favourites))
+
+// Journey mock stages (reuse JournalView behaviour)
+type JourneyStage = { id: string; image: string; createdAt: number }
+const totalStages = 4
+const journeyStages = computed<JourneyStage[]>(() => {
+  const today = Date.now()
+  const mk = (offset: number, img: string): JourneyStage => ({ id: `p-stage-${offset}`, image: img, createdAt: today - offset * 24 * 60 * 60 * 1000 })
+  return [
+    mk(21, '/Flower.jpg'),
+    mk(14, '/Herb.jpg'),
+    mk(7, '/Vegetable.jpg'),
+    mk(0, '/placeholder-plant.svg'),
+  ]
+})
+const completedStages = computed(() => 0)
+const progressPercent = computed(() => Math.round((completedStages.value / totalStages) * 100))
+function formatDate(ts: number) { try { return new Date(ts).toLocaleDateString() } catch { return '' } }
+
+// Stage completion (persisted)
+const STAGE_KEY = 'plantopia_profile_stage_completed'
+const stageCompleted = ref<Set<string>>(new Set())
+try {
+  const raw = localStorage.getItem(STAGE_KEY)
+  if (raw) stageCompleted.value = new Set(JSON.parse(raw))
+} catch {}
+function saveStageCompleted() {
+  try { localStorage.setItem(STAGE_KEY, JSON.stringify(Array.from(stageCompleted.value))) } catch {}
+}
+function markStageCompleted(id: string) {
+  stageCompleted.value.add(id)
+  saveStageCompleted()
+}
+function isStageCompleted(id: string) { return stageCompleted.value.has(id) }
+function toggleStageCompleted(id: string) {
+  if (stageCompleted.value.has(id)) stageCompleted.value.delete(id)
+  else stageCompleted.value.add(id)
+  saveStageCompleted()
+}
 
 const previewPlants = computed(() => {
   const favIds = Array.from(plantsStore.favourites)
@@ -385,6 +452,25 @@ function onPlantPointerUp(e: PointerEvent) {
 .timeline { }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
+.journey { display:grid; gap:12px; }
+.stages { display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; }
+.stage { border:1px solid #e5e7eb; border-radius:12px; padding:10px; text-align:center; background:#f9fafb; }
+.stage-actions { display:flex; align-items:center; gap:8px; justify-content:center; }
+.badge-btn { background:#ffffff; color:#111827; font-weight:800; font-size:12px; border:1px solid #111827; width:24px; height:24px; border-radius:9999px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.badge-btn.done { background:#10b981; color:#ffffff; border-color:#10b981; }
+.done-label { color:#065f46; font-weight:700; font-size:12px; }
+.stage-thumb { height:150px; border-radius:8px; overflow:hidden; background:#eef2f7; display:flex; align-items:center; justify-content:center; }
+.stage-thumb img { width:100%; height:100%; object-fit:cover; }
+.stage-date { margin:6px 0; color:#374151; font-weight:600; }
+.progress-row { display:flex; align-items:center; gap:12px; }
+.progress-bar { flex:1; height:16px; background:#eef2f7; border-radius:9999px; overflow:hidden; border:1px solid #e5e7eb; }
+.progress-fill { height:100%; background:#10b981; width:0; transition: width .25s ease; }
+.progress-text { color:#374151; }
+.impact-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+.impact-grid.compact { margin-top: 12px; }
+.impact-card { border:1px solid #e5e7eb; border-radius:12px; padding:12px; background:#ffffff; }
+.impact-title { font-weight:800; color:#065f46; margin-bottom:4px; }
+.impact-text { color:#374151; }
 .profile-card { background:#ffffff; border-radius:16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width:100%; max-width:720px; padding:24px; box-sizing: border-box; }
 .profile-header { text-align:center; margin-bottom:16px; }
 .profile-title { font-size:24px; font-weight:800; color:#065f46; }
