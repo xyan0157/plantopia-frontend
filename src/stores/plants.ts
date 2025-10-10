@@ -78,18 +78,8 @@ export const usePlantsStore = defineStore('plants', {
         this.lastKey = key
         const totalPages = Math.max(1, Math.ceil(total / limit))
 
-        // Load remaining pages progressively
-        for (let p = 2; p <= totalPages; p++) {
-          try {
-            const next = await plantApiService.getPlantsPaginated({ page: p, limit })
-            this.plants = [...this.plants, ...next.plants]
-          } catch (e) {
-            // Capture error but continue attempting subsequent pages
-            console.warn('[plants store] preload page failed:', p, e)
-          }
-          // Yield to UI thread
-          await new Promise(resolve => setTimeout(resolve, 0))
-        }
+        // Don't preload all pages - let them load on-demand when user clicks pagination
+        // This prevents database connection pool exhaustion
 
         this.initialized = true
         return { total }
