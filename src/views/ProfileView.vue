@@ -32,7 +32,59 @@
             <div class="section-title-row">
               <h3>Favourite Plants</h3>
             </div>
-            <div v-if="previewPlants.length === 0" class="empty-fav">No favourites yet.</div>
+            <div v-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
+            <div v-else>
+              <div
+                class="plant-scroll"
+                tabindex="0"
+                ref="plantScrollRef"
+                :class="{ dragging: plantDragging }"
+                @pointerdown="onPlantPointerDown"
+                @pointermove="onPlantPointerMove"
+                @pointerup="onPlantPointerUp"
+                @pointerleave="onPlantPointerUp"
+                @pointercancel="onPlantPointerUp"
+              >
+                <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
+                  <div class="plant-thumb">
+                    <img :src="getPlantPreviewImage(p)" alt="thumb" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        <!-- My Guide List (between My Plant List and Growth Timeline) -->
+        <div class="section-card guide-list">
+          <div class="section-title-row">
+            <h3>My Guide List</h3>
+          </div>
+          <div v-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
+          <ul v-else class="guide-fav-ul">
+            <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
+              {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
+            </li>
+          </ul>
+        </div>
+
+        <!-- Journal Plants below guide list -->
+        <div class="section-card plant-list">
+          <div class="section-title-row">
+            <h3>Journal Plants</h3>
+          </div>
+          <div v-if="journalPlants.length === 0">
+              <div
+                class="plant-scroll"
+                tabindex="0"
+                ref="plantScrollRef"
+              >
+                <div class="plant-item" @click="openMockJournal" style="cursor:pointer;">
+                  <div class="plant-thumb">
+                    <img :src="mockPlantImage" alt="thumb" />
+                  </div>
+                </div>
+              </div>
+            </div>
             <div v-else>
               <div v-if="filteredPlants.length === 0" class="empty-fav">No results.</div>
               <div
@@ -56,53 +108,7 @@
             </div>
           </div>
 
-        <!-- My Guide List (between My Plant List and Growth Timeline) -->
-        <div class="section-card guide-list">
-          <div class="section-title-row">
-            <h3>My Guide List</h3>
-          </div>
-          <div v-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
-          <ul v-else class="guide-fav-ul">
-            <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
-              {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
-            </li>
-          </ul>
-        </div>
-
-          <!-- Growth Timeline replaced by Journey Visualization -->
-          <div class="section-card timeline">
-            <h3>Journey Visualization</h3>
-            <div class="journey">
-              <div class="stages">
-                <div v-for="(s, idx) in journeyStages" :key="s.id" class="stage">
-                  <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
-                  <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
-                  <div class="stage-actions">
-                    <button class="badge-btn" :class="{ done: isStageCompleted(s.id) }" @click="toggleStageCompleted(s.id)">{{ idx + 1 }}</button>
-                    <button class="btn">See Detail</button>
-                  </div>
-                </div>
-              </div>
-              <div class="progress-row">
-                <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercent + '%' }"></div></div>
-                <div class="progress-text">You have completed {{ completedStages }}/{{ totalStages }} of the stages</div>
-              </div>
-              <div class="impact-grid compact">
-                <div class="impact-card">
-                  <div class="impact-title">CO2 absorption capacity</div>
-                  <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
-                </div>
-                <div class="impact-card">
-                  <div class="impact-title">Cooling effect</div>
-                  <div class="impact-text">Local temperature drops by approximately 2°C</div>
-                </div>
-                <div class="impact-card">
-                  <div class="impact-title">Air quality & biodiversity</div>
-                  <div class="impact-text">Providing habitats for bees and birds</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Replaced by per-plant journal modal; this inline block removed -->
 
           
 
@@ -122,7 +128,47 @@
       </div>
     </div>
   </div>
-  <PlantDetailModal v-if="selectedPlant" :plant="selectedPlant" @close="selectedPlant = null" />
+  <!-- Plant Journal Modal -->
+  <div v-if="journalPlant" class="modal-overlay" @click="closeJournal">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">{{ journalPlant.name }} · Journal</h2>
+        <button class="modal-close" @click="closeJournal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="journey">
+          <div class="stages">
+            <div v-for="(s, idx) in activeJourneyStages" :key="s.id" class="stage">
+              <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
+              <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
+              <div class="stage-actions">
+                <button class="badge-btn" :class="{ done: isStageCompletedScoped(s.id) }" @click="toggleStageCompletedScoped(s.id)">{{ idx + 1 }}</button>
+                <button class="btn">See Detail</button>
+              </div>
+            </div>
+          </div>
+          <div class="progress-row">
+            <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercentScoped + '%' }"></div></div>
+            <div class="progress-text">You have completed {{ completedStagesScoped }}/{{ totalStages }}</div>
+          </div>
+          <div class="impact-grid compact">
+            <div class="impact-card">
+              <div class="impact-title">CO2 absorption capacity</div>
+              <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
+            </div>
+            <div class="impact-card">
+              <div class="impact-title">Cooling effect</div>
+              <div class="impact-text">Local temperature drops by approximately 2°C</div>
+            </div>
+            <div class="impact-card">
+              <div class="impact-title">Air quality & biodiversity</div>
+              <div class="impact-text">Providing habitats for bees and birds</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Edit Profile Modal -->
   <div v-if="showEdit" class="modal-overlay" @click="closeEdit">
@@ -183,7 +229,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 // import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
-import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
+// import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
 import type { Plant } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 
@@ -235,61 +281,68 @@ const plantsStore = usePlantsStore()
 // Guides favourites preview
 const guidesStore = useGuidesStore()
 const guideFavs = computed(() => Array.from(guidesStore.favourites))
+// Favourite plants (separate from journal plants)
+const favouritePlants = computed<Plant[]>(() => {
+  const favIds = Array.from(plantsStore.favourites)
+  if (!favIds.length) return []
+  const map: Record<string, Plant> = {}
+  plantsStore.plants.forEach(p => { map[String((p as unknown as { id: string }).id)] = p })
+  return favIds.map(id => map[id]).filter(Boolean)
+})
+const mockPlantImage = '/Flower.jpg'
 
-// Journey mock stages (reuse JournalView behaviour)
+// Journey data per-plant
 type JourneyStage = { id: string; image: string; createdAt: number }
 const totalStages = 4
-const journeyStages = computed<JourneyStage[]>(() => {
+function defaultStages(): JourneyStage[] {
   const today = Date.now()
   const mk = (offset: number, img: string): JourneyStage => ({ id: `p-stage-${offset}`, image: img, createdAt: today - offset * 24 * 60 * 60 * 1000 })
-  return [
-    mk(21, '/Flower.jpg'),
-    mk(14, '/Herb.jpg'),
-    mk(7, '/Vegetable.jpg'),
-    mk(0, '/placeholder-plant.svg'),
-  ]
-})
-const completedStages = computed(() => 0)
-const progressPercent = computed(() => Math.round((completedStages.value / totalStages) * 100))
+  return [mk(21, '/Flower.jpg'), mk(14, '/Herb.jpg'), mk(7, '/Vegetable.jpg'), mk(0, '/placeholder-plant.svg')]
+}
 function formatDate(ts: number) { try { return new Date(ts).toLocaleDateString() } catch { return '' } }
 
-// Stage completion (persisted)
-const STAGE_KEY = 'plantopia_profile_stage_completed'
+// Stage completion per-plant
+const STAGE_KEY_PREFIX = 'plantopia_profile_stage_completed__'
+function keyForPlant(p: Plant | null) { return `${STAGE_KEY_PREFIX}${p?.id ?? 'none'}` }
 const stageCompleted = ref<Set<string>>(new Set())
-try {
-  const raw = localStorage.getItem(STAGE_KEY)
-  if (raw) stageCompleted.value = new Set(JSON.parse(raw))
-} catch {}
-function saveStageCompleted() {
-  try { localStorage.setItem(STAGE_KEY, JSON.stringify(Array.from(stageCompleted.value))) } catch {}
+function loadStagesForPlant(p: Plant | null) {
+  try {
+    const raw = localStorage.getItem(keyForPlant(p))
+    stageCompleted.value = raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch { stageCompleted.value = new Set() }
 }
-// function markStageCompleted(id: string) {
-//   stageCompleted.value.add(id)
-//   saveStageCompleted()
-// }
-function isStageCompleted(id: string) { return stageCompleted.value.has(id) }
-function toggleStageCompleted(id: string) {
+function saveStagesForPlant(p: Plant | null) {
+  try { localStorage.setItem(keyForPlant(p), JSON.stringify(Array.from(stageCompleted.value))) } catch {}
+}
+function isStageCompletedScoped(id: string) { return stageCompleted.value.has(id) }
+function toggleStageCompletedScoped(id: string) {
   if (stageCompleted.value.has(id)) stageCompleted.value.delete(id)
   else stageCompleted.value.add(id)
-  saveStageCompleted()
+  saveStagesForPlant(journalPlant.value)
 }
 
-const previewPlants = computed(() => {
-  const favIds = Array.from(plantsStore.favourites)
-  if (favIds.length) {
-  const map: Record<string, unknown> = {}
-  plantsStore.plants.forEach(p => { (map as Record<string, Plant>)[String((p as unknown as { id: string }).id)] = p })
-  return favIds.map(id => (map as Record<string, Plant>)[id]).filter(Boolean) as Plant[]
-  }
-  return [] as Plant[]
-})
+// Active journey stages for current plant
+const activeJourneyStages = computed<JourneyStage[]>(() => defaultStages())
+const completedStagesScoped = computed<number>(() => stageCompleted.value.size)
+const progressPercentScoped = computed<number>(() => Math.round((completedStagesScoped.value / totalStages) * 100))
 
-// Search within favourites
+// Journal plants list: persisted locally, independent from favourite plants
+const JOURNAL_PLANTS_KEY = 'plantopia_journal_plants'
+const journalPlants = ref<Plant[]>([])
+try {
+  const raw = localStorage.getItem(JOURNAL_PLANTS_KEY)
+  if (raw) journalPlants.value = JSON.parse(raw)
+} catch {}
+function saveJournalPlants() {
+  try { localStorage.setItem(JOURNAL_PLANTS_KEY, JSON.stringify(journalPlants.value)) } catch {}
+}
+
+// Search within journal plants
 const plantSearch = ref('')
 const filteredPlants = computed<Plant[]>(() => {
   const q = plantSearch.value.trim().toLowerCase()
-  if (!q) return previewPlants.value
-  return previewPlants.value.filter((p: Plant) => {
+  if (!q) return journalPlants.value
+  return journalPlants.value.filter((p: Plant) => {
     const common = (p as unknown as { common_name?: string }).common_name
     const name = String(common || p?.name || '').toLowerCase()
     return name.includes(q)
@@ -320,8 +373,10 @@ function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   return '/placeholder-plant.svg'
 }
 
-const selectedPlant = ref<Plant | null>(null)
-function openPlant(p: Plant) { selectedPlant.value = p }
+// Journal modal state (open on plant click)
+const journalPlant = ref<Plant | null>(null)
+function openPlant(p: Plant) { journalPlant.value = p }
+watch(journalPlant, (p) => { if (p) loadStagesForPlant(p) })
 
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
@@ -427,6 +482,23 @@ function saveEdit() {
 
 function openEdit() { startEdit() }
 function closeEdit() { cancelEdit() }
+function closeJournal() { journalPlant.value = null }
+function openMockJournal() {
+  const mock = {
+    id: 'mock-1',
+    databaseId: 'mock-1' as unknown as number,
+    name: 'My First Plant',
+    scientific_name: 'Plantae mockus',
+    description: 'Mock plant for demo journal',
+    category: 'flower',
+  } as unknown as Plant
+  // ensure mock is in journalPlants list
+  if (!journalPlants.value.find(p => String(p.id) === 'mock-1')) {
+    journalPlants.value = [mock]
+    saveJournalPlants()
+  }
+  journalPlant.value = mock
+}
 
 // Horizontal drag-to-scroll for My Plant List (match Guides UX)
 const plantScrollRef = ref<HTMLElement | null>(null)
