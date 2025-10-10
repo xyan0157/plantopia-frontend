@@ -355,13 +355,31 @@ const currentPage = ref(1)
 const plantsPerPage = 12
 const totalFromServer = ref(0)
 
-// API integration for loading plants (server-side pagination)
+// Client-side filtering (we loaded all plants once)
+const filteredPlants = computed(() => {
+  let filtered = plants.value
 
-// Computed properties - Server-side pagination, no client-side filtering needed
-const filteredPlants = computed(() => plants.value)  // Already filtered by server
+  // Category filter
+  if (selectedCategory.value !== 'all') {
+    filtered = filtered.filter(p => p.category === selectedCategory.value)
+  }
+
+  // Search filter
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    filtered = filtered.filter(p => {
+      const name = (p.name || '').toLowerCase()
+      const sci = (p.scientific_name || '').toLowerCase()
+      const tags = (p.tags || []).map(t => (t || '').toLowerCase())
+      return name.includes(q) || sci.includes(q) || tags.some(t => t.includes(q))
+    })
+  }
+
+  return filtered
+})
 
 // Pagination computed properties
-const totalPlants = computed(() => totalFromServer.value)
+const totalPlants = computed(() => filteredPlants.value.length)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalPlants.value / plantsPerPage)))
 
 // Markdown rendering computed property
@@ -376,7 +394,11 @@ const renderedDescription = computed(() => {
 const toggleFav = (p: Plant) => store.toggleFavourite(String(p.id))
 const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
-const paginatedPlants = computed(() => plants.value)  // Already paginated by server
+const paginatedPlants = computed(() => {
+  const start = (currentPage.value - 1) * plantsPerPage
+  const end = start + plantsPerPage
+  return filteredPlants.value.slice(start, end)
+})
 
 // Pagination navigation helpers
 const canGoPrevious = computed(() => currentPage.value > 1)
@@ -402,8 +424,8 @@ const pageNumbers = computed(() => {
 
 // Methods
 const loadPlants = async () => {
-  // Preload the full dataset once; later condition changes are filtered locally
-  const { total } = await store.preloadAllPaginated(plantsPerPage)
+  // Load entire dataset once via GET /api/v1/plants; show immediately once loaded
+  const { total } = await store.preloadAllPaginated()
   totalFromServer.value = total
 }
 
@@ -424,11 +446,6 @@ const setCategory = (category: 'all' | 'vegetable' | 'herb' | 'flower') => {
 const goToPage = async (page: number) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
-    // Load the requested page from server
-    const category = selectedCategory.value !== 'all' ? selectedCategory.value : undefined
-    const search = searchQuery.value.trim() || undefined
-    const { total } = await store.loadPage(page, plantsPerPage, category, search)
-    totalFromServer.value = total
     // Scroll to top of plant results
     scrollToResults()
   }
