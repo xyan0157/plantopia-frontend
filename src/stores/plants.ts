@@ -34,7 +34,7 @@ export const usePlantsStore = defineStore('plants', {
       if (this.initialized) return
       // Preload default dataset on app startup (all categories, empty search)
       try {
-        await this.preloadAllPaginated(12)
+        await this.preloadAllPaginated()
       } catch {
         // swallow errors to not block app start
       }
@@ -56,38 +56,40 @@ export const usePlantsStore = defineStore('plants', {
       }
     },
 
-    async preloadAllPaginated(limit: number): Promise<{ total: number }> {
-      // Preload once with fixed condition (all + empty search); reuse cache regardless of later condition changes
-      const key = 'global_all'
-      if (this.lastKey === key && this.initialized && this.plants.length >= Math.min(this.totalCount, this.plants.length)) {
+    async preloadAllPaginated(): Promise<{ total: number }> {
+      // Load all plants via GET /api/v1/plants (single request, no server pagination)
+      const key = 'global_all_no_pagination'
+      if (this.lastKey === key && this.initialized && this.plants.length > 0) {
         return { total: this.totalCount }
       }
 
       this.loading = true
       this.error = null
       try {
-        // First page
-        const first = await plantApiService.getPlantsPaginated({ page: 1, limit })
-        this.plants = first.plants
-        // Hide loading after first page is ready; continue background preloading silently
-        this.loading = false
-        this.firstPageShown = true
-
-        const total = first.total_count || 0
-        this.totalCount = total
+        const res = await plantApiService.getAllPlants()
+        const plants = plantApiService.transformAllPlantsToPlants(res)
+        // First paint: show first 12 items immediately
+        const firstBatchSize = 12
+        this.plants = plants.slice(0, firstBatchSize)
+        this.totalCount = Number(res.total_count || plants.length || 0)
         this.lastKey = key
-        const totalPages = Math.max(1, Math.ceil(total / limit))
-
-        // Don't preload all pages - let them load on-demand when user clicks pagination
-        // This prevents database connection pool exhaustion
-
+        this.firstPageShown = true
         this.initialized = true
-        return { total }
+        // Background: progressively append remaining items to store in chunks
+        ;(async () => {
+          const chunkSize = 48
+          for (let i = firstBatchSize; i < plants.length; i += chunkSize) {
+            const chunk = plants.slice(i, i + chunkSize)
+            await new Promise<void>(r => setTimeout(() => r(), 0))
+            this.plants = [...this.plants, ...chunk]
+          }
+        })()
+
+        return { total: this.totalCount }
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load plants'
         throw err
       } finally {
-        // Ensure loading cleared in any path (already false after first page)
         this.loading = false
       }
     },

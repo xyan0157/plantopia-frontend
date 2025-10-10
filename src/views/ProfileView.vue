@@ -2,8 +2,7 @@
   <div class="profile-container recommendations-bg">
     <div class="profile-card">
       <div class="profile-header">
-        <h1 class="profile-title">Profile</h1>
-        <p v-if="isLoggedIn" class="profile-subtitle">Manage your account</p>
+        <h1 class="profile-title">Hi {{ displayName }},</h1>
       </div>
 
       <div class="profile-body">
@@ -12,35 +11,12 @@
           <div class="section-card profile-info">
             <div class="profile-fields">
               <h3>User Profile</h3>
-              <div v-if="!editing">
+              <div>
+                <div>Email: {{ userEmail || 'None' }}</div>
                 <div>Name: {{ displayName }}</div>
-                <div>Preferences: {{ preferences || 'None' }}</div>
-                <div>Climate Goal: {{ climateGoal || 'None' }}</div>
-              </div>
-              <div v-else class="edit-grid">
-                <label>
-                  <span class="label">Name</span>
-                  <input class="input" v-model="editName" />
-                </label>
-                <label>
-                  <span class="label">Gardening Preference</span>
-                  <select class="select" v-model="editPref">
-                    <option v-for="opt in preferenceOptions" :key="opt" :value="opt">{{ opt }}</option>
-                  </select>
-                </label>
-                <label>
-                  <span class="label">Climate Goal</span>
-                  <select class="select" v-model="editGoal">
-                    <option v-for="opt in climateGoalOptions" :key="opt" :value="opt">{{ opt }}</option>
-                  </select>
-                </label>
               </div>
               <div class="edit-actions">
-                <button v-if="!editing" class="btn" @click="startEdit">Edit</button>
-                <template v-else>
-                  <button class="btn primary" @click="saveEdit">Save</button>
-                  <button class="btn" @click="cancelEdit">Cancel</button>
-                </template>
+                <button class="btn" @click="openEdit">Edit</button>
               </div>
             </div>
         
@@ -54,19 +30,11 @@
           <!-- My Plant List -->
           <div class="section-card plant-list">
             <div class="section-title-row">
-              <h3>My Plant List</h3>
-              <input
-                class="plant-search-input"
-                type="text"
-                v-model="plantSearch"
-                placeholder="Search favourites..."
-              />
+              <h3>Favourite Plants</h3>
             </div>
-            <div v-if="previewPlants.length === 0" class="empty-fav">No favourites yet.</div>
+            <div v-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
             <div v-else>
-              <div v-if="filteredPlants.length === 0" class="empty-fav">No results.</div>
               <div
-                v-else
                 class="plant-scroll"
                 tabindex="0"
                 ref="plantScrollRef"
@@ -77,11 +45,10 @@
                 @pointerleave="onPlantPointerUp"
                 @pointercancel="onPlantPointerUp"
               >
-                <div v-for="p in filteredPlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
+                <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
                   <div class="plant-thumb">
                     <img :src="getPlantPreviewImage(p)" alt="thumb" />
                   </div>
-                  <div class="plant-name">{{ p.common_name || p.name || 'Plant' }}</div>
                 </div>
               </div>
             </div>
@@ -100,40 +67,48 @@
           </ul>
         </div>
 
-          <!-- Growth Timeline replaced by Journey Visualization -->
-          <div class="section-card timeline">
-            <h3>Journey Visualization</h3>
-            <div class="journey">
-              <div class="stages">
-                <div v-for="(s, idx) in journeyStages" :key="s.id" class="stage">
-                  <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
-                  <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
-                  <div class="stage-actions">
-                    <button class="badge-btn" :class="{ done: isStageCompleted(s.id) }" @click="toggleStageCompleted(s.id)">{{ idx + 1 }}</button>
-                    <button class="btn">See Detail</button>
+        <!-- Journal Plants below guide list -->
+        <div class="section-card plant-list">
+          <div class="section-title-row">
+            <h3>Journal Plants</h3>
+          </div>
+          <div v-if="journalPlants.length === 0">
+              <div
+                class="plant-scroll"
+                tabindex="0"
+                ref="plantScrollRef"
+              >
+                <div class="plant-item" @click="openMockJournal" style="cursor:pointer;">
+                  <div class="plant-thumb">
+                    <img :src="mockPlantImage" alt="thumb" />
                   </div>
                 </div>
               </div>
-              <div class="progress-row">
-                <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercent + '%' }"></div></div>
-                <div class="progress-text">You have completed {{ completedStages }}/{{ totalStages }} of the stages</div>
-              </div>
-              <div class="impact-grid compact">
-                <div class="impact-card">
-                  <div class="impact-title">CO2 absorption capacity</div>
-                  <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
-                </div>
-                <div class="impact-card">
-                  <div class="impact-title">Cooling effect</div>
-                  <div class="impact-text">Local temperature drops by approximately 2°C</div>
-                </div>
-                <div class="impact-card">
-                  <div class="impact-title">Air quality & biodiversity</div>
-                  <div class="impact-text">Providing habitats for bees and birds</div>
+            </div>
+            <div v-else>
+              <div v-if="filteredPlants.length === 0" class="empty-fav">No results.</div>
+              <div
+                v-else
+                class="plant-scroll"
+                tabindex="0"
+                ref="plantScrollRef"
+                :class="{ dragging: plantDragging }"
+                @pointerdown="onPlantPointerDown"
+                @pointermove="onPlantPointerMove"
+                @pointerup="onPlantPointerUp"
+                @pointerleave="onPlantPointerUp"
+                @pointercancel="onPlantPointerUp"
+              >
+                <div v-for="p in filteredPlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
+                  <div class="plant-thumb">
+                    <img :src="getPlantPreviewImage(p)" alt="thumb" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Replaced by per-plant journal modal; this inline block removed -->
 
           
 
@@ -153,21 +128,113 @@
       </div>
     </div>
   </div>
-  <PlantDetailModal v-if="selectedPlant" :plant="selectedPlant" @close="selectedPlant = null" />
+  <!-- Plant Journal Modal -->
+  <div v-if="journalPlant" class="modal-overlay" @click="closeJournal">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">{{ journalPlant.name }} · Journal</h2>
+        <button class="modal-close" @click="closeJournal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="journey">
+          <div class="stages">
+            <div v-for="(s, idx) in activeJourneyStages" :key="s.id" class="stage">
+              <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
+              <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
+              <div class="stage-actions">
+                <button class="badge-btn" :class="{ done: isStageCompletedScoped(s.id) }" @click="toggleStageCompletedScoped(s.id)">{{ idx + 1 }}</button>
+                <button class="btn">See Detail</button>
+              </div>
+            </div>
+          </div>
+          <div class="progress-row">
+            <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercentScoped + '%' }"></div></div>
+            <div class="progress-text">You have completed {{ completedStagesScoped }}/{{ totalStages }}</div>
+          </div>
+          <div class="impact-grid compact">
+            <div class="impact-card">
+              <div class="impact-title">CO2 absorption capacity</div>
+              <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
+            </div>
+            <div class="impact-card">
+              <div class="impact-title">Cooling effect</div>
+              <div class="impact-text">Local temperature drops by approximately 2°C</div>
+            </div>
+            <div class="impact-card">
+              <div class="impact-title">Air quality & biodiversity</div>
+              <div class="impact-text">Providing habitats for bees and birds</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Profile Modal -->
+  <div v-if="showEdit" class="modal-overlay" @click="closeEdit">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">Edit Profile</h2>
+        <button class="modal-close" @click="closeEdit">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="edit-grid">
+          <label>
+            <span class="label">Email</span>
+            <input class="input" :value="userEmail" disabled />
+          </label>
+          <label>
+            <span class="label">Name</span>
+            <input class="input" v-model="editName" />
+          </label>
+          <label>
+            <span class="label">Suburb/Location</span>
+            <input class="input" v-model="editSuburb" placeholder="e.g. Richmond" />
+          </label>
+          <label>
+            <span class="label">Experience Level</span>
+            <select class="select" v-model="editExperience">
+              <option v-for="opt in experienceOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </label>
+          <label>
+            <span class="label">Garden Type</span>
+            <select class="select" v-model="editGardenType">
+              <option v-for="opt in gardenTypeOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </label>
+          <label>
+            <span class="label">Available Space</span>
+            <input class="input" v-model="editAvailableSpace" placeholder="e.g. 2 m²" />
+          </label>
+          <label>
+            <span class="label">Climate Goal</span>
+            <select class="select" v-model="editGoal">
+              <option v-for="opt in climateGoalOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </label>
+        </div>
+        <div class="edit-actions">
+          <button class="btn primary" @click="saveEdit">Save</button>
+          <button class="btn" @click="closeEdit">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+// import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
-import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
+// import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
 import type { Plant } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 
 const auth = useAuthStore()
-const router = useRouter()
+// const router = useRouter()
 
 const isLoggedIn = computed(() => auth.userIsLoggedIn)
 const username = computed(() => auth.userUsername)
@@ -177,14 +244,25 @@ const googleBtnContainer = ref<HTMLDivElement | null>(null)
 // Demo profile fields; later wire to real user prefs
 const preferences = ref('')
 const climateGoal = ref('')
+const suburb = ref('')
+const experienceLevel = ref('')
+const gardenType = ref('')
+const availableSpace = ref('')
 const editing = ref(false)
+const showEdit = ref(false)
 const editName = ref('')
 const editPref = ref('')
 const editGoal = ref('')
+const editSuburb = ref('')
+const editExperience = ref('')
+const editGardenType = ref('')
+const editAvailableSpace = ref('')
 
 // Select options for profile editing
-const preferenceOptions = ['None', 'Balcony', 'Outdoor', 'Indoor']
+// Removed unused preferenceOptions (legacy)
 const climateGoalOptions = ['None', 'Reduce Heat', 'Save Water', 'Increase Green Cover', 'Biodiversity']
+const experienceOptions = ['Beginner', 'Intermediate', 'Advanced']
+const gardenTypeOptions = ['Balcony', 'Outdoor', 'Indoor']
 
 function getEmailPrefix(): string {
   try {
@@ -194,84 +272,98 @@ function getEmailPrefix(): string {
 }
 
 const displayName = computed(() => (username.value || getEmailPrefix() || 'None'))
+const userEmail = computed(() => {
+  try { return localStorage.getItem('plantopia_user_email') || '' } catch { return '' }
+})
 
 // Plants store for a small personal list preview (use first items as placeholder)
 const plantsStore = usePlantsStore()
 // Guides favourites preview
 const guidesStore = useGuidesStore()
 const guideFavs = computed(() => Array.from(guidesStore.favourites))
+// Favourite plants (separate from journal plants)
+const favouritePlants = computed<Plant[]>(() => {
+  const favIds = Array.from(plantsStore.favourites)
+  if (!favIds.length) return []
+  const map: Record<string, Plant> = {}
+  plantsStore.plants.forEach(p => { map[String((p as unknown as { id: string }).id)] = p })
+  return favIds.map(id => map[id]).filter(Boolean)
+})
+const mockPlantImage = '/Flower.jpg'
 
-// Journey mock stages (reuse JournalView behaviour)
+// Journey data per-plant
 type JourneyStage = { id: string; image: string; createdAt: number }
 const totalStages = 4
-const journeyStages = computed<JourneyStage[]>(() => {
+function defaultStages(): JourneyStage[] {
   const today = Date.now()
   const mk = (offset: number, img: string): JourneyStage => ({ id: `p-stage-${offset}`, image: img, createdAt: today - offset * 24 * 60 * 60 * 1000 })
-  return [
-    mk(21, '/Flower.jpg'),
-    mk(14, '/Herb.jpg'),
-    mk(7, '/Vegetable.jpg'),
-    mk(0, '/placeholder-plant.svg'),
-  ]
-})
-const completedStages = computed(() => 0)
-const progressPercent = computed(() => Math.round((completedStages.value / totalStages) * 100))
+  return [mk(21, '/Flower.jpg'), mk(14, '/Herb.jpg'), mk(7, '/Vegetable.jpg'), mk(0, '/placeholder-plant.svg')]
+}
 function formatDate(ts: number) { try { return new Date(ts).toLocaleDateString() } catch { return '' } }
 
-// Stage completion (persisted)
-const STAGE_KEY = 'plantopia_profile_stage_completed'
+// Stage completion per-plant
+const STAGE_KEY_PREFIX = 'plantopia_profile_stage_completed__'
+function keyForPlant(p: Plant | null) { return `${STAGE_KEY_PREFIX}${p?.id ?? 'none'}` }
 const stageCompleted = ref<Set<string>>(new Set())
-try {
-  const raw = localStorage.getItem(STAGE_KEY)
-  if (raw) stageCompleted.value = new Set(JSON.parse(raw))
-} catch {}
-function saveStageCompleted() {
-  try { localStorage.setItem(STAGE_KEY, JSON.stringify(Array.from(stageCompleted.value))) } catch {}
+function loadStagesForPlant(p: Plant | null) {
+  try {
+    const raw = localStorage.getItem(keyForPlant(p))
+    stageCompleted.value = raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch { stageCompleted.value = new Set() }
 }
-function markStageCompleted(id: string) {
-  stageCompleted.value.add(id)
-  saveStageCompleted()
+function saveStagesForPlant(p: Plant | null) {
+  try { localStorage.setItem(keyForPlant(p), JSON.stringify(Array.from(stageCompleted.value))) } catch {}
 }
-function isStageCompleted(id: string) { return stageCompleted.value.has(id) }
-function toggleStageCompleted(id: string) {
+function isStageCompletedScoped(id: string) { return stageCompleted.value.has(id) }
+function toggleStageCompletedScoped(id: string) {
   if (stageCompleted.value.has(id)) stageCompleted.value.delete(id)
   else stageCompleted.value.add(id)
-  saveStageCompleted()
+  saveStagesForPlant(journalPlant.value)
 }
 
-const previewPlants = computed(() => {
-  const favIds = Array.from(plantsStore.favourites)
-  if (favIds.length) {
-    const map: Record<string, any> = {}
-    plantsStore.plants.forEach(p => { map[String((p as any).id)] = p })
-    return favIds.map(id => map[id]).filter(Boolean)
-  }
-  return [] as any[]
-})
+// Active journey stages for current plant
+const activeJourneyStages = computed<JourneyStage[]>(() => defaultStages())
+const completedStagesScoped = computed<number>(() => stageCompleted.value.size)
+const progressPercentScoped = computed<number>(() => Math.round((completedStagesScoped.value / totalStages) * 100))
 
-// Search within favourites
+// Journal plants list: persisted locally, independent from favourite plants
+const JOURNAL_PLANTS_KEY = 'plantopia_journal_plants'
+const journalPlants = ref<Plant[]>([])
+try {
+  const raw = localStorage.getItem(JOURNAL_PLANTS_KEY)
+  if (raw) journalPlants.value = JSON.parse(raw)
+} catch {}
+function saveJournalPlants() {
+  try { localStorage.setItem(JOURNAL_PLANTS_KEY, JSON.stringify(journalPlants.value)) } catch {}
+}
+
+// Search within journal plants
 const plantSearch = ref('')
-const filteredPlants = computed(() => {
+const filteredPlants = computed<Plant[]>(() => {
   const q = plantSearch.value.trim().toLowerCase()
-  if (!q) return previewPlants.value
-  return previewPlants.value.filter((p: any) => {
-    const name = String(p?.common_name || p?.name || '').toLowerCase()
+  if (!q) return journalPlants.value
+  return journalPlants.value.filter((p: Plant) => {
+    const common = (p as unknown as { common_name?: string }).common_name
+    const name = String(common || p?.name || '').toLowerCase()
     return name.includes(q)
   })
 })
 
-function getPlantPreviewImage(p: any): string {
+function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   // 1) base64 fields
-  const b64 = p?.image_base64 || p?.imageData
+  const base64Fields = (p as unknown as { image_base64?: string; imageData?: string })
+  const b64 = base64Fields.image_base64 || base64Fields.imageData
   if (typeof b64 === 'string' && b64.length) {
     return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`
   }
   // 2) direct URL
-  if (typeof p?.image_url === 'string' && p.image_url) return p.image_url
+  const imageUrl = (p as unknown as { image_url?: string }).image_url
+  if (typeof imageUrl === 'string' && imageUrl) return imageUrl
   // 3) backend proxy via imagePath
-  if (typeof p?.imagePath === 'string' && p.imagePath) {
+  const imagePath = (p as unknown as { imagePath?: string }).imagePath
+  if (typeof imagePath === 'string' && imagePath) {
     const base = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-    return `${base}/api/v1/plant-image/${encodeURIComponent(p.imagePath)}`
+    return `${base}/api/v1/plant-image/${encodeURIComponent(imagePath)}`
   }
   // 4) category placeholder
   const c = String(p?.category || '').toLowerCase()
@@ -281,8 +373,10 @@ function getPlantPreviewImage(p: any): string {
   return '/placeholder-plant.svg'
 }
 
-const selectedPlant = ref<Plant | null>(null)
-function openPlant(p: any) { selectedPlant.value = p as Plant }
+// Journal modal state (open on plant click)
+const journalPlant = ref<Plant | null>(null)
+function openPlant(p: Plant) { journalPlant.value = p }
+watch(journalPlant, (p) => { if (p) loadStagesForPlant(p) })
 
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
@@ -291,12 +385,15 @@ const ensurePlantsLoaded = async () => {
 onMounted(async () => {
   if (isLoggedIn.value) return
   await ensureGoogleIdentityLoaded()
-  const cid = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID
-  const google = (window as any).google
+  const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID
+  type GoogleInitOptions = { client_id: string; callback: (resp: { credential?: string }) => void; auto_select: boolean; ux_mode: string }
+  type GoogleRenderOptions = { type: string; theme: string; size: string; text: string; shape: string; width: number; logo_alignment: string }
+  type GoogleIdApi = { initialize: (opts: GoogleInitOptions) => void; renderButton: (el: HTMLElement, opts: GoogleRenderOptions) => void }
+  const google = (window as unknown as { google?: { accounts?: { id?: GoogleIdApi } } }).google
   if (!google?.accounts?.id || !cid) return
-  google.accounts.id.initialize({
+  google?.accounts?.id?.initialize({
     client_id: cid,
-    callback: (resp: any) => {
+    callback: (resp: { credential?: string }) => {
       const info = parseJwtCredential(resp?.credential || '')
       const display = (info.email && String(info.email).split('@')[0]) || info.name || 'Google User'
       const pic = info.picture || ''
@@ -307,7 +404,7 @@ onMounted(async () => {
     ux_mode: 'popup',
   })
   if (googleBtnContainer.value) {
-    google.accounts.id.renderButton(googleBtnContainer.value, {
+    google?.accounts?.id?.renderButton(googleBtnContainer.value, {
       type: 'standard',
       theme: 'outline',
       size: 'large',
@@ -326,8 +423,16 @@ watch(isLoggedIn, async (v) => { if (v) await ensurePlantsLoaded() }, { immediat
 try {
   const savedPref = localStorage.getItem('profile_preferences')
   const savedGoal = localStorage.getItem('profile_climate_goal')
+  const savedSuburb = localStorage.getItem('profile_suburb')
+  const savedExp = localStorage.getItem('profile_experience')
+  const savedGarden = localStorage.getItem('profile_garden_type')
+  const savedSpace = localStorage.getItem('profile_available_space')
   if (savedPref) preferences.value = savedPref
   if (savedGoal) climateGoal.value = savedGoal
+  if (savedSuburb) suburb.value = savedSuburb
+  if (savedExp) experienceLevel.value = savedExp
+  if (savedGarden) gardenType.value = savedGarden
+  if (savedSpace) availableSpace.value = savedSpace
 } catch {}
 
 // No fallback prompt button; we only use the official button above
@@ -340,24 +445,59 @@ function startEdit() {
   editName.value = username.value || 'User'
   editPref.value = preferences.value
   editGoal.value = climateGoal.value
+  editSuburb.value = suburb.value
+  editExperience.value = experienceLevel.value
+  editGardenType.value = gardenType.value
+  editAvailableSpace.value = availableSpace.value
   editing.value = true
+  showEdit.value = true
 }
 
 function cancelEdit() {
   editing.value = false
+  showEdit.value = false
 }
 
 function saveEdit() {
   // Persist to localStorage only for demo; replace with API later
   preferences.value = editPref.value
   climateGoal.value = editGoal.value
+  suburb.value = editSuburb.value
+  experienceLevel.value = editExperience.value
+  gardenType.value = editGardenType.value
+  availableSpace.value = editAvailableSpace.value
   // username is computed from store; we only store a display override locally
   try {
     localStorage.setItem('profile_preferences', preferences.value)
     localStorage.setItem('profile_climate_goal', climateGoal.value)
     localStorage.setItem('profile_display_name', editName.value)
+    localStorage.setItem('profile_suburb', suburb.value)
+    localStorage.setItem('profile_experience', experienceLevel.value)
+    localStorage.setItem('profile_garden_type', gardenType.value)
+    localStorage.setItem('profile_available_space', availableSpace.value)
   } catch {}
   editing.value = false
+  showEdit.value = false
+}
+
+function openEdit() { startEdit() }
+function closeEdit() { cancelEdit() }
+function closeJournal() { journalPlant.value = null }
+function openMockJournal() {
+  const mock = {
+    id: 'mock-1',
+    databaseId: 'mock-1' as unknown as number,
+    name: 'My First Plant',
+    scientific_name: 'Plantae mockus',
+    description: 'Mock plant for demo journal',
+    category: 'flower',
+  } as unknown as Plant
+  // ensure mock is in journalPlants list
+  if (!journalPlants.value.find(p => String(p.id) === 'mock-1')) {
+    journalPlants.value = [mock]
+    saveJournalPlants()
+  }
+  journalPlant.value = mock
 }
 
 // Horizontal drag-to-scroll for My Plant List (match Guides UX)
@@ -382,7 +522,7 @@ function onPlantPointerMove(e: PointerEvent) {
   plantScrollRef.value.scrollLeft = plantStartScrollLeft - dx
 }
 
-function onPlantPointerUp(e: PointerEvent) {
+function onPlantPointerUp() {
   if (!plantDragging.value) return
   plantDragging.value = false
 }
@@ -440,10 +580,10 @@ function onPlantPointerUp(e: PointerEvent) {
 }
 .plant-scroll.dragging { cursor: grabbing; user-select: none; }
 .plant-scroll::-webkit-scrollbar { display: none; height: 0; }
-.plant-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:12px; text-align:center; box-shadow: 0 4px 10px rgba(0,0,0,0.05); scroll-snap-align: start; }
+.plant-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); scroll-snap-align: start; }
 .plant-thumb { width:100%; height:180px; border-radius:10px; background:#e5e7eb; overflow:hidden; display:flex; align-items:center; justify-content:center; }
 .plant-thumb img { width:100%; height:100%; object-fit:cover; }
-.plant-name { margin-top:8px; font-weight:800; color:#111827; font-size:16px; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plant-name { display:none; }
 .plant-search-input { width:260px; max-width: 50%; border:1px solid #d1d5db; border-radius:8px; padding:10px 12px; font-size:14px; }
 .plant-search-input:focus { outline:none; border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
 .guide-fav-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
@@ -471,9 +611,9 @@ function onPlantPointerUp(e: PointerEvent) {
 .impact-card { border:1px solid #e5e7eb; border-radius:12px; padding:12px; background:#ffffff; }
 .impact-title { font-weight:800; color:#065f46; margin-bottom:4px; }
 .impact-text { color:#374151; }
-.profile-card { background:#ffffff; border-radius:16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width:100%; max-width:720px; padding:24px; box-sizing: border-box; }
+.profile-card { background:#ffffff; border-radius:16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width:100%; max-width:880px; padding:24px; box-sizing: border-box; }
 .profile-header { text-align:center; margin-bottom:16px; }
-.profile-title { font-size:24px; font-weight:800; color:#065f46; }
+.profile-title { font-size:28px; font-weight:800; color:#065f46; }
 .profile-subtitle { color:#6b7280; font-size:14px; }
 .profile-body { padding-top:8px; }
 .profile-row { display:flex; align-items:center; gap:16px; }
@@ -494,4 +634,12 @@ function onPlantPointerUp(e: PointerEvent) {
 .danger { background:#ef4444; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:700; }
 .danger:hover { background:#dc2626; }
 .google-btn-slot { display:inline-block; }
+
+/* Modal styles reused from other views to keep consistency */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 1rem; }
+.modal-content { background:#ffffff; border-radius:16px; width:min(720px, 96%); max-height:90vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.15); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb; }
+.modal-title { font-size:1.25rem; font-weight:800; color:#065f46; }
+.modal-close { background:transparent; border:none; font-size:1.5rem; line-height:1; cursor:pointer; color:#374151; }
+.modal-body { padding:1rem 1.25rem 1.25rem; }
 </style>
