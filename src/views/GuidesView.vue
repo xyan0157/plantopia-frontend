@@ -87,14 +87,14 @@
             <!-- File Modal -->
             <div v-if="showModal" class="guide-modal" @click.self="closeModal">
               <div class="guide-modal-dialog" role="dialog" aria-modal="true">
-                <div class="guide-modal-header">
-                  <div class="guide-modal-title">{{ (activeFile && (activeFile.title || activeFile.filename)) || '' }}</div>
-                  <button class="guide-modal-close" @click="closeModal" aria-label="Close">&times;</button>
-                </div>
+              <div class="guide-modal-header">
+                <div class="guide-modal-title">{{ (activeFile && (activeFile.title || activeFile.filename)) || '' }}</div>
+                <button class="guide-modal-close" @click="closeModal" aria-label="Close">&times;</button>
+              </div>
                 <div class="guide-modal-body">
                   <div v-if="fileLoading" class="placeholder-text">Loading article...</div>
                   <div v-else-if="fileError" class="placeholder-text">{{ fileError }}</div>
-                  <div v-else class="markdown-content" v-html="renderedContent"></div>
+                <div v-else class="markdown-content article" v-html="renderedContent"></div>
                 </div>
               </div>
             </div>
@@ -330,6 +330,7 @@ const activeFile = ref<MarkdownFileSummary | null>(null)
 const fileLoading = ref(false)
 const fileError = ref<string | null>(null)
 const renderedContent = ref('')
+const readingMinutes = ref(1)
 
 async function openFile(f: MarkdownFileSummary) {
   activeFile.value = f
@@ -343,7 +344,11 @@ async function loadActiveFile() {
   fileError.value = null
   try {
     const content = await guides.getFileContent(selectedCategory.value, activeFile.value.filename)
-    renderedContent.value = renderMarkdown(content)
+  renderedContent.value = renderMarkdown(content)
+  // estimate reading time (~200 wpm)
+  const textOnly = content.replace(/<[^>]+>/g, '')
+  const words = textOnly.trim().split(/\s+/).length
+  readingMinutes.value = Math.max(1, Math.round(words / 200))
   } catch (e) {
     fileError.value = e instanceof Error ? e.message : 'Failed to load article'
   } finally {
@@ -551,6 +556,9 @@ function onKeydown(e: KeyboardEvent) {
 .guide-modal-dialog { width: min(960px, 100%); max-height: 85vh; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35); display: flex; flex-direction: column; }
 .guide-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
 .guide-modal-title { font-weight: 700; color: #065f46; }
+.guide-meta { color:#6b7280; font-size:12px; margin-top:2px; display:flex; align-items:center; gap:6px; }
+.guide-chip { background:#e8f6ee; color:#065f46; border:1px solid #a7f3d0; padding:2px 8px; border-radius:9999px; font-weight:700; }
+.dot { opacity:.6; }
 .guide-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
 .guide-modal-body { padding: 1rem 1.25rem; overflow: auto; }
 
@@ -561,4 +569,9 @@ function onKeydown(e: KeyboardEvent) {
 .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
 .markdown-content pre { background: #0b1020; color: #e5e7eb; padding: .75rem; border-radius: 8px; overflow: auto; }
 .markdown-content code { background: #f3f4f6; padding: .15rem .35rem; border-radius: 4px; }
+.article :where(h1,h2,h3){ border-left:4px solid #10b981; padding-left:.5rem; margin-top:1.25rem; }
+.article p { line-height:1.8; color:#1f2937; }
+.article ul { margin: .5rem 0 .75rem 1.25rem; }
+.article li::marker{ color:#10b981; }
+.article blockquote { border-left:4px solid #e5e7eb; padding:.25rem .75rem; color:#374151; background:#f9fafb; border-radius:6px; }
 </style>
