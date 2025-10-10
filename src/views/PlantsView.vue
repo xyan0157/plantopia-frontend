@@ -84,6 +84,7 @@
                   v-for="plant in paginatedPlants"
                   :key="plant.id"
                   class="plant-card"
+                  :style="getCardStyle(plant)"
                   @click="selectPlant(plant)"
                 >
                   <div class="plant-image">
@@ -104,23 +105,14 @@
                   <div class="plant-info">
                     <h3 class="plant-name">{{ plant.name }}</h3>
                     <p class="plant-scientific">{{ plant.scientific_name }}</p>
-                    <div class="plant-tags">
-                      <span
-                        v-for="tag in plant.tags?.slice(0, 3)"
-                        :key="tag"
-                        class="plant-tag"
-                      >
-                        {{ tag }}
-                      </span>
-                    </div>
-                    <div class="plant-care">
-                      <div class="care-item">
-                        <span class="care-label">Sun:</span>
-                        <span class="care-value">{{ plant.care_requirements?.sunlight || 'N/A' }}</span>
-                      </div>
-                      <div class="care-item">
-                        <span class="care-label">Water:</span>
-                        <span class="care-value">{{ plant.care_requirements?.watering || 'N/A' }}</span>
+                    <div class="bottom-stack">
+                      <div v-if="plant.category" class="category-chip">{{ plant.category }}</div>
+                      <div class="plant-care">
+                        <PlantRequirements 
+                          :sunlight="plant.care_requirements?.sunlight || ''"
+                          :water="plant.care_requirements?.watering || ''"
+                          :effort="''"
+                        />
                       </div>
                     </div>
                   </div>
@@ -341,10 +333,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { plantApiService, type Plant } from '@/services/api'
+import { type Plant } from '@/services/api'
 import { usePlantsStore } from '@/stores/plants'
-import { getPlantImageUrl, handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
+import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
+import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
 
 // Reactive state
 const store = usePlantsStore()
@@ -417,7 +410,7 @@ const pageNumbers = computed(() => {
   const pages = []
   const maxVisiblePages = 5
   let startPage = Math.max(1, currentPage.value - Math.floor(maxVisiblePages / 2))
-  let endPage = Math.min(totalPages.value, startPage + maxVisiblePages - 1)
+  const endPage = Math.min(totalPages.value, startPage + maxVisiblePages - 1)
 
   // Adjust start page if we're near the end
   if (endPage - startPage + 1 < maxVisiblePages) {
@@ -537,7 +530,7 @@ const getPlantImage = (plant: Plant): { src: string; step: string } => {
 const handleImageError = (event: Event, plantId: string) => {
   const img = event.target as HTMLImageElement
   console.warn('[PLANTS VIEW] Failed to load plant image:', img.src)
-  const step = (img as any).dataset?.srcStep
+  const step = (img as HTMLImageElement & { dataset: DOMStringMap }).dataset?.srcStep
   if (step) {
     console.warn('[PLANTS VIEW] Image load failed at step:', step)
   }
@@ -569,7 +562,7 @@ const hasPlantFeatures = (plant: Plant): boolean => {
 }
 
 // Check if climate data has any non-empty values
-const hasClimateData = (climateData: any): boolean => {
+const hasClimateData = (climateData: Record<string, unknown> | null | undefined): boolean => {
   if (!climateData) return false
   return Object.values(climateData).some(value => value && value !== '')
 }
@@ -579,6 +572,39 @@ const getMaintenanceLevel = (score: number): string => {
   if (score >= 0.8) return 'Low'
   if (score >= 0.5) return 'Medium'
   return 'High'
+}
+
+// Dynamic color palette for All Plants card backgrounds
+type Palette = { bgStart: string; bgEnd: string }
+const normalizeColor = (s?: string): string => String(s || '').toLowerCase()
+const pickColor = (p: Plant): string => {
+  const arr = (p.flower_colors || []) as (string | undefined)[]
+  if (Array.isArray(arr) && arr.length > 0) return normalizeColor(arr[0])
+  const desc = normalizeColor(p.description)
+  const keywords = ['red','pink','purple','blue','yellow','orange','white','green']
+  for (const k of keywords) if (desc.includes(k)) return k
+  return 'default'
+}
+const paletteFor = (c: string): Palette => {
+  switch (c) {
+    case 'red': return { bgStart: '#f87171', bgEnd: '#ef4444' }
+    case 'pink': return { bgStart: '#f472b6', bgEnd: '#ec4899' }
+    case 'purple': return { bgStart: '#a78bfa', bgEnd: '#8b5cf6' }
+    case 'blue': return { bgStart: '#60a5fa', bgEnd: '#3b82f6' }
+    case 'yellow': return { bgStart: '#f59e0b', bgEnd: '#d97706' }
+    case 'orange': return { bgStart: '#fb923c', bgEnd: '#f97316' }
+    case 'white': return { bgStart: '#e5e7eb', bgEnd: '#d1d5db' }
+    case 'green': return { bgStart: '#34d399', bgEnd: '#10b981' }
+    default: return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0' }
+  }
+}
+const getCardStyle = (p: Plant) => {
+  const pal = paletteFor(pickColor(p))
+  // Sky-like vertical gradient: vivid at top -> soft -> near-white bottom
+  return {
+    background: `linear-gradient(180deg, ${pal.bgStart}33 0%, ${pal.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`,
+    animation: 'cardPulse 6s ease-in-out infinite'
+  }
 }
 
 // Capitalize first letter
@@ -813,6 +839,14 @@ onMounted(() => {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes cardPulse {
+  0% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(8deg); }
+  100% { filter: hue-rotate(0deg); }
 }
 
 .plant-card:hover {
@@ -867,7 +901,12 @@ onMounted(() => {
 
 .plant-info {
   padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
+
+.bottom-stack { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
 
 .desc-head { display:flex; align-items:center; gap:8px; }
 .desc-title-row { display:flex; align-items:baseline; justify-content:space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
@@ -878,13 +917,13 @@ onMounted(() => {
 .plant-name {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #1f2937;
+    color: #ffffff;
   margin-bottom: 0.25rem;
 }
 
 .plant-scientific {
   font-style: italic;
-  color: #6b7280;
+  color: #ffffff;
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
 }
@@ -909,6 +948,20 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  margin-top: auto;
+}
+
+.category-chip {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: #065f46;
+  border: 2px solid #a7f3d0;
+  border-radius: 10px;
+  width: fit-content;
+  text-transform: lowercase;
+  font-weight: 600;
+  font-size: 0.875rem;
 }
 
 .care-item {

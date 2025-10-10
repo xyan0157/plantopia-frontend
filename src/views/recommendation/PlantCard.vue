@@ -4,7 +4,7 @@
     Displays an individual plant with image, details, icons, and action button
     Emits 'select' event when clicked to open plant details modal
   -->
-  <div class="plant-card" @click="$emit('select', plant)">
+  <div class="plant-card" :style="cardStyle" @click="$emit('select', plant)">
     <!-- Plant Image Section -->
     <div class="plant-card-image">
 
@@ -19,7 +19,7 @@
     </div>
 
     <!-- Plant Information Section -->
-    <div class="plant-card-content">
+    <div class="plant-card-content" :style="contentStyle">
       <!-- Plant Name with Score -->
       <div class="plant-header">
         <h3 class="plant-card-title">{{ plant.name }}</h3>
@@ -115,6 +115,50 @@ onMounted(() => {
     })
   })
 })
+
+// Dynamic color palette based on plant color
+type Palette = { bgStart: string; bgEnd: string; border: string }
+const normalizeColor = (s?: string): string => String(s || '').toLowerCase()
+const pickDominantColor = (): string => {
+  const arr = (props.plant.flower_colors || []) as (string | undefined)[]
+  if (Array.isArray(arr) && arr.length > 0) return normalizeColor(arr[0])
+  // attempt parse from description keywords
+  const desc = normalizeColor(props.plant.description)
+  const keywords = ['red','pink','purple','blue','yellow','orange','white','green']
+  for (const k of keywords) if (desc.includes(k)) return k
+  return 'default'
+}
+const toPalette = (c: string): Palette => {
+  switch (c) {
+    case 'red':
+      return { bgStart: '#f87171', bgEnd: '#ef4444', border: '#b91c1c' }
+    case 'pink':
+      return { bgStart: '#f472b6', bgEnd: '#ec4899', border: '#be185d' }
+    case 'purple':
+      return { bgStart: '#a78bfa', bgEnd: '#8b5cf6', border: '#6d28d9' }
+    case 'blue':
+      return { bgStart: '#60a5fa', bgEnd: '#3b82f6', border: '#1d4ed8' }
+    case 'yellow':
+      return { bgStart: '#f59e0b', bgEnd: '#d97706', border: '#b45309' }
+    case 'orange':
+      return { bgStart: '#fb923c', bgEnd: '#f97316', border: '#c2410c' }
+    case 'white':
+      return { bgStart: '#e5e7eb', bgEnd: '#d1d5db', border: '#9ca3af' }
+    case 'green':
+      return { bgStart: '#34d399', bgEnd: '#10b981', border: '#047857' }
+    default:
+      return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0', border: '#a7f3d0' }
+  }
+}
+const palette = computed<Palette>(() => toPalette(pickDominantColor()))
+const cardStyle = computed(() => ({
+  background: `linear-gradient(135deg, ${palette.value.bgStart}, ${palette.value.bgEnd})`,
+  borderColor: palette.value.border
+}))
+
+const contentStyle = computed(() => ({
+  background: `linear-gradient(180deg, ${palette.value.bgStart}, ${palette.value.bgEnd})`
+}))
 
 // Function to get image source with Victoria Plants Data priority
 const getImageSource = (): string => {
