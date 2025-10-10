@@ -540,6 +540,8 @@ export class PlantRecommendationService {
           method: apiPlant.sowing.method,
           seasonLabel: apiPlant.sowing.season_label,
         },
+        // companion + visual cues
+        flower_colors: (apiPlant as unknown as { flower_colors?: string[] }).flower_colors,
         imagePath: apiPlant.media.image_path,
         imageData: apiPlant.media.image_base64, // Base64 encoded image
         // Companion planting (strings possibly provided by backend)
