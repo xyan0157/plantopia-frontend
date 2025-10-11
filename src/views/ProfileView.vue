@@ -76,6 +76,7 @@
           <div class="signin-title">Sign in with:</div>
           <div class="idp-list">
             <div ref="googleBtnContainer" class="google-button-host"></div>
+            <a v-if="showGsiFallback" :href="oauthLink" class="primary">Continue with Google</a>
           </div>
         </template>
 
@@ -159,6 +160,23 @@ const isLoggedIn = computed(() => auth.userIsLoggedIn)
 const username = computed(() => auth.userUsername)
 // Avatar no longer displayed here
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
+const showGsiFallback = ref(false)
+const oauthLink = computed(() => {
+  const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID || ''
+  // Using OAuth 2.0 implicit-like redirect to Google Accounts consent page
+  const origin = window.location.origin
+  // Use profile page as redirect target; backend should also accept it if needed
+  const redirect = `${origin}/profile`
+  const qp = new URLSearchParams({
+    client_id: cid,
+    redirect_uri: redirect,
+    response_type: 'token',
+    scope: 'openid email profile',
+    include_granted_scopes: 'true',
+    state: 'gsi_fallback'
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${qp.toString()}`
+})
 
 // Demo profile fields; later wire to real user prefs
 const preferences = ref('')
@@ -200,7 +218,7 @@ const plantsStore = usePlantsStore()
 // Guides favourites preview
 const guidesStore = useGuidesStore()
 const guideFavs = computed(() => Array.from(guidesStore.favourites))
-// Favourite plants (separate from journal plants)
+// Favourite plants (localStorage-based favourites set)
 const favouritePlants = computed<Plant[]>(() => {
   const favIds = Array.from(plantsStore.favourites)
   if (!favIds.length) return []
@@ -272,13 +290,13 @@ onMounted(async () => {
     await loadJournalPlantsFromBackend()
     return
   }
-  await ensureGoogleIdentityLoaded()
+  await ensureGoogleIdentityLoaded().catch(() => { showGsiFallback.value = true })
   const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID
   type GoogleInitOptions = { client_id: string; callback: (resp: { credential?: string }) => void; auto_select: boolean; ux_mode: string }
   type GoogleRenderOptions = { type: string; theme: string; size: string; text: string; shape: string; width: number; logo_alignment: string }
   type GoogleIdApi = { initialize: (opts: GoogleInitOptions) => void; renderButton: (el: HTMLElement, opts: GoogleRenderOptions) => void }
   const google = (window as unknown as { google?: { accounts?: { id?: GoogleIdApi } } }).google
-  if (!google?.accounts?.id || !cid) return
+  if (!google?.accounts?.id || !cid) { showGsiFallback.value = true; return }
   google?.accounts?.id?.initialize({
     client_id: cid,
     callback: (resp: { credential?: string }) => {
@@ -291,16 +309,20 @@ onMounted(async () => {
     auto_select: false,
     ux_mode: 'popup',
   })
-  if (googleBtnContainer.value) {
-    google?.accounts?.id?.renderButton(googleBtnContainer.value, {
-      type: 'standard',
-      theme: 'outline',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'pill',
-      width: 280,
-      logo_alignment: 'left',
-    })
+  try {
+    if (googleBtnContainer.value) {
+      google?.accounts?.id?.renderButton(googleBtnContainer.value, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'pill',
+        width: 280,
+        logo_alignment: 'left',
+      })
+    }
+  } catch {
+    showGsiFallback.value = true
   }
 })
 

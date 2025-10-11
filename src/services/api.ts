@@ -217,6 +217,16 @@ export interface ApiUserPlantsResponse {
   pagination?: { page?: number; limit?: number; total_pages?: number }
 }
 
+// Favorites
+export interface ApiFavoriteItem {
+  id: number
+  plant_id: number
+  notes?: string
+  priority_level?: number
+  created_at?: string
+  plant?: Partial<ApiPlantData> & { plant_name?: string; plant_category?: string; image_url?: string }
+}
+
 // Frontend Plant interface (transformed from API response)
 export interface Plant {
   id: string
@@ -564,6 +574,18 @@ export class PlantRecommendationService {
     const response = await this.fetchWithFallback(path)
     const data = await response.json()
     return data as ApiUserPlantsResponse
+  }
+
+  // --- Favorites: get current user's favorite plants ---
+  async getUserFavorites(): Promise<ApiFavoriteItem[]> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/favorites')
+      const data = await response.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch {
+      // If unauthorized or endpoint missing, return empty list gracefully
+      return []
+    }
   }
 
   // Transform All Plants API response to frontend Plant interface

@@ -35,8 +35,8 @@
         <div class="plant-detail-info">
           <!-- Plant Header -->
           <div class="plant-header">
-            <h2 class="plant-detail-title">{{ plant.name }}</h2>
-            <p class="plant-detail-scientific">{{ plant.scientificName }}</p>
+            <h2 class="plant-detail-title">{{ resolvedName }}</h2>
+            <p class="plant-detail-scientific">{{ resolvedScientific }}</p>
             <div class="recommendation-score" v-if="plant.score">
               <span class="score-label">Recommendation Score:</span>
               <span class="score-value">{{ plant.score.toFixed(1) }}/100</span>
@@ -96,15 +96,15 @@
               <div class="card-content">
                 <div class="info-item">
                   <span class="info-icon">Sun:</span>
-                  <span>{{ formatSunlight(plant.sunlight || '') }}</span>
+                  <span>{{ formatSunlight(sunlightResolved) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">Water:</span>
-                  <span>{{ plant.water }}</span>
+                  <span>{{ waterResolved }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">Effort:</span>
-                  <span>{{ plant.effort }} Maintenance</span>
+                  <span>{{ effortResolved }} Maintenance</span>
                 </div>
               </div>
             </div>
@@ -371,10 +371,8 @@ const imageError = ref(false)
 
 // Markdown rendering computed property
 const renderedDescription = computed(() => {
-  if (!props.plant || !props.plant.description) {
-    return 'No description available.'
-  }
-  return renderMarkdown(props.plant.description)
+  const desc = props.plant?.description || matchedFromAll.value?.description
+  return desc ? renderMarkdown(desc) : 'No description available.'
 })
 
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
@@ -397,6 +395,7 @@ const plantWithCompanions = computed<PlantWithCompanions | null>(() => (props.pl
 // Fallback: try to match from the global plantsStore (data from /plants) by name/scientific name
 const matchedFromAll = computed<PlantWithCompanions | null>(() => {
   if (!props.plant) return null
+  // Match by name first; fallback to scientific name
   const n = String(props.plant.name || '').toLowerCase()
   const s = String((props.plant as PlantWithCompanions).scientific_name || '').toLowerCase()
   const found = plantStore.plants.find(p => {
@@ -406,6 +405,13 @@ const matchedFromAll = computed<PlantWithCompanions | null>(() => {
   }) as PlantWithCompanions | undefined
   return found || null
 })
+
+// Resolved fields unified for all entry points (including favourites)
+const resolvedName = computed(() => props.plant?.name || matchedFromAll.value?.name || '')
+const resolvedScientific = computed(() => (props.plant as PlantWithCompanions)?.scientific_name || matchedFromAll.value?.scientific_name || '')
+const sunlightResolved = computed(() => (props.plant?.sunlight as string) || matchedFromAll.value?.sunlight || '')
+const waterResolved = computed(() => (props.plant?.water as string) || matchedFromAll.value?.care_requirements?.watering || '')
+const effortResolved = computed(() => (props.plant?.effort as string) || (matchedFromAll.value?.maintainability_score ? (matchedFromAll.value!.maintainability_score! <= 3 ? 'low' : matchedFromAll.value!.maintainability_score! >= 7 ? 'high' : 'medium') : 'medium'))
 
 const beneficialCompanions = computed<string[]>(() => {
   const own = parseCompanions(plantWithCompanions.value?.beneficial_companions)
