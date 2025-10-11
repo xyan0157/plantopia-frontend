@@ -1,7 +1,6 @@
-// Markdown (Grow Guide) API client with fallback (Cloudflare → localhost)
+// Markdown (Grow Guide) API client for cloud backend only
 
 const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-const FALLBACK_API_URL = 'http://localhost:8000'
 
 export interface MarkdownCategory {
   name: string
@@ -35,28 +34,16 @@ export interface MarkdownFileResponse {
 export class MarkdownApiService {
   private currentBaseUrl: string
   private readonly primaryUrl: string
-  private readonly fallbackUrl: string
 
-  constructor(primaryUrl: string = PRIMARY_API_URL, fallbackUrl: string = FALLBACK_API_URL) {
+  constructor(primaryUrl: string = PRIMARY_API_URL) {
     this.primaryUrl = primaryUrl
-    this.fallbackUrl = fallbackUrl
     this.currentBaseUrl = primaryUrl
   }
 
   private async fetchWithFallback(endpoint: string, options?: RequestInit): Promise<Response> {
-    try {
-      const res = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-      return res
-    } catch (err) {
-      if (this.currentBaseUrl !== this.fallbackUrl) {
-        this.currentBaseUrl = this.fallbackUrl
-        const res = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        return res
-      }
-      throw err
-    }
+    const res = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+    return res
   }
 
   async listCategories(): Promise<MarkdownCategoryResponse> {

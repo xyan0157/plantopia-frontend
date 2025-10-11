@@ -21,6 +21,45 @@
             </div>
           </div>
 
+          <!-- AI Q&A -->
+          <div class="section-card ai-qa">
+            <div class="section-title-row">
+              <h3>AI Q&A</h3>
+            </div>
+            <div v-if="!hasUserId" class="user-id-warning">
+              <div class="warn-text">User ID not set. Please sign in first. For testing you can set a numeric user id manually.</div>
+              <div class="manual-id-row">
+                <input class="input" v-model="manualUserId" placeholder="Enter numeric user id" />
+                <button class="btn primary" @click="saveManualUserId">Save</button>
+              </div>
+            </div>
+            <div class="chat">
+              <div class="chat-window" ref="chatWindowRef">
+                <div v-for="m in chatMessages" :key="m.id" class="msg" :class="m.role">
+                  <div class="bubble">
+                    <img v-if="m.image" :src="m.image" class="msg-img" alt="attachment" />
+                    <div class="text">{{ m.text }}</div>
+                  </div>
+                </div>
+                <div v-if="aiLoading" class="msg assistant">
+                  <div class="bubble typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                </div>
+              </div>
+              <div class="attach-preview" v-if="attachPreview">
+                <img :src="attachPreview" alt="preview" />
+                <button class="btn small" @click="clearAttach">Remove</button>
+              </div>
+              <div class="chat-input">
+                <label class="attach">
+                  <input type="file" accept="image/*" @change="onAttach" />
+                  +
+                </label>
+                <textarea class="input" rows="2" v-model="inputText" placeholder="Ask about your plant or describe an issue"></textarea>
+                <button class="btn primary" @click="sendMessage" :disabled="aiLoading || (!inputText.trim() && !attachPreview)">Send</button>
+              </div>
+            </div>
+          </div>
+
           <!-- My Plant List -->
           <div class="section-card plant-list">
             <div class="section-title-row">
@@ -144,7 +183,7 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 // import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
@@ -252,6 +291,89 @@ async function loadJournalPlantsFromBackend() {
   }
 }
 
+// --- AI Q&A state and actions ---
+type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; image?: string | null }
+const chatMessages = ref<ChatMsg[]>([])
+const inputText = ref('')
+const attachPreview = ref<string | null>(null)
+const chatWindowRef = ref<HTMLDivElement | null>(null)
+const aiLoading = ref(false)
+const chatId = ref<number | null>(null)
+const manualUserId = ref('')
+const hasUserId = computed(() => {
+  const idRaw = localStorage.getItem('plantopia_user_id') || ''
+  const id = parseInt(idRaw, 10)
+  return Number.isFinite(id) && id > 0
+})
+
+function generateId(): string {
+  try {
+    const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto
+    if (c?.randomUUID) return c.randomUUID()
+  } catch {}
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+function onAttach(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (!files || !files[0]) { attachPreview.value = null; return }
+  const reader = new FileReader()
+  reader.onload = () => { attachPreview.value = String(reader.result || '') }
+  reader.readAsDataURL(files[0])
+}
+
+function clearAttach() { attachPreview.value = null }
+
+function scrollToBottom() {
+  const el = chatWindowRef.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+async function sendMessage() {
+  if (!inputText.value.trim() && !attachPreview.value) return
+  const userMsg: ChatMsg = { id: generateId(), role: 'user', text: inputText.value.trim(), image: attachPreview.value }
+  chatMessages.value.push(userMsg)
+  inputText.value = ''
+  attachPreview.value = null
+  await nextTick(); scrollToBottom()
+
+  aiLoading.value = true
+  try {
+    // Ensure a chat session exists
+    if (!chatId.value) {
+      const savedId = parseInt(localStorage.getItem('plantopia_user_id') || '', 10)
+      const userId = Number.isFinite(savedId) && savedId > 0 ? savedId : 0
+      if (!userId) {
+        throw new Error('Missing user id')
+      }
+      const res = await plantApiService.startGeneralChat(userId)
+      chatId.value = res.chat_id
+    }
+
+    const { reply } = await plantApiService.sendGeneralChatMessage({
+      chat_id: chatId.value!,
+      message: userMsg.text,
+      image: userMsg.image || undefined,
+    })
+    const replyMsg: ChatMsg = { id: generateId(), role: 'assistant', text: reply || 'No reply' }
+    chatMessages.value.push(replyMsg)
+  } catch {
+    const errMsg: ChatMsg = { id: generateId(), role: 'assistant', text: 'Failed to contact AI service. Please try again later.' }
+    chatMessages.value.push(errMsg)
+  } finally {
+    aiLoading.value = false
+    await nextTick(); scrollToBottom()
+  }
+}
+
+function saveManualUserId() {
+  const id = parseInt(manualUserId.value.trim(), 10)
+  if (Number.isFinite(id) && id > 0) {
+    try { localStorage.setItem('plantopia_user_id', String(id)) } catch {}
+    manualUserId.value = ''
+  }
+}
+
 function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   // 1) base64 fields
   const base64Fields = (p as unknown as { image_base64?: string; imageData?: string })
@@ -304,7 +426,19 @@ onMounted(async () => {
       const display = (info.email && String(info.email).split('@')[0]) || info.name || 'Google User'
       const pic = info.picture || ''
       if (info.email) try { localStorage.setItem('plantopia_user_email', String(info.email)) } catch {}
-      auth.userLogin(display, pic)
+      // Call backend to create/get user and store user_id
+      ;(async () => {
+        try {
+          const login = await plantApiService.googleLogin(resp?.credential || '')
+          const userId = Number(login?.user?.id || 0)
+          if (Number.isFinite(userId) && userId > 0) {
+            localStorage.setItem('plantopia_user_id', String(userId))
+          }
+          auth.userLogin(display, pic, userId)
+        } catch {
+          auth.userLogin(display, pic)
+        }
+      })()
     },
     auto_select: false,
     ux_mode: 'popup',

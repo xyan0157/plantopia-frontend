@@ -64,12 +64,6 @@ const showNavbar = computed(() => route.name !== 'login')
               Profile
             </RouterLink>
           </li>
-                 <li class="nav-item">
-                   <RouterLink to="/journal" class="nav-link">
-                     <UserCircleIcon class="nav-icon" />
-                     Journal
-                   </RouterLink>
-                 </li>
         </ul>
       </div>
     </nav>

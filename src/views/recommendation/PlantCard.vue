@@ -267,7 +267,6 @@ const getImageUrl = (imagePath: string): string => {
   
   // Base URL for your backend with environment variables
   const primaryUrl = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-  const fallbackUrl = 'http://localhost:8000'
   
   // For separated frontend/backend projects, we need API endpoints
   const possibleUrls = [
@@ -277,13 +276,6 @@ const getImageUrl = (imagePath: string): string => {
     `${primaryUrl}/image/${encodeURIComponent(imagePath)}`,
     `${primaryUrl}/static/${imagePath}`,           
     `${primaryUrl}/media/${imagePath}`,
-    // Fallback URLs
-    `${fallbackUrl}/api/v1/plant-image/${encodeURIComponent(imagePath)}`,
-    `${fallbackUrl}/api/v1/plant-image?path=${encodeURIComponent(imagePath)}`,
-    `${fallbackUrl}/api/v1/images/${encodeURIComponent(imagePath)}`,
-    `${fallbackUrl}/image/${encodeURIComponent(imagePath)}`,
-    `${fallbackUrl}/static/${imagePath}`,           
-    `${fallbackUrl}/media/${imagePath}`,            
   ]
   
   // Store all possible URLs for fallback

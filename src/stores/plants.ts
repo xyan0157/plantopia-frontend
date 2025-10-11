@@ -66,8 +66,9 @@ export const usePlantsStore = defineStore('plants', {
       this.loading = true
       this.error = null
       try {
-        const pageSize = 200
-        const first = await plantApiService.getPlantsPaginated({ page: 1, limit: pageSize })
+        // Respect backend cap (api clamps to 100). Start with 100 to be safe.
+        const initialLimit = 100
+        const first = await plantApiService.getPlantsPaginated({ page: 1, limit: initialLimit })
         this.plants = first.plants
         this.totalCount = Number(first.total_count || first.plants.length || 0)
         this.lastKey = key
@@ -76,6 +77,7 @@ export const usePlantsStore = defineStore('plants', {
 
         // Background progressive append
         ;(async () => {
+          const pageSize = Math.max(1, Number(first.limit || initialLimit))
           const totalPages = Math.max(1, Math.ceil(this.totalCount / pageSize))
           for (let page = 2; page <= totalPages; page += 1) {
             try {

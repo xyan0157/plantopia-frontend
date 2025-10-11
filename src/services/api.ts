@@ -2,9 +2,8 @@
 // Handles all communication with the backend recommendation API
 
 // Configuration - Now using Cloudflare Tunnel for HTTPS
-// Production uses Cloudflare Tunnel URL, development uses local backend
+// Always use cloud API URL
 const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-const FALLBACK_API_URL = 'http://localhost:8000'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
@@ -179,6 +178,20 @@ export interface ApiQuantifiedImpact {
   community_impact_potential: string | null
 }
 
+// --- Auth types ---
+export interface ApiAuthUser {
+  id: number
+  email?: string
+  name?: string
+  avatar_url?: string
+}
+
+export interface ApiGoogleLoginResponse {
+  access_token: string
+  token_type: string
+  user: ApiAuthUser
+}
+
 export interface ApiSuitabilityScore {
   total_score: number
   breakdown: Record<string, number>
@@ -302,54 +315,35 @@ export interface Plant {
 // API Service class
 export class PlantRecommendationService {
   private primaryUrl: string
-  private fallbackUrl: string
   private currentBaseUrl: string
   private gcsPlantImagesBaseUrl: string
 
-  constructor(primaryUrl: string = PRIMARY_API_URL, fallbackUrl: string = FALLBACK_API_URL) {
+  constructor(primaryUrl: string = PRIMARY_API_URL) {
     this.primaryUrl = primaryUrl
-    this.fallbackUrl = fallbackUrl
     this.currentBaseUrl = primaryUrl
-    // Prefer env override if provided; otherwise use the shared bucket base
-    // import.meta typing workaround without using any
     const envObj = (import.meta as unknown as { env?: Record<string, string> }).env || {}
+    // Prefer env override if provided; otherwise use the shared bucket base
     this.gcsPlantImagesBaseUrl = envObj.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   }
 
-  // Helper method to try API call with fallback
   private async fetchWithFallback(endpoint: string, options?: RequestInit): Promise<Response> {
-    // console.debug(`[API] Attempting to connect to ${this.currentBaseUrl}${endpoint}`)
-    
-    try {
-      const response = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      // console.debug(`[API] Successfully connected to ${this.currentBaseUrl}`)
-      return response
-    } catch (error) {
-      // console.warn(`[API] Failed to connect to ${this.currentBaseUrl}:`, error)
-      
-      // If we're not already using fallback, try fallback URL
-      if (this.currentBaseUrl !== this.fallbackUrl && process.env.NODE_ENV !== 'production') {
-        // console.debug(`[API] Switching to fallback URL: ${this.fallbackUrl}`)
-        this.currentBaseUrl = this.fallbackUrl
-        
-        try {
-          const fallbackResponse = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-          if (!fallbackResponse.ok) {
-            throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackResponse.statusText}`)
-          }
-          // console.debug(`[API] Successfully connected to fallback URL ${this.currentBaseUrl}`)
-          return fallbackResponse
-    } catch {
-          this.currentBaseUrl = this.primaryUrl // Reset to primary for next attempt
-          throw new Error(`Both primary (${this.primaryUrl}) and fallback (${this.fallbackUrl}) URLs failed`)
-        }
-      } else {
-        throw error
-      }
+    const url = `${this.currentBaseUrl}${endpoint}`
+    const response = await fetch(url, options)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
+    return response
+  }
+
+  // --- Auth: Google login (create or retrieve user, return token + user) ---
+  async googleLogin(credential: string): Promise<ApiGoogleLoginResponse> {
+    const response = await this.fetchWithFallback('/api/v1/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    })
+    const data = await response.json()
+    return data as ApiGoogleLoginResponse
   }
 
   // Health check endpoint
@@ -472,7 +466,7 @@ export class PlantRecommendationService {
   // --- AI Chat (General) ---
   async startGeneralChat(userId: number | string): Promise<{ chat_id: number; expires_at?: string }> {
     try {
-      const response = await this.fetchWithFallback('/chat/general/start', {
+      const response = await this.fetchWithFallback('/api/v1/chat/general/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId })
@@ -539,7 +533,7 @@ export class PlantRecommendationService {
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
     const body = { user_data, plant_id: params.plant_id, plant_nickname: params.plant_nickname, start_date: user_data.start_date, location_details: params.location_details }
-    const response = await this.fetchWithFallback('/tracking/start', {
+    const response = await this.fetchWithFallback('/api/v1/tracking/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -550,7 +544,7 @@ export class PlantRecommendationService {
 
   async sendGeneralChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string }> {
     try {
-      const response = await this.fetchWithFallback('/chat/general/message', {
+      const response = await this.fetchWithFallback('/api/v1/chat/general/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -627,6 +621,10 @@ export class PlantRecommendationService {
         flower_colors: apiPlant.flower_colors,
         habit: apiPlant.habit,
         maintainability_score: apiPlant.maintainability_score,
+        // Sustainability impact (derived for All Plants so favourites have values)
+        coolingEffect: this.determineCoolingEffect(apiPlant.plant_category),
+        carbonReduction: this.determineCarbonReduction(apiPlant.plant_category),
+        droughtTolerance: (apiPlant.characteristics || '').toLowerCase().includes('drought') ? 'excellent' : 'moderate',
         // Generate tags from characteristics and plant type
         tags: this.generateTagsFromPlantData(apiPlant),
         // Generate care requirements from plant data
