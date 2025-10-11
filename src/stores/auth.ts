@@ -45,13 +45,16 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // End-user identity login (Google)
-  const userLogin = (name: string, avatar?: string) => {
+  const userLogin = (name: string, avatar?: string, userId?: number) => {
     userLoggedIn.value = true
     userName.value = name
     userAvatar.value = avatar || ''
     localStorage.setItem('plantopia_user_logged_in', 'true')
     localStorage.setItem('plantopia_user_name', name)
     if (avatar) localStorage.setItem('plantopia_user_avatar', avatar)
+    if (typeof userId === 'number' && Number.isFinite(userId) && userId > 0) {
+      localStorage.setItem('plantopia_user_id', String(userId))
+    }
   }
 
   // Logout function
@@ -71,6 +74,14 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('plantopia_user_logged_in')
     localStorage.removeItem('plantopia_user_name')
     localStorage.removeItem('plantopia_user_avatar')
+    localStorage.removeItem('plantopia_user_id')
+  }
+
+  // Allow setting user_id after backend returns it
+  const setUserId = (id: number) => {
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) {
+      localStorage.setItem('plantopia_user_id', String(id))
+    }
   }
 
   // Initialize auth status
@@ -87,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     userLogin,
     userLogout,
+    setUserId,
     checkAuthStatus
   }
 })

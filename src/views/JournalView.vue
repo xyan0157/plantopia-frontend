@@ -53,6 +53,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick } from 'vue'
+import { plantApiService } from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 
 interface JournalEntry { id: string; image?: string; title?: string; content: string; createdAt: number }
 
@@ -70,32 +72,11 @@ const chatMessages = ref<ChatMsg[]>([])
 const inputText = ref('')
 const attachPreview = ref<string | null>(null)
 const chatWindowRef = ref<HTMLDivElement | null>(null)
+const auth = useAuthStore()
+const chatId = ref<number | null>(null)
 const totalStages = 4
-// Mock data used when there are not enough entries
-const mockStages = computed<JournalEntry[]>(() => {
-  const today = Date.now()
-  const gen = (offsetDays: number, img?: string, title?: string, text?: string): JournalEntry => ({
-    id: `mock-${offsetDays}`,
-    image: img,
-    title: title || 'Demo stage',
-    content: text || 'Demo journal content',
-    createdAt: today - offsetDays * 24 * 60 * 60 * 1000,
-  })
-  return [
-    gen(21, '/Flower.jpg', 'Seedling', 'Started from seed'),
-    gen(14, '/Herb.jpg', 'Transplanted', 'Moved to a bigger pot'),
-    gen(7, '/Vegetable.jpg', 'Growth', 'New leaves appeared'),
-    gen(0, '/placeholder-plant.svg', 'Bloom', 'First bloom!'),
-  ]
-})
 
-const computedStages = computed<JournalEntry[]>(() => {
-  const list = entries.value.slice(0, totalStages)
-  if (list.length >= totalStages) return list
-  // fill remaining positions with mocks
-  const needed = totalStages - list.length
-  return [...list, ...mockStages.value.slice(list.length, list.length + needed)]
-})
+const computedStages = computed<JournalEntry[]>(() => entries.value.slice(0, totalStages))
 
 const completedStages = computed(() => Math.min(entries.value.length, totalStages))
 const progressPercent = computed(() => Math.round((completedStages.value / totalStages) * 100))
@@ -210,13 +191,29 @@ async function sendMessage() {
   await nextTick(); scrollToBottom()
 
   aiLoading.value = true
-  // Placeholder AI streaming
-  setTimeout(async () => {
-    const reply: ChatMsg = { id: generateId(), role: 'assistant', text: 'Thanks! This is a demo AI reply. Replace sendMessage() with your API.' }
-    chatMessages.value.push(reply)
+  try {
+    // Ensure a chat session exists
+    if (!chatId.value) {
+      // Use email as user_id if available; fallback to 1
+      const email = localStorage.getItem('plantopia_user_email') || ''
+      const res = await plantApiService.startGeneralChat(email || 1)
+      chatId.value = res.chat_id
+    }
+
+    const { reply } = await plantApiService.sendGeneralChatMessage({
+      chat_id: chatId.value!,
+      message: userMsg.text,
+      image: userMsg.image || undefined,
+    })
+    const replyMsg: ChatMsg = { id: generateId(), role: 'assistant', text: reply || 'No reply' }
+    chatMessages.value.push(replyMsg)
+  } catch (e) {
+    const errMsg: ChatMsg = { id: generateId(), role: 'assistant', text: 'Failed to contact AI service. Please try again later.' }
+    chatMessages.value.push(errMsg)
+  } finally {
     aiLoading.value = false
     await nextTick(); scrollToBottom()
-  }, 600)
+  }
 }
 
 function scrollToBottom() {
