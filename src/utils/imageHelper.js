@@ -5,10 +5,8 @@
 
 // API base URL configuration: always prefer explicit VITE_API_URL
 const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com';
-// Local dev as fallback when primary fails
-const FALLBACK_API_URL = 'http://localhost:8000';
 
-// Current API URL (will switch to fallback if needed)
+// Current API URL (always cloud)
 let currentApiUrl = PRIMARY_API_URL;
 
 // Alternative category mappings (handle different naming conventions)
@@ -53,10 +51,7 @@ export const getPlantImageUrl = async (category, imageName = null) => {
       response = await fetch(`${currentApiUrl}/images/${normalizedCategory}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
     } catch (error) {
-      console.warn(`[IMAGE HELPER] Primary URL failed, trying fallback...`);
-      currentApiUrl = FALLBACK_API_URL;
-      response = await fetch(`${currentApiUrl}/images/${normalizedCategory}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      throw error;
     }
     const data = await response.json();
     
@@ -105,10 +100,7 @@ export const getCategoryImages = async (category) => {
       response = await fetch(`${currentApiUrl}/images/${normalizedCategory}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
     } catch (error) {
-      console.warn(`[IMAGE HELPER] Primary URL failed, trying fallback...`);
-      currentApiUrl = FALLBACK_API_URL;
-      response = await fetch(`${currentApiUrl}/images/${normalizedCategory}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      throw error;
     }
     const data = await response.json();
     return data.images || [];

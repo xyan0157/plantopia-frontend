@@ -35,8 +35,8 @@
         <div class="plant-detail-info">
           <!-- Plant Header -->
           <div class="plant-header">
-            <h2 class="plant-detail-title">{{ plant.name }}</h2>
-            <p class="plant-detail-scientific">{{ plant.scientificName }}</p>
+            <h2 class="plant-detail-title">{{ resolvedName }}</h2>
+            <p class="plant-detail-scientific">{{ resolvedScientific }}</p>
             <div class="recommendation-score" v-if="plant.score">
               <span class="score-label">Recommendation Score:</span>
               <span class="score-value">{{ plant.score.toFixed(1) }}/100</span>
@@ -96,15 +96,23 @@
               <div class="card-content">
                 <div class="info-item">
                   <span class="info-icon">Sun:</span>
-                  <span>{{ formatSunlight(plant.sunlight || '') }}</span>
+                  <div class="requirement-icons" :title="resolvedSunlightLabel">
+                    <SunIcon v-if="sunType === 'full'" class="icon sun" />
+                    <div v-else-if="sunType === 'partial'" class="icon sun-partial"><SunIcon class="icon sun" /></div>
+                    <MoonIcon v-else class="icon shade" />
+                  </div>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">Water:</span>
-                  <span>{{ plant.water }}</span>
+                  <div class="requirement-icons" :title="resolvedWaterLabel">
+                    <BeakerIcon v-for="i in 3" :key="'w-'+i" class="icon water" :class="{ inactive: i > waterLevel }" />
+                  </div>
                 </div>
                 <div class="info-item">
                   <span class="info-icon">Effort:</span>
-                  <span>{{ plant.effort }} Maintenance</span>
+                  <div class="requirement-icons" :title="resolvedEffortLabel">
+                    <WrenchScrewdriverIcon v-for="i in 3" :key="'c-'+i" class="icon care" :class="{ inactive: i > effortLevel }" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -345,6 +353,7 @@ import { renderMarkdown } from '@/services/markdownService'
 import { plantApiService } from '@/services/api'
 import { useRecommendationsStore } from '@/stores/recommendations'
 import { usePlantsStore } from '@/stores/plants'
+import { SunIcon, MoonIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
 
 // Component props - receives plant data or null when modal is closed
 const props = defineProps<{
@@ -371,10 +380,8 @@ const imageError = ref(false)
 
 // Markdown rendering computed property
 const renderedDescription = computed(() => {
-  if (!props.plant || !props.plant.description) {
-    return 'No description available.'
-  }
-  return renderMarkdown(props.plant.description)
+  const desc = props.plant?.description || matchedFromAll.value?.description
+  return desc ? renderMarkdown(desc) : 'No description available.'
 })
 
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
@@ -397,6 +404,7 @@ const plantWithCompanions = computed<PlantWithCompanions | null>(() => (props.pl
 // Fallback: try to match from the global plantsStore (data from /plants) by name/scientific name
 const matchedFromAll = computed<PlantWithCompanions | null>(() => {
   if (!props.plant) return null
+  // Match by name first; fallback to scientific name
   const n = String(props.plant.name || '').toLowerCase()
   const s = String((props.plant as PlantWithCompanions).scientific_name || '').toLowerCase()
   const found = plantStore.plants.find(p => {
@@ -406,6 +414,13 @@ const matchedFromAll = computed<PlantWithCompanions | null>(() => {
   }) as PlantWithCompanions | undefined
   return found || null
 })
+
+// Resolved fields unified for all entry points (including favourites)
+const resolvedName = computed(() => props.plant?.name || matchedFromAll.value?.name || '')
+const resolvedScientific = computed(() => (props.plant as PlantWithCompanions)?.scientific_name || matchedFromAll.value?.scientific_name || '')
+const sunlightResolved = computed(() => (props.plant?.sunlight as string) || matchedFromAll.value?.care_requirements?.sunlight || '')
+const waterResolved = computed(() => (props.plant?.water as string) || matchedFromAll.value?.care_requirements?.watering || '')
+const effortResolved = computed(() => (props.plant?.effort as string) || (matchedFromAll.value?.maintainability_score ? (matchedFromAll.value!.maintainability_score! <= 3 ? 'low' : matchedFromAll.value!.maintainability_score! >= 7 ? 'high' : 'medium') : 'medium'))
 
 const beneficialCompanions = computed<string[]>(() => {
   const own = parseCompanions(plantWithCompanions.value?.beneficial_companions)
@@ -680,19 +695,46 @@ const handleImageError = (event: Event) => {
   img.style.display = 'none'
 }
 
-// Helper function to format sunlight requirements for display
-const formatSunlight = (sunlight: string): string => {
-  switch (sunlight) {
-    case 'full':
-      return 'Full Sun'
-    case 'partial':
-      return 'Partial Sun'
-    case 'shade':
-      return 'Shade'
-    default:
-      return sunlight // Return original value if not recognized
-  }
-}
+// formatSunlight helper no longer needed (icons component handles labels)
+
+// Local computed helpers for icons while preserving existing layout
+const sunType = computed<'full' | 'partial' | 'shade'>(() => {
+  const s = String(sunlightResolved.value || '').toLowerCase()
+  if (s.includes('partial') || s.includes('part')) return 'partial'
+  if (s.includes('shade')) return 'shade'
+  return 'full'
+})
+
+const resolvedSunlightLabel = computed(() => {
+  const s = sunType.value
+  return s === 'full' ? 'Full Sun' : s === 'partial' ? 'Partial Sun' : 'Shade'
+})
+
+const waterLevel = computed<number>(() => {
+  const w = String(waterResolved.value || '').toLowerCase()
+  if (w.includes('high')) return 3
+  if (w.includes('med')) return 2
+  return 1
+})
+const resolvedWaterLabel = computed(() => {
+  const w = String(waterResolved.value || '').toLowerCase()
+  if (w.includes('high')) return 'High'
+  if (w.includes('med')) return 'Medium'
+  return 'Low'
+})
+
+const effortLevel = computed<number>(() => {
+  const e = String(effortResolved.value || '').toLowerCase()
+  if (e.includes('high')) return 3
+  if (e.includes('med')) return 2
+  return 1
+})
+const resolvedEffortLabel = computed(() => {
+  const e = String(effortResolved.value || '').toLowerCase()
+  if (e.includes('high')) return 'High'
+  if (e.includes('med')) return 'Medium'
+  return 'Low'
+})
 </script>
 
 <style scoped>
@@ -915,6 +957,16 @@ const formatSunlight = (sunlight: string): string => {
   min-width: 4rem;
   flex-shrink: 0;
 }
+
+/* Icons for Growing Requirements (Sun/Water/Effort) */
+.requirement-icons { display: flex; align-items: center; gap: 4px; min-height: 20px; }
+.icon { width: 18px; height: 18px; }
+.sun { color: #f59e0b; }
+.shade { color: #6b7280; }
+.sun-partial { width: 18px; height: 18px; clip-path: inset(0 50% 0 0); }
+.water { color: #0ea5e9; }
+.care { color: #f59e0b; }
+.inactive { opacity: 0.25; }
 
 .benefits-grid {
   display: grid;

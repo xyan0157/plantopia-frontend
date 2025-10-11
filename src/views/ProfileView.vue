@@ -19,11 +19,44 @@
                 <button class="btn" @click="openEdit">Edit</button>
               </div>
             </div>
-        
-        
-            <div class="profile-avatar">
-              <img v-if="avatarUrl" :src="avatarUrl" alt="avatar" />
-              <span v-else>{{ (username || 'U').substring(0,1).toUpperCase() }}</span>
+          </div>
+
+          <!-- AI Q&A -->
+          <div class="section-card ai-qa">
+            <div class="section-title-row">
+              <h3>AI Q&A</h3>
+            </div>
+            <div v-if="!hasUserId" class="user-id-warning">
+              <div class="warn-text">User ID not set. Please sign in first. For testing you can set a numeric user id manually.</div>
+              <div class="manual-id-row">
+                <input class="input" v-model="manualUserId" placeholder="Enter numeric user id" />
+                <button class="btn primary" @click="saveManualUserId">Save</button>
+              </div>
+            </div>
+            <div class="chat">
+              <div class="chat-window" ref="chatWindowRef">
+                <div v-for="m in chatMessages" :key="m.id" class="msg" :class="m.role">
+                  <div class="bubble">
+                    <img v-if="m.image" :src="m.image" class="msg-img" alt="attachment" />
+                    <div class="text">{{ m.text }}</div>
+                  </div>
+                </div>
+                <div v-if="aiLoading" class="msg assistant">
+                  <div class="bubble typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                </div>
+              </div>
+              <div class="attach-preview" v-if="attachPreview">
+                <img :src="attachPreview" alt="preview" />
+                <button class="btn small" @click="clearAttach">Remove</button>
+              </div>
+              <div class="chat-input">
+                <label class="attach">
+                  <input type="file" accept="image/*" @change="onAttach" />
+                  +
+                </label>
+                <textarea class="input" rows="2" v-model="inputText" placeholder="Ask about your plant or describe an issue"></textarea>
+                <button class="btn primary" @click="sendMessage" :disabled="aiLoading || (!inputText.trim() && !attachPreview)">Send</button>
+              </div>
             </div>
           </div>
 
@@ -45,7 +78,7 @@
                 @pointerleave="onPlantPointerUp"
                 @pointercancel="onPlantPointerUp"
               >
-                <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
+                <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlantDetail(p)" style="cursor:pointer;">
                   <div class="plant-thumb">
                     <img :src="getPlantPreviewImage(p)" alt="thumb" />
                   </div>
@@ -67,58 +100,22 @@
           </ul>
         </div>
 
-        <!-- Journal Plants below guide list -->
+        <!-- Journal Plants (query from backend by email) -->
         <div class="section-card plant-list">
           <div class="section-title-row">
             <h3>Journal Plants</h3>
           </div>
-          <div v-if="journalPlants.length === 0">
-              <div
-                class="plant-scroll"
-                tabindex="0"
-                ref="plantScrollRef"
-              >
-                <div class="plant-item" @click="openMockJournal" style="cursor:pointer;">
-                  <div class="plant-thumb">
-                    <img :src="mockPlantImage" alt="thumb" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else>
-              <div v-if="filteredPlants.length === 0" class="empty-fav">No results.</div>
-              <div
-                v-else
-                class="plant-scroll"
-                tabindex="0"
-                ref="plantScrollRef"
-                :class="{ dragging: plantDragging }"
-                @pointerdown="onPlantPointerDown"
-                @pointermove="onPlantPointerMove"
-                @pointerup="onPlantPointerUp"
-                @pointerleave="onPlantPointerUp"
-                @pointercancel="onPlantPointerUp"
-              >
-                <div v-for="p in filteredPlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlant(p)" style="cursor:pointer;">
-                  <div class="plant-thumb">
-                    <img :src="getPlantPreviewImage(p)" alt="thumb" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Replaced by per-plant journal modal; this inline block removed -->
-
-          
-
-          
+          <div v-if="journalLoading" class="empty-fav">Loading...</div>
+          <div v-else-if="journalError" class="empty-fav">{{ journalError }}</div>
+          <div v-else-if="journalPlants.length === 0" class="empty-fav">No journal yet.</div>
+        </div>
         </div>
 
         <template v-if="!isLoggedIn">
           <div class="signin-title">Sign in with:</div>
           <div class="idp-list">
             <div ref="googleBtnContainer" class="google-button-host"></div>
+            <a v-if="showGsiFallback" :href="oauthLink" class="primary">Continue with Google</a>
           </div>
         </template>
 
@@ -128,47 +125,8 @@
       </div>
     </div>
   </div>
-  <!-- Plant Journal Modal -->
-  <div v-if="journalPlant" class="modal-overlay" @click="closeJournal">
-    <div class="modal-content" @click.stop>
-      <div class="modal-header">
-        <h2 class="modal-title">{{ journalPlant.name }} · Journal</h2>
-        <button class="modal-close" @click="closeJournal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="journey">
-          <div class="stages">
-            <div v-for="(s, idx) in activeJourneyStages" :key="s.id" class="stage">
-              <div class="stage-thumb"><img :src="s.image" alt="stage" /></div>
-              <div class="stage-date">Date: {{ formatDate(s.createdAt) }}</div>
-              <div class="stage-actions">
-                <button class="badge-btn" :class="{ done: isStageCompletedScoped(s.id) }" @click="toggleStageCompletedScoped(s.id)">{{ idx + 1 }}</button>
-                <button class="btn">See Detail</button>
-              </div>
-            </div>
-          </div>
-          <div class="progress-row">
-            <div class="progress-bar"><div class="progress-fill" :style="{ width: progressPercentScoped + '%' }"></div></div>
-            <div class="progress-text">You have completed {{ completedStagesScoped }}/{{ totalStages }}</div>
-          </div>
-          <div class="impact-grid compact">
-            <div class="impact-card">
-              <div class="impact-title">CO2 absorption capacity</div>
-              <div class="impact-text">Cumulative absorption of 24 g of CO2 per year</div>
-            </div>
-            <div class="impact-card">
-              <div class="impact-title">Cooling effect</div>
-              <div class="impact-text">Local temperature drops by approximately 2°C</div>
-            </div>
-            <div class="impact-card">
-              <div class="impact-title">Air quality & biodiversity</div>
-              <div class="impact-text">Providing habitats for bees and birds</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Plant Detail Modal -->
+  <PlantDetailModal :plant="detailPlant" @close="closeDetailModal" v-if="detailPlant" />
 
   <!-- Edit Profile Modal -->
   <div v-if="showEdit" class="modal-overlay" @click="closeEdit">
@@ -225,12 +183,13 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 // import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
-// import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
-import type { Plant } from '@/services/api'
+import { plantApiService } from '@/services/api'
+import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
+import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 
 const auth = useAuthStore()
@@ -238,8 +197,25 @@ const auth = useAuthStore()
 
 const isLoggedIn = computed(() => auth.userIsLoggedIn)
 const username = computed(() => auth.userUsername)
-const avatarUrl = computed(() => auth.userAvatarUrl)
+// Avatar no longer displayed here
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
+const showGsiFallback = ref(false)
+const oauthLink = computed(() => {
+  const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID || ''
+  // Using OAuth 2.0 implicit-like redirect to Google Accounts consent page
+  const origin = window.location.origin
+  // Use profile page as redirect target; backend should also accept it if needed
+  const redirect = `${origin}/profile`
+  const qp = new URLSearchParams({
+    client_id: cid,
+    redirect_uri: redirect,
+    response_type: 'token',
+    scope: 'openid email profile',
+    include_granted_scopes: 'true',
+    state: 'gsi_fallback'
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${qp.toString()}`
+})
 
 // Demo profile fields; later wire to real user prefs
 const preferences = ref('')
@@ -281,7 +257,7 @@ const plantsStore = usePlantsStore()
 // Guides favourites preview
 const guidesStore = useGuidesStore()
 const guideFavs = computed(() => Array.from(guidesStore.favourites))
-// Favourite plants (separate from journal plants)
+// Favourite plants (localStorage-based favourites set)
 const favouritePlants = computed<Plant[]>(() => {
   const favIds = Array.from(plantsStore.favourites)
   if (!favIds.length) return []
@@ -289,65 +265,114 @@ const favouritePlants = computed<Plant[]>(() => {
   plantsStore.plants.forEach(p => { map[String((p as unknown as { id: string }).id)] = p })
   return favIds.map(id => map[id]).filter(Boolean)
 })
-const mockPlantImage = '/Flower.jpg'
+// removed mock image
 
-// Journey data per-plant
-type JourneyStage = { id: string; image: string; createdAt: number }
-const totalStages = 4
-function defaultStages(): JourneyStage[] {
-  const today = Date.now()
-  const mk = (offset: number, img: string): JourneyStage => ({ id: `p-stage-${offset}`, image: img, createdAt: today - offset * 24 * 60 * 60 * 1000 })
-  return [mk(21, '/Flower.jpg'), mk(14, '/Herb.jpg'), mk(7, '/Vegetable.jpg'), mk(0, '/placeholder-plant.svg')]
-}
-function formatDate(ts: number) { try { return new Date(ts).toLocaleDateString() } catch { return '' } }
+// Journey types and helpers removed from this view; journal now uses backend data only
 
-// Stage completion per-plant
-const STAGE_KEY_PREFIX = 'plantopia_profile_stage_completed__'
-function keyForPlant(p: Plant | null) { return `${STAGE_KEY_PREFIX}${p?.id ?? 'none'}` }
-const stageCompleted = ref<Set<string>>(new Set())
-function loadStagesForPlant(p: Plant | null) {
+// Journal plants from backend
+const journalPlants = ref<ApiUserPlantInstanceSummary[]>([])
+const journalLoading = ref(false)
+const journalError = ref('')
+
+async function loadJournalPlantsFromBackend() {
+  journalLoading.value = true
+  journalError.value = ''
   try {
-    const raw = localStorage.getItem(keyForPlant(p))
-    stageCompleted.value = raw ? new Set(JSON.parse(raw)) : new Set()
-  } catch { stageCompleted.value = new Set() }
-}
-function saveStagesForPlant(p: Plant | null) {
-  try { localStorage.setItem(keyForPlant(p), JSON.stringify(Array.from(stageCompleted.value))) } catch {}
-}
-function isStageCompletedScoped(id: string) { return stageCompleted.value.has(id) }
-function toggleStageCompletedScoped(id: string) {
-  if (stageCompleted.value.has(id)) stageCompleted.value.delete(id)
-  else stageCompleted.value.add(id)
-  saveStagesForPlant(journalPlant.value)
-}
-
-// Active journey stages for current plant
-const activeJourneyStages = computed<JourneyStage[]>(() => defaultStages())
-const completedStagesScoped = computed<number>(() => stageCompleted.value.size)
-const progressPercentScoped = computed<number>(() => Math.round((completedStagesScoped.value / totalStages) * 100))
-
-// Journal plants list: persisted locally, independent from favourite plants
-const JOURNAL_PLANTS_KEY = 'plantopia_journal_plants'
-const journalPlants = ref<Plant[]>([])
-try {
-  const raw = localStorage.getItem(JOURNAL_PLANTS_KEY)
-  if (raw) journalPlants.value = JSON.parse(raw)
-} catch {}
-function saveJournalPlants() {
-  try { localStorage.setItem(JOURNAL_PLANTS_KEY, JSON.stringify(journalPlants.value)) } catch {}
+    const idRaw = localStorage.getItem('plantopia_user_id') || ''
+    const userId = parseInt(idRaw, 10)
+    if (!Number.isFinite(userId) || userId <= 0) { journalPlants.value = []; return }
+    const res = await plantApiService.getUserTrackingPlants(String(userId), { active_only: true })
+    journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
+  } catch {
+    journalError.value = 'Failed to load journal'
+    journalPlants.value = []
+  } finally {
+    journalLoading.value = false
+  }
 }
 
-// Search within journal plants
-const plantSearch = ref('')
-const filteredPlants = computed<Plant[]>(() => {
-  const q = plantSearch.value.trim().toLowerCase()
-  if (!q) return journalPlants.value
-  return journalPlants.value.filter((p: Plant) => {
-    const common = (p as unknown as { common_name?: string }).common_name
-    const name = String(common || p?.name || '').toLowerCase()
-    return name.includes(q)
-  })
+// --- AI Q&A state and actions ---
+type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; image?: string | null }
+const chatMessages = ref<ChatMsg[]>([])
+const inputText = ref('')
+const attachPreview = ref<string | null>(null)
+const chatWindowRef = ref<HTMLDivElement | null>(null)
+const aiLoading = ref(false)
+const chatId = ref<number | null>(null)
+const manualUserId = ref('')
+const hasUserId = computed(() => {
+  const idRaw = localStorage.getItem('plantopia_user_id') || ''
+  const id = parseInt(idRaw, 10)
+  return Number.isFinite(id) && id > 0
 })
+
+function generateId(): string {
+  try {
+    const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto
+    if (c?.randomUUID) return c.randomUUID()
+  } catch {}
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+function onAttach(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (!files || !files[0]) { attachPreview.value = null; return }
+  const reader = new FileReader()
+  reader.onload = () => { attachPreview.value = String(reader.result || '') }
+  reader.readAsDataURL(files[0])
+}
+
+function clearAttach() { attachPreview.value = null }
+
+function scrollToBottom() {
+  const el = chatWindowRef.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+async function sendMessage() {
+  if (!inputText.value.trim() && !attachPreview.value) return
+  const userMsg: ChatMsg = { id: generateId(), role: 'user', text: inputText.value.trim(), image: attachPreview.value }
+  chatMessages.value.push(userMsg)
+  inputText.value = ''
+  attachPreview.value = null
+  await nextTick(); scrollToBottom()
+
+  aiLoading.value = true
+  try {
+    // Ensure a chat session exists
+    if (!chatId.value) {
+      const savedId = parseInt(localStorage.getItem('plantopia_user_id') || '', 10)
+      const userId = Number.isFinite(savedId) && savedId > 0 ? savedId : 0
+      if (!userId) {
+        throw new Error('Missing user id')
+      }
+      const res = await plantApiService.startGeneralChat(userId)
+      chatId.value = res.chat_id
+    }
+
+    const { reply } = await plantApiService.sendGeneralChatMessage({
+      chat_id: chatId.value!,
+      message: userMsg.text,
+      image: userMsg.image || undefined,
+    })
+    const replyMsg: ChatMsg = { id: generateId(), role: 'assistant', text: reply || 'No reply' }
+    chatMessages.value.push(replyMsg)
+  } catch {
+    const errMsg: ChatMsg = { id: generateId(), role: 'assistant', text: 'Failed to contact AI service. Please try again later.' }
+    chatMessages.value.push(errMsg)
+  } finally {
+    aiLoading.value = false
+    await nextTick(); scrollToBottom()
+  }
+}
+
+function saveManualUserId() {
+  const id = parseInt(manualUserId.value.trim(), 10)
+  if (Number.isFinite(id) && id > 0) {
+    try { localStorage.setItem('plantopia_user_id', String(id)) } catch {}
+    manualUserId.value = ''
+  }
+}
 
 function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   // 1) base64 fields
@@ -373,24 +398,27 @@ function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   return '/placeholder-plant.svg'
 }
 
-// Journal modal state (open on plant click)
-const journalPlant = ref<Plant | null>(null)
-function openPlant(p: Plant) { journalPlant.value = p }
-watch(journalPlant, (p) => { if (p) loadStagesForPlant(p) })
+// Detail modal state (open on favourite click)
+const detailPlant = ref<Plant | null>(null)
+function openPlantDetail(p: Plant) { detailPlant.value = p }
 
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
 }
 
 onMounted(async () => {
-  if (isLoggedIn.value) return
-  await ensureGoogleIdentityLoaded()
+  // Load journal plants for logged-in users (by email)
+  if (isLoggedIn.value) {
+    await loadJournalPlantsFromBackend()
+    return
+  }
+  await ensureGoogleIdentityLoaded().catch(() => { showGsiFallback.value = true })
   const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID
   type GoogleInitOptions = { client_id: string; callback: (resp: { credential?: string }) => void; auto_select: boolean; ux_mode: string }
   type GoogleRenderOptions = { type: string; theme: string; size: string; text: string; shape: string; width: number; logo_alignment: string }
   type GoogleIdApi = { initialize: (opts: GoogleInitOptions) => void; renderButton: (el: HTMLElement, opts: GoogleRenderOptions) => void }
   const google = (window as unknown as { google?: { accounts?: { id?: GoogleIdApi } } }).google
-  if (!google?.accounts?.id || !cid) return
+  if (!google?.accounts?.id || !cid) { showGsiFallback.value = true; return }
   google?.accounts?.id?.initialize({
     client_id: cid,
     callback: (resp: { credential?: string }) => {
@@ -398,26 +426,47 @@ onMounted(async () => {
       const display = (info.email && String(info.email).split('@')[0]) || info.name || 'Google User'
       const pic = info.picture || ''
       if (info.email) try { localStorage.setItem('plantopia_user_email', String(info.email)) } catch {}
-      auth.userLogin(display, pic)
+      // Call backend to create/get user and store user_id
+      ;(async () => {
+        try {
+          const login = await plantApiService.googleLogin(resp?.credential || '')
+          const userId = Number(login?.user?.id || 0)
+          if (Number.isFinite(userId) && userId > 0) {
+            localStorage.setItem('plantopia_user_id', String(userId))
+          }
+          auth.userLogin(display, pic, userId)
+        } catch {
+          auth.userLogin(display, pic)
+        }
+      })()
     },
     auto_select: false,
     ux_mode: 'popup',
   })
-  if (googleBtnContainer.value) {
-    google?.accounts?.id?.renderButton(googleBtnContainer.value, {
-      type: 'standard',
-      theme: 'outline',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'pill',
-      width: 280,
-      logo_alignment: 'left',
-    })
+  try {
+    if (googleBtnContainer.value) {
+      google?.accounts?.id?.renderButton(googleBtnContainer.value, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'pill',
+        width: 280,
+        logo_alignment: 'left',
+      })
+    }
+  } catch {
+    showGsiFallback.value = true
   }
 })
 
 // When user logs in, ensure plants are available for preview
-watch(isLoggedIn, async (v) => { if (v) await ensurePlantsLoaded() }, { immediate: true })
+watch(isLoggedIn, async (v) => {
+  if (v) {
+    await ensurePlantsLoaded()
+    await loadJournalPlantsFromBackend()
+  }
+}, { immediate: true })
 
 // Load saved profile fields
 try {
@@ -482,23 +531,9 @@ function saveEdit() {
 
 function openEdit() { startEdit() }
 function closeEdit() { cancelEdit() }
-function closeJournal() { journalPlant.value = null }
-function openMockJournal() {
-  const mock = {
-    id: 'mock-1',
-    databaseId: 'mock-1' as unknown as number,
-    name: 'My First Plant',
-    scientific_name: 'Plantae mockus',
-    description: 'Mock plant for demo journal',
-    category: 'flower',
-  } as unknown as Plant
-  // ensure mock is in journalPlants list
-  if (!journalPlants.value.find(p => String(p.id) === 'mock-1')) {
-    journalPlants.value = [mock]
-    saveJournalPlants()
-  }
-  journalPlant.value = mock
-}
+// removed legacy closeJournal
+function closeDetailModal() { detailPlant.value = null }
+// mock open removed
 
 // Horizontal drag-to-scroll for My Plant List (match Guides UX)
 const plantScrollRef = ref<HTMLElement | null>(null)
@@ -545,7 +580,7 @@ function onPlantPointerUp() {
 }
 .section-card { background:#ffffff; border: 1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
 .profile-sections { display:grid; gap:16px; }
-.profile-info { display:grid; grid-template-columns: 1fr 96px; align-items:center; }
+.profile-info { display:grid; grid-template-columns: 1fr; align-items:center; }
 .profile-fields { color:#374151; font-size:14px; line-height:1.5; }
 .edit-grid { display:grid; gap:8px; margin-top:6px; }
 .label { display:block; font-weight:600; color:#065f46; margin-bottom:2px; }
@@ -556,8 +591,7 @@ function onPlantPointerUp() {
 .edit-actions { margin-top:8px; display:flex; gap:8px; }
 .btn { background:#e5e7eb; color:#111827; border:none; padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700; }
 .btn.primary { background:#10b981; color:#fff; }
-.profile-avatar { width:96px; height:96px; border-radius:12px; overflow:hidden; background:#f3f4f6; display:flex; align-items:center; justify-content:center; }
-.profile-avatar img { width:100%; height:100%; object-fit:cover; }
+/* avatar removed */
 .plant-list { overflow: hidden; }
 .section-title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .plant-scroll {
@@ -589,7 +623,6 @@ function onPlantPointerUp() {
 .guide-fav-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
 .guide-fav-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; color:#111827; font-weight:700; font-size:16px; }
 .empty-fav { color:#6b7280; font-style:italic; padding:8px 0; }
-.timeline { }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }

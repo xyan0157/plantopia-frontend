@@ -2,9 +2,8 @@
 // Handles all communication with the backend recommendation API
 
 // Configuration - Now using Cloudflare Tunnel for HTTPS
-// Production uses Cloudflare Tunnel URL, development uses local backend
+// Always use cloud API URL
 const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
-const FALLBACK_API_URL = 'http://localhost:8000'
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
@@ -179,6 +178,20 @@ export interface ApiQuantifiedImpact {
   community_impact_potential: string | null
 }
 
+// --- Auth types ---
+export interface ApiAuthUser {
+  id: number
+  email?: string
+  name?: string
+  avatar_url?: string
+}
+
+export interface ApiGoogleLoginResponse {
+  access_token: string
+  token_type: string
+  user: ApiAuthUser
+}
+
 export interface ApiSuitabilityScore {
   total_score: number
   breakdown: Record<string, number>
@@ -193,6 +206,38 @@ export interface ApiQuantifyResponse {
   suburb: string
   climate_zone: string
   plant_count: number
+}
+
+// Tracking: user's plant instances (journal plants)
+export interface ApiUserPlantInstanceSummary {
+  instance_id: number
+  plant_id: number
+  plant_name: string
+  plant_nickname?: string
+  start_date?: string
+  expected_maturity_date?: string
+  current_stage?: string
+  days_elapsed?: number
+  progress_percentage?: number
+  location_details?: string
+  image_url?: string
+}
+
+export interface ApiUserPlantsResponse {
+  plants: ApiUserPlantInstanceSummary[]
+  total_count?: number
+  active_count?: number
+  pagination?: { page?: number; limit?: number; total_pages?: number }
+}
+
+// Favorites
+export interface ApiFavoriteItem {
+  id: number
+  plant_id: number
+  notes?: string
+  priority_level?: number
+  created_at?: string
+  plant?: Partial<ApiPlantData> & { plant_name?: string; plant_category?: string; image_url?: string }
 }
 
 // Frontend Plant interface (transformed from API response)
@@ -270,55 +315,35 @@ export interface Plant {
 // API Service class
 export class PlantRecommendationService {
   private primaryUrl: string
-  private fallbackUrl: string
   private currentBaseUrl: string
   private gcsPlantImagesBaseUrl: string
 
-  constructor(primaryUrl: string = PRIMARY_API_URL, fallbackUrl: string = FALLBACK_API_URL) {
+  constructor(primaryUrl: string = PRIMARY_API_URL) {
     this.primaryUrl = primaryUrl
-    this.fallbackUrl = fallbackUrl
     this.currentBaseUrl = primaryUrl
-    // Prefer env override if provided; otherwise use the shared bucket base
-    // import.meta typing workaround without using any
     const envObj = (import.meta as unknown as { env?: Record<string, string> }).env || {}
+    // Prefer env override if provided; otherwise use the shared bucket base
     this.gcsPlantImagesBaseUrl = envObj.VITE_IMAGES_BASE_URL || 'https://storage.googleapis.com/plantopia-images-1757656642/plant_images'
   }
 
-  // Helper method to try API call with fallback
   private async fetchWithFallback(endpoint: string, options?: RequestInit): Promise<Response> {
-    // console.debug(`[API] Attempting to connect to ${this.currentBaseUrl}${endpoint}`)
-    
-    try {
-      const response = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      // console.debug(`[API] Successfully connected to ${this.currentBaseUrl}`)
-      return response
-    } catch (error) {
-      // console.warn(`[API] Failed to connect to ${this.currentBaseUrl}:`, error)
-      
-      // If we're not already using fallback, try fallback URL
-      if (this.currentBaseUrl !== this.fallbackUrl && process.env.NODE_ENV !== 'production') {
-        // console.debug(`[API] Switching to fallback URL: ${this.fallbackUrl}`)
-        this.currentBaseUrl = this.fallbackUrl
-        
-        try {
-          const fallbackResponse = await fetch(`${this.currentBaseUrl}${endpoint}`, options)
-          if (!fallbackResponse.ok) {
-            throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackResponse.statusText}`)
-          }
-          // console.debug(`[API] Successfully connected to fallback URL ${this.currentBaseUrl}`)
-          return fallbackResponse
-        } catch (fallbackError) {
-          // console.error(`[API] Fallback URL also failed:`, fallbackError)
-          this.currentBaseUrl = this.primaryUrl // Reset to primary for next attempt
-          throw new Error(`Both primary (${this.primaryUrl}) and fallback (${this.fallbackUrl}) URLs failed`)
-        }
-      } else {
-        throw error
-      }
+    const url = `${this.currentBaseUrl}${endpoint}`
+    const response = await fetch(url, options)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
+    return response
+  }
+
+  // --- Auth: Google login (create or retrieve user, return token + user) ---
+  async googleLogin(credential: string): Promise<ApiGoogleLoginResponse> {
+    const response = await this.fetchWithFallback('/api/v1/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    })
+    const data = await response.json()
+    return data as ApiGoogleLoginResponse
   }
 
   // Health check endpoint
@@ -356,11 +381,6 @@ export class PlantRecommendationService {
       const response = await this.fetchWithFallback(`/api/v1/plants/paginated?${qp.toString()}`)
 
       const responseData: unknown = await response.json()
-      // Show return body for search requests (debugging the search result payload only)
-      if (search && search.trim()) {
-        // eslint-disable-next-line no-console
-        console.log('[SEARCH] return body:', responseData)
-      }
       const data = responseData as Partial<ApiPaginatedPlantsResponse> & { pagination?: { total?: number; total_count?: number; page?: number; limit?: number } }
 
       const totalFromApi =
@@ -385,7 +405,6 @@ export class PlantRecommendationService {
         limit: Number(limitFromApi),
       }
     } catch (error) {
-      // console.error('[PLANTS API] getPlantsPaginated error:', error)
       throw error
     }
   }
@@ -402,9 +421,6 @@ export class PlantRecommendationService {
         body: JSON.stringify(request),
       })
       const responseData = await response.json()
-      // Show return body for search/recommendations result payload
-      // eslint-disable-next-line no-console
-      console.log('[SEARCH] return body:', responseData)
       return responseData
     } catch (error) {
       // console.error('[PLANT API] recommendations error:', error)
@@ -447,10 +463,129 @@ export class PlantRecommendationService {
     }
   }
 
+  // --- AI Chat (General) ---
+  async startGeneralChat(userId: number | string): Promise<{ chat_id: number; expires_at?: string }> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/chat/general/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId })
+      })
+      const data = await response.json()
+      const chatId = Number((data.chat_id ?? data.id) || 0)
+      return { chat_id: chatId, expires_at: data.expires_at }
+    } catch (error) {
+      throw error
+    }
+  }
+
+  // --- Tracking: Build user_data from profile/localStorage ---
+  buildTrackingUserDataFromProfile(): {
+    email: string
+    name: string
+    suburb_id: number
+    experience_level: string
+    garden_type: string
+    available_space: number
+    climate_goal: string
+    start_date: string
+  } {
+    const email = ((): string => {
+      try { return localStorage.getItem('plantopia_user_email') || '' } catch { return '' }
+    })()
+    const savedName = ((): string => {
+      try { return localStorage.getItem('profile_display_name') || localStorage.getItem('plantopia_user_name') || '' } catch { return '' }
+    })()
+    const experience = ((): string => {
+      try { return localStorage.getItem('profile_experience') || 'beginner' } catch { return 'beginner' }
+    })()
+    const gardenType = ((): string => {
+      try { return localStorage.getItem('profile_garden_type') || 'backyard' } catch { return 'backyard' }
+    })()
+    const available = ((): number => {
+      try { const v = parseFloat(localStorage.getItem('profile_available_space') || '') ; return Number.isFinite(v) ? v : 10.0 } catch { return 10.0 }
+    })()
+    const goal = ((): string => {
+      try { return localStorage.getItem('profile_climate_goal') || 'general gardening' } catch { return 'general gardening' }
+    })()
+    const suburbId = ((): number => {
+      try {
+        const sid = localStorage.getItem('profile_suburb_id') || localStorage.getItem('profile_suburb') || ''
+        const n = parseInt(sid as string, 10)
+        return Number.isFinite(n) ? n : 0
+      } catch { return 0 }
+    })()
+    const today = new Date();
+    const startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0, 10)
+
+    return {
+      email,
+      name: savedName || 'User',
+      suburb_id: suburbId,
+      experience_level: experience,
+      garden_type: gardenType,
+      available_space: available,
+      climate_goal: goal,
+      start_date: startDate,
+    }
+  }
+
+  async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
+    const user_data = this.buildTrackingUserDataFromProfile()
+    const body = { user_data, plant_id: params.plant_id, plant_nickname: params.plant_nickname, start_date: user_data.start_date, location_details: params.location_details }
+    const response = await this.fetchWithFallback('/api/v1/tracking/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    const data = await response.json() as { instance_id?: number }
+    return { instance_id: Number(data.instance_id || 0) }
+  }
+
+  async sendGeneralChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string }> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/chat/general/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await response.json() as { reply?: string; message?: string; text?: string; answer?: string }
+      const reply: string = data.reply || data.message || data.text || data.answer || ''
+      return { reply }
+    } catch (error) {
+      throw error
+    }
+  }
+
+  // --- Tracking: Get user's plant instances (by email as user_id) ---
+  async getUserTrackingPlants(userId: string, options?: { active_only?: boolean; page?: number; limit?: number }): Promise<ApiUserPlantsResponse> {
+    const qp = new URLSearchParams()
+    if (options?.active_only !== undefined) qp.set('active_only', String(Boolean(options.active_only)))
+    if (options?.page) qp.set('page', String(options.page))
+    if (options?.limit) qp.set('limit', String(options.limit))
+    const qs = qp.toString()
+    const path = `/api/v1/tracking/user/${encodeURIComponent(String(userId))}${qs ? `?${qs}` : ''}`
+    const response = await this.fetchWithFallback(path)
+    const data = await response.json()
+    return data as ApiUserPlantsResponse
+  }
+
+  // --- Favorites: get current user's favorite plants ---
+  async getUserFavorites(): Promise<ApiFavoriteItem[]> {
+    try {
+      const response = await this.fetchWithFallback('/api/v1/favorites')
+      const data = await response.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch {
+      // If unauthorized or endpoint missing, return empty list gracefully
+      return []
+    }
+  }
+
   // Transform All Plants API response to frontend Plant interface
   transformAllPlantsToPlants(apiResponse: ApiAllPlantsResponse): Plant[] {
     // console.debug('[TRANSFORM] All Plants -> Plants')
-    const transformedPlants = apiResponse.plants.map((apiPlant, index) => {
+    const transformedPlants = apiResponse.plants.map((apiPlant) => {
 
       const transformedPlant: Plant = {
         id: String(apiPlant.id),
@@ -486,6 +621,10 @@ export class PlantRecommendationService {
         flower_colors: apiPlant.flower_colors,
         habit: apiPlant.habit,
         maintainability_score: apiPlant.maintainability_score,
+        // Sustainability impact (derived for All Plants so favourites have values)
+        coolingEffect: this.determineCoolingEffect(apiPlant.plant_category),
+        carbonReduction: this.determineCarbonReduction(apiPlant.plant_category),
+        droughtTolerance: (apiPlant.characteristics || '').toLowerCase().includes('drought') ? 'excellent' : 'moderate',
         // Generate tags from characteristics and plant type
         tags: this.generateTagsFromPlantData(apiPlant),
         // Generate care requirements from plant data
@@ -501,7 +640,7 @@ export class PlantRecommendationService {
   // Transform API response to frontend Plant interface
   transformApiResponseToPlants(apiResponse: ApiRecommendationResponse): Plant[] {
     // console.debug('[TRANSFORM] Recommendations -> Plants')
-    const transformedPlants = apiResponse.recommendations.map((apiPlant, index) => {
+    const transformedPlants = apiResponse.recommendations.map((apiPlant) => {
 
       const transformedPlant: Plant = {
         id: String(apiPlant.id),

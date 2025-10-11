@@ -57,8 +57,8 @@ export const usePlantsStore = defineStore('plants', {
     },
 
     async preloadAllPaginated(): Promise<{ total: number }> {
-      // Load all plants via GET /api/v1/plants (single request, no server pagination)
-      const key = 'global_all_no_pagination'
+      // Use server-side pagination: show page 1 immediately, then append remaining pages in background
+      const key = 'global_paginated_progressive'
       if (this.lastKey === key && this.initialized && this.plants.length > 0) {
         return { total: this.totalCount }
       }
@@ -66,22 +66,26 @@ export const usePlantsStore = defineStore('plants', {
       this.loading = true
       this.error = null
       try {
-        const res = await plantApiService.getAllPlants()
-        const plants = plantApiService.transformAllPlantsToPlants(res)
-        // First paint: show first 12 items immediately
-        const firstBatchSize = 12
-        this.plants = plants.slice(0, firstBatchSize)
-        this.totalCount = Number(res.total_count || plants.length || 0)
+        // Respect backend cap (api clamps to 100). Start with 100 to be safe.
+        const initialLimit = 100
+        const first = await plantApiService.getPlantsPaginated({ page: 1, limit: initialLimit })
+        this.plants = first.plants
+        this.totalCount = Number(first.total_count || first.plants.length || 0)
         this.lastKey = key
         this.firstPageShown = true
         this.initialized = true
-        // Background: progressively append remaining items to store in chunks
+
+        // Background progressive append
         ;(async () => {
-          const chunkSize = 48
-          for (let i = firstBatchSize; i < plants.length; i += chunkSize) {
-            const chunk = plants.slice(i, i + chunkSize)
-            await new Promise<void>(r => setTimeout(() => r(), 0))
-            this.plants = [...this.plants, ...chunk]
+          const pageSize = Math.max(1, Number(first.limit || initialLimit))
+          const totalPages = Math.max(1, Math.ceil(this.totalCount / pageSize))
+          for (let page = 2; page <= totalPages; page += 1) {
+            try {
+              const { plants } = await plantApiService.getPlantsPaginated({ page, limit: pageSize })
+              this.plants = [...this.plants, ...plants]
+            } catch {
+              // ignore background page errors
+            }
           }
         })()
 
