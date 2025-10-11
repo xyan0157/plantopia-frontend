@@ -67,6 +67,51 @@
                       <MapPinIcon />
                     </button>
                   </div>
+                <div class="history-trend" v-if="getTrendText(item)">{{ getTrendText(item) }}</div>
+                <div class="history-report" v-if="getDetailForItem(item)">
+                  <div class="report-media">
+                    <img src="/images/informational.png" alt="UHI info" />
+                  </div>
+                  <div class="report-content">
+                    <div class="report-title">Local summary</div>
+                    <ul class="kpi-list">
+                      <li class="kpi" v-if="getDetailForItem(item)?.heatAvg != null">
+                        <span class="kpi-label">Heat</span>
+                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.heatAvg).toFixed(1) }}°C ({{ getDetailForItem(item)?.heatCategory || 'N/A' }})</span>
+                      </li>
+                      <li class="kpi" v-if="getDetailForItem(item)?.vegTotal != null">
+                        <span class="kpi-label">Vegetation</span>
+                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.vegTotal).toFixed(1) }}%</span>
+                      </li>
+                      <li class="kpi" v-if="getDetailForItem(item)?.trees != null">
+                        <span class="kpi-label">Trees</span>
+                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.trees).toFixed(1) }}%</span>
+                      </li>
+                      <li class="kpi" v-if="getDetailForItem(item)?.shrubs != null">
+                        <span class="kpi-label">Shrubs</span>
+                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.shrubs).toFixed(1) }}%</span>
+                      </li>
+                      <li class="kpi" v-if="getDetailForItem(item)?.grass != null">
+                        <span class="kpi-label">Grass</span>
+                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.grass).toFixed(1) }}%</span>
+                      </li>
+                      <template v-if="getDetailForItem(item)?.heights">
+                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.large_15m_plus != null">
+                          <span class="kpi-label">Large trees >=15m</span>
+                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.large_15m_plus).toFixed(1) }}%</span>
+                        </li>
+                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.medium_10_15m != null">
+                          <span class="kpi-label">Medium 10-15m</span>
+                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.medium_10_15m).toFixed(1) }}%</span>
+                        </li>
+                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.small_3_10m != null">
+                          <span class="kpi-label">Small 3-10m</span>
+                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.small_3_10m).toFixed(1) }}%</span>
+                        </li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
                 </div>
               </div>
             </div>
@@ -76,28 +121,134 @@
       <!-- Charts Card (same width as map content card) -->
       <div class="content-card charts-card">
         <div class="charts-section">
-          <div class="chart-card">
-            <div class="chart-title">Heat categories</div>
-            <div class="chart-rows">
-              <div class="chart-row" v-for="row in heatChartRows" :key="row.key">
-                <div class="chart-label">{{ row.label }}</div>
-                <div class="chart-bar">
-                  <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
+          <!-- Doughnut: heat categories -->
+          <div class="charts-row-2">
+            <div class="chart-card">
+              <div class="chart-title">Heat categories (doughnut)</div>
+              <div class="chart-split">
+                <div class="chart-pane">
+                  <canvas id="heat-donut" class="chart-canvas"></canvas>
                 </div>
-                <div class="chart-value">{{ row.count }}</div>
+                <div class="chart-desc">
+                  <div class="desc-title">Summary</div>
+                  <p class="desc-text">{{ heatDonutText }}</p>
+                  <ul class="desc-list">
+                    <li v-for="it in heatDonutTopList" :key="it.label">{{ it.label }}: {{ it.percent }}%</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Vegetation (%) (doughnut)</div>
+              <div class="chart-split">
+                <div class="chart-pane">
+                  <canvas id="veg-donut" class="chart-canvas"></canvas>
+                </div>
+                <div class="chart-desc">
+                  <div class="desc-title">Summary</div>
+                  <p class="desc-text">{{ vegDonutText }}</p>
+                  <ul class="desc-list">
+                    <li v-for="it in vegDonutTopList" :key="it.bucket">{{ it.bucket }}: {{ it.percent }}%</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          
+
+          <!-- Scatter: heat vs vegetation -->
+          <div class="chart-card">
+            <div class="chart-title">Heat vs Vegetation (scatter)</div>
+            <div class="chart-split">
+              <div class="chart-pane">
+                <canvas id="heat-veg-scatter" class="chart-canvas"></canvas>
+              </div>
+              <div class="chart-desc">
+                <div class="desc-title">Summary</div>
+                <p class="desc-text">{{ scatterText }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Additional charts -->
+          <div class="chart-card">
+            <div class="chart-title">Heat bins (°C)</div>
+            <div class="chart-split">
+              <div class="chart-pane">
+                <div class="chart-rows">
+                  <div class="chart-row" v-for="row in heatBinRows" :key="row.bucket">
+                    <div class="chart-label">{{ row.bucket }}</div>
+                    <div class="chart-bar">
+                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
+                    </div>
+                    <div class="chart-value">{{ row.count }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-desc">
+                <div class="desc-title">Summary</div>
+                <p class="desc-text">{{ heatBinsText }}</p>
               </div>
             </div>
           </div>
 
           <div class="chart-card">
-            <div class="chart-title">Vegetation (%)</div>
-            <div class="chart-rows">
-              <div class="chart-row" v-for="row in vegChartRows" :key="row.bucket">
-                <div class="chart-label">{{ row.bucket }}</div>
-                <div class="chart-bar">
-                  <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
+            <div class="chart-title">Top 5 hottest suburbs</div>
+            <div class="chart-split">
+              <div class="chart-pane">
+                <div class="chart-rows">
+                  <div class="chart-row" v-for="row in topHotRows" :key="row.name">
+                    <div class="chart-label">{{ row.name }}</div>
+                    <div class="chart-bar">
+                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: '#ef4444' }"></div>
+                    </div>
+                    <div class="chart-value">{{ row.heat.toFixed(1) }}°C</div>
+                  </div>
                 </div>
-                <div class="chart-value">{{ row.count }}</div>
+              </div>
+              <div class="chart-desc">
+                <div class="desc-title">Summary</div>
+                <p class="desc-text">{{ topHotText }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Top 5 greenest suburbs</div>
+            <div class="chart-split">
+              <div class="chart-pane">
+                <div class="chart-rows">
+                  <div class="chart-row" v-for="row in topGreenRows" :key="row.name">
+                    <div class="chart-label">{{ row.name }}</div>
+                    <div class="chart-bar">
+                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: '#10b981' }"></div>
+                    </div>
+                    <div class="chart-value">{{ row.veg.toFixed(1) }}%</div>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-desc">
+                <div class="desc-title">Summary</div>
+                <p class="desc-text">{{ topGreenText }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Heat vs Vegetation correlation</div>
+            <div class="chart-split">
+              <div class="chart-pane">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="chart-bar" style="flex:1; height: 8px;">
+                    <div class="chart-bar-fill" :style="{ width: Math.round((correlationR + 1) * 50) + '%', background: correlationR > 0 ? '#ef4444' : '#10b981' }"></div>
+                  </div>
+                  <div class="chart-value" :title="'Pearson r'">r={{ correlationR.toFixed(2) }}</div>
+                </div>
+              </div>
+              <div class="chart-desc">
+                <div class="desc-title">Summary</div>
+                <p class="desc-text">{{ corrText }}</p>
               </div>
             </div>
           </div>
@@ -109,7 +260,8 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { onMounted, ref, watch, nextTick } from 'vue'
+import { onMounted, ref, watch, nextTick, computed } from 'vue'
+import Chart from 'chart.js/auto'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
 import { getUhiMetadata, getUhiData, getBoundaryGeo } from '@/services/uhiPreload'
 import { MapPinIcon } from '@heroicons/vue/24/solid'
@@ -146,6 +298,64 @@ let uhiByName: Record<string, any> = {}
 // Chart state
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
 const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
+// Extra charts
+const heatBinRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
+const topHotRows = ref<Array<{ name: string; heat: number; percent: number }>>([])
+const topGreenRows = ref<Array<{ name: string; veg: number; percent: number }>>([])
+const correlationR = ref<number>(0)
+const scatterPairs = ref<Array<{ x: number; y: number; color: string }>>([])
+
+// Descriptive texts for charts (computed)
+const heatDonutText = computed(() => {
+  if (!heatChartRows.value.length) return 'No data available.'
+  const top = [...heatChartRows.value].sort((a, b) => b.percent - a.percent)[0]
+  return top ? `Most suburbs fall into ${top.label} category.` : 'No data available.'
+})
+const heatDonutTopList = computed(() => {
+  const top3 = [...heatChartRows.value].sort((a, b) => b.percent - a.percent).slice(0, 3)
+  return top3.map(r => ({ label: r.label, percent: r.percent }))
+})
+
+const vegDonutText = computed(() => {
+  if (!vegChartRows.value.length) return 'No data available.'
+  const top = [...vegChartRows.value].sort((a, b) => b.percent - a.percent)[0]
+  return top ? `Vegetation coverage most commonly lies in ${top.bucket}.` : 'No data available.'
+})
+const vegDonutTopList = computed(() => {
+  const top3 = [...vegChartRows.value].sort((a, b) => b.percent - a.percent).slice(0, 3)
+  return top3.map(r => ({ bucket: r.bucket, percent: r.percent }))
+})
+
+const scatterText = computed(() => {
+  const n = scatterPairs.value.length
+  if (!n) return 'No data available.'
+  return `Scatter shows ${n} suburbs. Trend aligns with correlation value below.`
+})
+
+const heatBinsText = computed(() => {
+  if (!heatBinRows.value.length) return 'No data available.'
+  const top = [...heatBinRows.value].sort((a, b) => b.percent - a.percent)[0]
+  return top ? `Most suburbs are in ${top.bucket} bin by count.` : 'No data available.'
+})
+
+const topHotText = computed(() => {
+  if (!topHotRows.value.length) return 'No data available.'
+  const first = topHotRows.value[0]
+  return `Hottest suburb: ${first.name} (${first.heat.toFixed(1)}°C).`
+})
+
+const topGreenText = computed(() => {
+  if (!topGreenRows.value.length) return 'No data available.'
+  const first = topGreenRows.value[0]
+  return `Greenest suburb: ${first.name} (${first.veg.toFixed(1)}%).`
+})
+
+const corrText = computed(() => {
+  const r = Number(correlationR.value)
+  if (!Number.isFinite(r)) return 'No data available.'
+  const dir = r > 0 ? 'positive' : r < 0 ? 'negative' : 'no'
+  return `Pearson r indicates ${dir} correlation (${r.toFixed(2)}).`
+})
 
 // Persist/restore history so it survives page reloads
 function loadHistoryFromStorage() {
@@ -338,6 +548,59 @@ function refreshHistoryStats() {
     const rank = it.layer === 'heat' ? (Number(rankHeat)) : (Number(rankVeg))
     return { ...it, heat: heatVal, veg: vegVal, heatCategory: heatCat, rank: Number.isFinite(rank) ? rank : it.rank }
   })
+}
+
+// Build a short, human-readable trend sentence for a suburb
+function getTrendText(item: { label: string; layer: 'heat' | 'veg'; heat?: number; veg?: number; heatCategory?: string }): string {
+  const label = String(item?.label || '')
+  const heatVal = Number(item?.heat)
+  const vegVal = Number(item?.veg)
+  const cat = String(item?.heatCategory || '').toLowerCase()
+  const heatText = Number.isFinite(heatVal) ? `${heatVal.toFixed(1)}°C` : 'N/A'
+  const vegText = Number.isFinite(vegVal) ? `${vegVal.toFixed(1)}%` : 'N/A'
+
+  if (Number.isFinite(heatVal) && Number.isFinite(vegVal)) {
+    if (vegVal >= 40 && /low|cool/.test(cat)) {
+      return `${label}: high vegetation (${vegText}) aligns with low heat (${heatText}).`
+    }
+    if (vegVal <= 15 && /high|extreme/.test(cat)) {
+      return `${label}: low vegetation (${vegText}) aligns with high heat (${heatText}).`
+    }
+    if (vegVal >= 30 && /high|extreme/.test(cat)) {
+      return `${label}: green coverage is decent (${vegText}) but heat remains high (${heatText}) - check density and surfaces.`
+    }
+    if (vegVal <= 20 && /low|cool/.test(cat)) {
+      return `${label}: vegetation is limited (${vegText}) but heat is relatively low (${heatText}) - likely coastal/breezy influence.`
+    }
+    return `${label}: heat ${heatText}, vegetation ${vegText}.`
+  }
+  if (Number.isFinite(heatVal)) {
+    return `${label}: heat ${heatText}${item.heatCategory ? ` (${item.heatCategory})` : ''}.`
+  }
+  if (Number.isFinite(vegVal)) {
+    return `${label}: vegetation ${vegText}.`
+  }
+  return ''
+}
+
+// Helper to retrieve full metrics for a suburb card
+function getDetailForItem(item: { label: string }): { heatAvg?: number; heatCategory?: string; vegTotal?: number; trees?: number; shrubs?: number; grass?: number; heights?: Record<string, number> } | null {
+  const r = uhiByName[item.label]
+  if (!r) return null
+  const out: any = {}
+  const heatAvg = Number(r?.heat?.avg ?? r?.heat?.intensity)
+  if (Number.isFinite(heatAvg)) out.heatAvg = heatAvg
+  if (r?.heat?.category) out.heatCategory = r.heat.category
+  const vegTotal = Number(r?.vegetation?.total)
+  if (Number.isFinite(vegTotal)) out.vegTotal = vegTotal
+  const trees = Number(r?.vegetation?.trees)
+  if (Number.isFinite(trees)) out.trees = trees
+  const shrubs = Number(r?.vegetation?.shrubs)
+  if (Number.isFinite(shrubs)) out.shrubs = shrubs
+  const grass = Number(r?.vegetation?.grass)
+  if (Number.isFinite(grass)) out.grass = grass
+  if (r?.trees_by_height) out.heights = r.trees_by_height
+  return out
 }
 
 // Try to resolve a suburb label to our stats maps using multiple variants
@@ -669,9 +932,9 @@ function buildLegend(categories: Record<string, any>) {
       const hi = typeof v.max === 'number' ? v.max : undefined
       let range = ''
       const fmt = (n: number) => (Number.isInteger(n) ? `${n}` : n.toFixed(1))
-      if (lo != null && hi != null && hi < 900) range = ` (${fmt(lo)}&ndash;${fmt(hi)}°C)`
-      else if (lo != null && (hi == null || hi >= 900)) range = ` (&ge;${fmt(lo)}°C)`
-      else if (hi != null && (lo == null)) range = ` (&le;${fmt(hi)}°C)`
+      if (lo != null && hi != null && hi < 900) range = ` (${fmt(lo)}-${fmt(hi)}°C)`
+      else if (lo != null && (hi == null || hi >= 900)) range = ` (>=${fmt(lo)}°C)`
+      else if (hi != null && (lo == null)) range = ` (<=${fmt(hi)}°C)`
       return `
       <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
         <span class="legend-label">${v.label}${range}</span>
@@ -852,6 +1115,63 @@ onMounted(async () => {
 
     // Load chart data once
     await buildCharts()
+    // After charts data ready, render canvas charts
+    await nextTick()
+    try {
+      const donut = document.getElementById('heat-donut') as HTMLCanvasElement | null
+      if (donut && heatChartRows.value.length) {
+        const labels = heatChartRows.value.map(r => r.label)
+        const values = heatChartRows.value.map(r => r.count)
+        const colors = heatChartRows.value.map(r => r.color)
+        new Chart(donut.getContext('2d')!, {
+          type: 'doughnut',
+          data: { labels, datasets: [{ data: values, backgroundColor: colors }] },
+          options: {
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12 } },
+              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw}` } }
+            },
+            cutout: '60%',
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+
+      // Vegetation donut using vegChartRows order/colors
+      const vDonut = document.getElementById('veg-donut') as HTMLCanvasElement | null
+      if (vDonut && vegChartRows.value.length) {
+        const vLabels = vegChartRows.value.map(r => r.bucket)
+        const vValues = vegChartRows.value.map(r => r.count)
+        const vColors = vegChartRows.value.map(r => r.color)
+        new Chart(vDonut.getContext('2d')!, {
+          type: 'doughnut',
+          data: { labels: vLabels, datasets: [{ data: vValues, backgroundColor: vColors }] },
+          options: {
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12 } },
+              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw}` } }
+            },
+            cutout: '60%',
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+      const scatter = document.getElementById('heat-veg-scatter') as HTMLCanvasElement | null
+      if (scatter) {
+        new Chart(scatter.getContext('2d')!, {
+          type: 'scatter',
+          data: { datasets: [{ label: 'Suburbs', data: (scatterPairs.value.length ? scatterPairs.value : [{ x: 0, y: 0, color: '#d1d5db' }]).map(p => ({ x: p.x, y: p.y })), pointRadius: 3, backgroundColor: (scatterPairs.value.length ? scatterPairs.value : [{ x: 0, y: 0, color: '#d1d5db' }]).map(p => p.color) }] },
+          options: {
+            scales: { x: { title: { display: true, text: 'Vegetation %' } }, y: { title: { display: true, text: 'Heat (°C)' } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx: any) => `(${ctx.parsed.x}, ${ctx.parsed.y})` } } },
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+    } catch {}
   } catch {
     // fail silent to avoid breaking dashboard
   }
@@ -965,6 +1285,69 @@ async function buildCharts() {
       count: vegCounts[b.name] || 0,
       percent: Math.round(((vegCounts[b.name] || 0) / total) * 100)
     }))
+
+    // Heat bins (<=0,0-4,4-8,8-12,>12)
+    const hBins = [
+      { name: '<=0', min: -1000, max: 0, color: '#93c5fd' },
+      { name: '0-4', min: 0, max: 4, color: '#60a5fa' },
+      { name: '4-8', min: 4, max: 8, color: '#f59e0b' },
+      { name: '8-12', min: 8, max: 12, color: '#ef4444' },
+      { name: '>12', min: 12, max: 1000, color: '#7f1d1d' },
+    ]
+    const hCounts: Record<string, number> = {}
+    hBins.forEach(b => { hCounts[b.name] = 0 })
+    suburbs.forEach((s: any) => {
+      const v = Number(s?.heat?.avg ?? s?.heat?.intensity)
+      if (!Number.isFinite(v)) return
+      const b = hBins.find(b => v >= b.min && v < b.max)
+      if (b) hCounts[b.name] += 1
+    })
+    heatBinRows.value = hBins.map(b => ({
+      bucket: b.name,
+      color: b.color,
+      count: hCounts[b.name] || 0,
+      percent: Math.round(((hCounts[b.name] || 0) / total) * 100)
+    }))
+
+    // Top N lists
+    const byHeat = suburbs
+      .map((s: any) => ({ name: String(s?.name || s?.id || ''), heat: Number(s?.heat?.avg ?? s?.heat?.intensity) }))
+      .filter(x => x.name && Number.isFinite(x.heat))
+      .sort((a, b) => b.heat - a.heat)
+      .slice(0, 5)
+    const hMax = byHeat[0]?.heat || 1
+    topHotRows.value = byHeat.map(x => ({ ...x, percent: Math.round((x.heat / hMax) * 100) }))
+
+    const byVeg = suburbs
+      .map((s: any) => ({ name: String(s?.name || s?.id || ''), veg: Number(s?.vegetation?.total) }))
+      .filter(x => x.name && Number.isFinite(x.veg))
+      .sort((a, b) => b.veg - a.veg)
+      .slice(0, 5)
+    const vMax = byVeg[0]?.veg || 1
+    topGreenRows.value = byVeg.map(x => ({ ...x, percent: Math.round((x.veg / vMax) * 100) }))
+
+    // Pearson correlation between vegetation total and heat avg
+    const pairs = suburbs
+      .map((s: any) => ({
+        x: Number(s?.vegetation?.total),
+        y: Number(s?.heat?.avg ?? s?.heat?.intensity),
+        color: ((payload?.heat_categories || categoriesMap || {})[String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')]?.color) || '#9ca3af'
+      }))
+      .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+    scatterPairs.value = pairs
+    const n = pairs.length
+    if (n > 2) {
+      const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length
+      const xs = pairs.map(p => p.x)
+      const ys = pairs.map(p => p.y)
+      const mx = mean(xs), my = mean(ys)
+      const cov = pairs.reduce((acc, p) => acc + (p.x - mx) * (p.y - my), 0)
+      const sx = Math.sqrt(pairs.reduce((acc, p) => acc + Math.pow(p.x - mx, 2), 0))
+      const sy = Math.sqrt(pairs.reduce((acc, p) => acc + Math.pow(p.y - my, 2), 0))
+      correlationR.value = sx && sy ? (cov / (sx * sy)) : 0
+    } else {
+      correlationR.value = 0
+    }
   } catch {
     // ignore chart errors
   }
@@ -1056,6 +1439,15 @@ async function buildCharts() {
 .history-clear { background: transparent; border: none; color: #065f46; cursor: pointer; font-size: 12px; }
 .hint-text { color: #6b7280; font-size: 12px; margin-top: 8px; }
 .map-panel { position: relative; }
+.history-trend { margin-top: 6px; font-size: 12px; color: #374151; }
+.history-report { display: grid; grid-template-columns: 120px 1fr; gap: 12px; margin-top: 8px; align-items: start; }
+.report-media img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #e5e7eb; }
+.report-content { display: grid; gap: 6px; }
+.report-title { font-weight: 700; color: #065f46; font-size: 12px; }
+.kpi-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.kpi { display: flex; justify-content: space-between; font-size: 12px; color: #374151; }
+.kpi-label { color: #6b7280; }
+.kpi-value { font-weight: 700; }
 
 .map-card-header { position: absolute; top: 12px; left: 12px; font-weight: 700; color: #065f46; background: #ffffff; padding: 6px 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
 
@@ -1093,6 +1485,9 @@ async function buildCharts() {
 .chart-bar { height: 10px; background: #eef2f7; border-radius: 8px; overflow: hidden; }
 .chart-bar-fill { height: 100%; border-radius: 8px; }
 .chart-value { text-align: right; font-size: 12px; color: #374151; }
+.chart-canvas { width: 100%; max-width: 520px; height: 260px; display: block; margin: 0 auto; }
+.charts-row-2 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+@media (min-width: 900px) { .charts-row-2 { grid-template-columns: 1fr 1fr; } }
 
 .placeholder-text {
   color: #6b7280;
@@ -1101,4 +1496,13 @@ async function buildCharts() {
 
 /* Hide Google Maps InfoWindow close (X) button inside this component */
 :deep(.gm-ui-hover-effect) { display: none !important; }
+
+/* Split layout for chart + description */
+.chart-split { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+@media (min-width: 900px) { .chart-split { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+.chart-pane { min-width: 0; }
+.chart-desc { min-width: 0; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; }
+.desc-title { font-weight: 700; color: #065f46; margin-bottom: 6px; }
+.desc-text { color: #374151; font-size: 13px; line-height: 1.45; margin: 0 0 6px 0; }
+.desc-list { margin: 0; padding-left: 18px; color: #374151; font-size: 13px; }
 </style>

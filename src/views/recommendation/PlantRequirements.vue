@@ -100,7 +100,7 @@ const effortLevel = computed<number>(() => {
 
 .requirement-label {
   font-weight: 600;
-  color: #047857;
+  color: #ffffff; /* keep labels white */
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;

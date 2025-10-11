@@ -152,12 +152,13 @@ const toPalette = (c: string): Palette => {
 }
 const palette = computed<Palette>(() => toPalette(pickDominantColor()))
 const cardStyle = computed(() => ({
-  background: `linear-gradient(135deg, ${palette.value.bgStart}, ${palette.value.bgEnd})`,
+  background: `linear-gradient(180deg, ${palette.value.bgStart}33 0%, ${palette.value.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`,
+  animation: 'cardPulse 6s ease-in-out infinite',
   borderColor: palette.value.border
 }))
 
 const contentStyle = computed(() => ({
-  background: `linear-gradient(180deg, ${palette.value.bgStart}, ${palette.value.bgEnd})`
+  background: 'transparent'
 }))
 
 // Function to get image source with Victoria Plants Data priority
@@ -350,6 +351,11 @@ const handleImageError = (event: Event) => {
 .plant-card:hover .plant-image {
   transform: scale(1.05);                             /* Slight zoom on hover */
 }
+@keyframes cardPulse {
+  0% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(8deg); }
+  100% { filter: hue-rotate(0deg); }
+}
 
 /* Image error handling - hide broken images */
 .plant-image[style*="display: none"] {
@@ -385,7 +391,7 @@ const handleImageError = (event: Event) => {
 .plant-card-title {
   font-size: 1.125rem;          /* Larger font size */
   font-weight: 600;             /* Semi-bold */
-  color: #1c3d21;               /* Dark green color */
+  color: #ffffff;               /* White */
   margin: 0;                    /* Remove default margin */
   flex: 1;                      /* Take available space */
 }
@@ -404,10 +410,18 @@ const handleImageError = (event: Event) => {
 
 /* Plant description styling */
 .plant-card-description {
-  color: #1c3d21;               /* Dark green color */
+  color: #ffffff;               /* White */
   font-size: 0.875rem;          /* Smaller font size */
   margin-bottom: 1rem;          /* Space below */
   line-height: 1.5;             /* Better line spacing */
+}
+
+/* Ensure v-html content (not scoped) also renders in white */
+:deep(.plant-card-description),
+:deep(.plant-card-description *),
+:deep(.plant-card-description a),
+:deep(.plant-card-description a:visited) {
+  color: #ffffff !important;
 }
 
 
@@ -430,7 +444,7 @@ const handleImageError = (event: Event) => {
 .show-more-btn {
   background: transparent;
   border: none;
-  color: #065f46;
+  color: #ffffff;               /* White */
   font-weight: 600;
   cursor: pointer;
   padding: 0; margin-top: -0.25rem; margin-bottom: 0.5rem;
@@ -470,7 +484,7 @@ const handleImageError = (event: Event) => {
 /* Why recommended section styling */
 .why-recommended {
   font-size: 0.875rem;                               /* Smaller font */
-  color: #1c3d21;                                     /* Dark green text */
+  color: #1c3d21;                                     /* Keep dark text */
   margin-top: 0.5rem;                                 /* small top gap from requirements */
   margin-bottom: 1rem;                                /* Space below */
   padding: 0.75rem;                                   /* Inner padding */
@@ -484,9 +498,9 @@ const handleImageError = (event: Event) => {
 .learn-more-button {
   width: 100%;                  /* Full width */
   padding: 0.75rem;             /* Inner spacing */
-  background: transparent;      /* Transparent background */
-  border: 2px solid #1c3d21;   /* Dark green border */
-  color: #1c3d21;               /* Dark green text */
+  background: #ffffff;          /* Solid white background */
+  border: 2px solid #ffffff;   /* White border */
+  color: #065f46;               /* Dark green text for contrast */
   border-radius: 0.75rem;       /* Rounded corners */
   font-weight: 600;             /* Semi-bold text */
   cursor: pointer;              /* Show pointer cursor */
@@ -495,8 +509,8 @@ const handleImageError = (event: Event) => {
 
 /* Button hover effect */
 .learn-more-button:hover {
-  background: #1c3d21;                              /* Dark green background */
-  color: white;                                     /* White text */
+  background: #e5e7eb;                              /* Light hover */
+  color: #065f46;
   transform: translateY(-1px);                     /* Slight lift */
   box-shadow: 0 4px 12px rgba(28, 61, 33, 0.3);   /* Add shadow */
 }
