@@ -186,11 +186,41 @@ export interface ApiAuthUser {
   avatar_url?: string
 }
 
-export interface ApiGoogleLoginResponse {
-  access_token: string
-  token_type: string
-  user: ApiAuthUser
+// --- Tracking user/profile types ---
+export interface ApiUserCore {
+  id: number
+  email: string
+  name?: string
+  suburb_id?: number
+  created_at?: string
+  updated_at?: string
+  last_login?: string
 }
+
+export interface ApiUserProfileCore {
+  id: number
+  user_id: number
+  experience_level?: string
+  garden_type?: string
+  climate_goals?: string
+  available_space_m2?: number
+  sun_exposure?: string | null
+  has_containers?: boolean | null
+  organic_preference?: boolean | null
+  budget_level?: string | null
+  notification_preferences?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ApiUserUpsertResponse {
+  success?: boolean
+  message?: string
+  user?: ApiUserCore
+  profile?: ApiUserProfileCore
+}
+
+// Removed: ApiGoogleLoginResponse (deprecated with /api/v1/auth/google)
 
 export interface ApiSuitabilityScore {
   total_score: number
@@ -335,16 +365,7 @@ export class PlantRecommendationService {
     return response
   }
 
-  // --- Auth: Google login (create or retrieve user, return token + user) ---
-  async googleLogin(credential: string): Promise<ApiGoogleLoginResponse> {
-    const response = await this.fetchWithFallback('/api/v1/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential })
-    })
-    const data = await response.json()
-    return data as ApiGoogleLoginResponse
-  }
+  // Removed: googleLogin (backend endpoint deprecated)
 
   // Health check endpoint
   async healthCheck(): Promise<{ message: string }> {
@@ -464,17 +485,21 @@ export class PlantRecommendationService {
   }
 
   // --- AI Chat (General) ---
-  async startGeneralChat(userId: number | string): Promise<{ chat_id: number; expires_at?: string }> {
+  async startGeneralChatByEmail(email: string): Promise<{ chat_id: number; expires_at?: string }> {
     try {
+      const payload = { email }
+      console.log('[Chat] start/general request', payload)
       const response = await this.fetchWithFallback('/api/v1/chat/general/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId })
+        body: JSON.stringify(payload)
       })
       const data = await response.json()
+      console.log('[Chat] start/general response', data)
       const chatId = Number((data.chat_id ?? data.id) || 0)
       return { chat_id: chatId, expires_at: data.expires_at }
     } catch (error) {
+      try { console.error('[Chat] start/general failed', { email, error }) } catch {}
       throw error
     }
   }
@@ -530,6 +555,115 @@ export class PlantRecommendationService {
     }
   }
 
+  // Build user upsert payload (without start_date)
+  buildUserUpsertDataFromProfile(): {
+    email: string
+    name?: string
+    suburb_id?: number
+    experience_level?: string
+    garden_type?: string
+    available_space?: number
+    climate_goal?: string
+  } {
+    const email = ((): string => {
+      try { return localStorage.getItem('plantopia_user_email') || '' } catch { return '' }
+    })()
+    const savedName = ((): string | undefined => {
+      try { return localStorage.getItem('profile_display_name') || localStorage.getItem('plantopia_user_name') || undefined } catch { return undefined }
+    })()
+    const experience = ((): string | undefined => {
+      try { const v = localStorage.getItem('profile_experience'); return v || undefined } catch { return undefined }
+    })()
+    const gardenType = ((): string | undefined => {
+      try { const v = localStorage.getItem('profile_garden_type'); return v || undefined } catch { return undefined }
+    })()
+    const available = ((): number | undefined => {
+      try { const v = parseFloat(localStorage.getItem('profile_available_space') || '') ; return Number.isFinite(v) ? v : undefined } catch { return undefined }
+    })()
+    const goal = ((): string | undefined => {
+      try { const v = localStorage.getItem('profile_climate_goal'); return v || undefined } catch { return undefined }
+    })()
+    const suburbId = ((): number | undefined => {
+      try {
+        const sid = localStorage.getItem('profile_suburb_id') || localStorage.getItem('profile_suburb') || ''
+        const n = parseInt(sid as string, 10)
+        return Number.isFinite(n) ? n : undefined
+      } catch { return undefined }
+    })()
+
+    const payload: {
+      email: string
+      name?: string
+      suburb_id?: number
+      experience_level?: string
+      garden_type?: string
+      available_space?: number
+      climate_goal?: string
+    } = { email }
+    if (savedName) payload.name = savedName
+    if (typeof suburbId === 'number') payload.suburb_id = suburbId
+    if (experience) payload.experience_level = experience
+    if (gardenType) payload.garden_type = gardenType
+    if (typeof available === 'number') payload.available_space = available
+    if (goal) payload.climate_goal = goal
+    return payload
+  }
+
+  // Upsert user/profile to backend using current local profile
+  async upsertUserByProfile(): Promise<ApiUserUpsertResponse> {
+    const body = this.buildUserUpsertDataFromProfile()
+    if (!body.email) return { success: false }
+    const response = await this.fetchWithFallback('/api/v1/tracking/user/upsert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    try { const data = await response.json(); return data as ApiUserUpsertResponse } catch { return { success: true } }
+  }
+
+  // --- Suburbs cache and helper ---
+  private static SUBURBS_CACHE_KEY = 'suburbs_cache_v1'
+  private static SUBURBS_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+
+  private readCachedSuburbs(): Array<{ id: number; name: string }> | null {
+    try {
+      const raw = localStorage.getItem(PlantRecommendationService.SUBURBS_CACHE_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as { ts?: number; list?: Array<{ id: number; name: string }> }
+      if (!parsed?.list || !Array.isArray(parsed.list)) return null
+      const ts = typeof parsed.ts === 'number' ? parsed.ts : 0
+      if (Date.now() - ts > PlantRecommendationService.SUBURBS_CACHE_TTL_MS) return null
+      return parsed.list
+    } catch { return null }
+  }
+
+  private writeCachedSuburbs(list: Array<{ id: number; name: string }>) {
+    try { localStorage.setItem(PlantRecommendationService.SUBURBS_CACHE_KEY, JSON.stringify({ ts: Date.now(), list })) } catch {}
+  }
+
+  async fetchAllSuburbs(): Promise<Array<{ id: number; name: string }>> {
+    const cached = this.readCachedSuburbs()
+    if (cached) return cached
+    try {
+      const resp = await this.fetchWithFallback('/api/v1/suburbs')
+      const json: unknown = await resp.json()
+      const arr: Array<Record<string, unknown>> = Array.isArray(json)
+        ? (json as Array<Record<string, unknown>>)
+        : (Array.isArray((json as { suburbs?: unknown }).suburbs) ? (json as { suburbs: Array<Record<string, unknown>> }).suburbs : [])
+      const list = arr
+        .map((s) => ({ id: Number((s.id ?? (s as { suburb_id?: unknown }).suburb_id) || 0), name: String((s.name ?? (s as { suburb?: unknown }).suburb) || '') }))
+        .filter((s) => Number.isFinite(s.id) && Boolean(s.name))
+      this.writeCachedSuburbs(list)
+      return list
+    } catch { return [] }
+  }
+
+  async getSuburbNameById(id: number): Promise<string | null> {
+    const list = await this.fetchAllSuburbs()
+    const found = list.find((s) => s.id === id)
+    return found?.name || null
+  }
+
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
     const body = { user_data, plant_id: params.plant_id, plant_nickname: params.plant_nickname, start_date: user_data.start_date, location_details: params.location_details }
@@ -542,20 +676,43 @@ export class PlantRecommendationService {
     return { instance_id: Number(data.instance_id || 0) }
   }
 
-  async sendGeneralChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string }> {
+  async sendGeneralChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string; token_warning?: boolean; total_tokens?: number }> {
     try {
       const response = await this.fetchWithFallback('/api/v1/chat/general/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      const data = await response.json() as { reply?: string; message?: string; text?: string; answer?: string }
-      const reply: string = data.reply || data.message || data.text || data.answer || ''
-      return { reply }
+      const data = await response.json() as { ai_response?: string; reply?: string; message?: string; text?: string; answer?: string; token_warning?: boolean; total_tokens?: number }
+      const reply: string = data.ai_response || data.reply || data.message || data.text || data.answer || ''
+      return { reply, token_warning: Boolean(data.token_warning), total_tokens: data.total_tokens }
     } catch (error) {
       throw error
     }
   }
+
+  // --- AI Chat (Plant-specific) ---
+  async startPlantChat(instanceId: number, email: string): Promise<{ chat_id: number; expires_at?: string }> {
+    const response = await this.fetchWithFallback(`/api/v1/chat/plant/${encodeURIComponent(String(instanceId))}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
+    const data = await response.json()
+    return { chat_id: Number(data.chat_id || 0), expires_at: data.expires_at }
+  }
+
+  async sendPlantChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string; token_warning?: boolean; total_tokens?: number }> {
+    const response = await this.fetchWithFallback('/api/v1/chat/plant/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const data = await response.json() as { ai_response?: string; token_warning?: boolean; total_tokens?: number }
+    return { reply: data.ai_response || '', token_warning: Boolean(data.token_warning), total_tokens: data.total_tokens }
+  }
+
+  // (temporary suburbs helper removed)
 
   // --- Tracking: Get user's plant instances (by email as user_id) ---
   async getUserTrackingPlants(userId: string, options?: { active_only?: boolean; page?: number; limit?: number }): Promise<ApiUserPlantsResponse> {
