@@ -57,7 +57,7 @@
           <div class="section-title-row">
             <h3>My Guide List</h3>
           </div>
-          <div v-if="!guidesStore.favouritesLoaded || guidesStore.favouritesLoading" class="empty-fav">Loading...</div>
+          <div v-if="guidesStore.favouritesLoading || !guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
           <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
           <ul v-else class="guide-fav-ul">
             <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
@@ -724,7 +724,7 @@ async function onSelectStage(name?: string) {
   const instanceId = currentInstanceId.value
   if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
   try {
-    await plantApiService.updatePlantInstanceProgress(instanceId, { current_stage: stage })
+    await plantApiService.updatePlantInstanceProgress(instanceId, { current_stage: stage, align_to_stage_start: true })
     showInfo('Updated', 'Stage updated to ' + stage)
     await refreshInstanceAfterProgress()
   } catch {

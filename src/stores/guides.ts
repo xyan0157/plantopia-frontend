@@ -63,6 +63,7 @@ export const useGuidesStore = defineStore('guides', {
 
     async syncFavouritesFromServer(): Promise<void> {
       this.favouritesLoading = true
+      this.favouritesLoaded = false
       try {
         const email = localStorage.getItem('plantopia_user_email') || ''
         if (!email) return

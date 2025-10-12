@@ -688,7 +688,7 @@ export class PlantRecommendationService {
     return await resp.json()
   }
 
-  async updatePlantInstanceProgress(instanceId: number, body: { current_stage?: string; user_notes?: string; location_details?: string }): Promise<Record<string, unknown>> {
+  async updatePlantInstanceProgress(instanceId: number, body: { current_stage?: string; user_notes?: string; location_details?: string; align_to_stage_start?: boolean }): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/progress`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     })
