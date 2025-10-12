@@ -42,7 +42,7 @@
               <div v-else class="history-cards">
                 <div
                   v-for="item in searchHistory"
-                  :key="item.label"
+                  :key="item.id"
                   class="filter-card history-card"
                 >
                   <div class="history-card-header">
@@ -67,12 +67,9 @@
                       <MapPinIcon />
                     </button>
                   </div>
-                <div class="history-trend" v-if="getTrendText(item)">{{ getTrendText(item) }}</div>
+                <!-- Removed one-line summary between tags and image per request; trend helper kept for later use -->
                 <div class="history-report" v-if="getDetailForItem(item)">
-                  <div class="report-media">
-                    <img src="/images/informational.png" alt="UHI info" />
-                  </div>
-                  <div class="report-content">
+                  <div class="report-content" style="grid-column: 1 / -1;">
                     <div class="report-title">Local summary</div>
                     <ul class="kpi-list">
                       <li class="kpi" v-if="getDetailForItem(item)?.heatAvg != null">
@@ -279,7 +276,7 @@ let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
 // Reusable marker to indicate the precise centered location
 const centerMarkerRef = ref<any>(null)
-const searchHistory = ref<Array<{ label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string; rank?: number }>>([])
+const searchHistory = ref<Array<{ id: string; label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string; rank?: number }>>([])
 const HISTORY_STORAGE_KEY = 'uhi_recent_searches_v1'
 // Standardized out-of-coverage message in English only
 const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
@@ -368,6 +365,7 @@ function loadHistoryFromStorage() {
     const cleaned = parsed
       .filter((it: any) => it && typeof it.label === 'string' && it.center && typeof it.center.lat === 'number' && typeof it.center.lng === 'number')
       .map((it: any) => ({
+        id: String(it.id || cryptoRandom()),
         label: String(it.label),
         center: { lat: Number(it.center.lat), lng: Number(it.center.lng) },
         layer: (it.layer === 'veg' ? 'veg' : 'heat') as 'heat' | 'veg',
@@ -388,6 +386,16 @@ function saveHistoryToStorage() {
   } catch {}
 }
 
+function cryptoRandom(): string {
+  try {
+    const arr = new Uint32Array(4)
+    crypto.getRandomValues(arr)
+    return Array.from(arr).map(n => n.toString(16)).join('')
+  } catch {
+    return String(Date.now() + Math.random())
+  }
+}
+
 function normKey(v: unknown): string {
   return String(v ?? '').toLowerCase().trim().replace(/\s+/g, '_')
 }
@@ -396,6 +404,7 @@ function uhiUrl(path: string) {
   const base = (import.meta as any).env?.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
   return `${base}${path}`
 }
+
 
 // Prefer geocoding results that are in Victoria (VIC)
 function isVicGeocodeResult(r: any): boolean {
@@ -551,37 +560,7 @@ function refreshHistoryStats() {
 }
 
 // Build a short, human-readable trend sentence for a suburb
-function getTrendText(item: { label: string; layer: 'heat' | 'veg'; heat?: number; veg?: number; heatCategory?: string }): string {
-  const label = String(item?.label || '')
-  const heatVal = Number(item?.heat)
-  const vegVal = Number(item?.veg)
-  const cat = String(item?.heatCategory || '').toLowerCase()
-  const heatText = Number.isFinite(heatVal) ? `${heatVal.toFixed(1)}°C` : 'N/A'
-  const vegText = Number.isFinite(vegVal) ? `${vegVal.toFixed(1)}%` : 'N/A'
-
-  if (Number.isFinite(heatVal) && Number.isFinite(vegVal)) {
-    if (vegVal >= 40 && /low|cool/.test(cat)) {
-      return `${label}: high vegetation (${vegText}) aligns with low heat (${heatText}).`
-    }
-    if (vegVal <= 15 && /high|extreme/.test(cat)) {
-      return `${label}: low vegetation (${vegText}) aligns with high heat (${heatText}).`
-    }
-    if (vegVal >= 30 && /high|extreme/.test(cat)) {
-      return `${label}: green coverage is decent (${vegText}) but heat remains high (${heatText}) - check density and surfaces.`
-    }
-    if (vegVal <= 20 && /low|cool/.test(cat)) {
-      return `${label}: vegetation is limited (${vegText}) but heat is relatively low (${heatText}) - likely coastal/breezy influence.`
-    }
-    return `${label}: heat ${heatText}, vegetation ${vegText}.`
-  }
-  if (Number.isFinite(heatVal)) {
-    return `${label}: heat ${heatText}${item.heatCategory ? ` (${item.heatCategory})` : ''}.`
-  }
-  if (Number.isFinite(vegVal)) {
-    return `${label}: vegetation ${vegText}.`
-  }
-  return ''
-}
+// getTrendText removed; replaced with static snapshot thumbnail in history cards
 
 // Helper to retrieve full metrics for a suburb card
 function getDetailForItem(item: { label: string }): { heatAvg?: number; heatCategory?: string; vegTotal?: number; trees?: number; shrubs?: number; grass?: number; heights?: Record<string, number> } | null {
@@ -1019,7 +998,7 @@ onMounted(async () => {
           const heatCat = liveHeat.category
           // Store precise map-derived value immediately
           const heatRank = findMapValue(label, heatRankMap) as number | undefined
-          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined, rank: heatRank })
+          searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined, rank: heatRank })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
           saveHistoryToStorage()
@@ -1038,7 +1017,7 @@ onMounted(async () => {
           if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
           placeCenterMarker(center, 'veg')
           const vegRank = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
-          searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank })
+          searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank })
           if (searchHistory.value.length > 8) searchHistory.value.pop()
           refreshHistoryStats()
           saveHistoryToStorage()
@@ -1085,7 +1064,7 @@ onMounted(async () => {
               placeCenterMarker(center, 'heat')
               // Store precise map-derived value immediately
               const heatRank2 = findMapValue(label, heatRankMap) as number | undefined
-              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined, rank: heatRank2 })
+              searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined, rank: heatRank2 })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
               saveHistoryToStorage()
@@ -1102,7 +1081,7 @@ onMounted(async () => {
               if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
               placeCenterMarker(center, 'veg')
               const vegRank2 = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
-              searchHistory.value.unshift({ label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank2 })
+              searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank2 })
               if (searchHistory.value.length > 8) searchHistory.value.pop()
               refreshHistoryStats()
               saveHistoryToStorage()
@@ -1229,8 +1208,15 @@ function centerTo(item: { label: string; center: { lat: number; lng: number }; l
   placeCenterMarker(center, item.layer)
 }
 
-function removeHistory(item: { label: string }) {
-  searchHistory.value = searchHistory.value.filter(h => h.label !== item.label)
+function removeHistory(item: { label: string; id?: string }) {
+  // Remove by id when available; fallback to first label match
+  if (item.id) {
+    const posById = searchHistory.value.findIndex(h => h.id === item.id)
+    if (posById >= 0) searchHistory.value.splice(posById, 1)
+  } else {
+    const pos = searchHistory.value.findIndex(h => h.label === item.label)
+    if (pos >= 0) searchHistory.value.splice(pos, 1)
+  }
   saveHistoryToStorage()
 }
 
@@ -1442,6 +1428,12 @@ async function buildCharts() {
 .history-trend { margin-top: 6px; font-size: 12px; color: #374151; }
 .history-report { display: grid; grid-template-columns: 120px 1fr; gap: 12px; margin-top: 8px; align-items: start; }
 .report-media img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #e5e7eb; }
+.heat-media {
+  width: 100%; height: 0; padding-bottom: 140px; border-radius: 8px; border: 1px solid #e5e7eb;
+  background: radial-gradient(circle at 30% 30%, rgba(239,68,68,0.9), rgba(239,68,68,0.4) 40%, rgba(239,68,68,0.2) 60%, rgba(239,68,68,0.05) 75%, rgba(255,255,255,1) 76%),
+              conic-gradient(from 0deg, rgba(239,68,68,0.85), rgba(245,158,11,0.85), rgba(59,130,246,0.4), rgba(34,197,94,0.65));
+  background-blend-mode: multiply;
+}
 .report-content { display: grid; gap: 6px; }
 .report-title { font-weight: 700; color: #065f46; font-size: 12px; }
 .kpi-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
