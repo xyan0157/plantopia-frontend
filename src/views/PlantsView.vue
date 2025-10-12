@@ -354,6 +354,8 @@
       :message="signInMessage"
       @close="showSignIn = false"
     />
+    <!-- Loading Modal -->
+    <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
   </div>
 </template>
 
@@ -367,6 +369,7 @@ import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
 import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
 import SignInModal from '@/components/SignInModal.vue'
+import LoadingModal from '@/components/LoadingModal.vue'
 
 // Reactive state
 const store = usePlantsStore()
@@ -385,6 +388,8 @@ function promptSignIn(message: string) {
   signInMessage.value = message
   showSignIn.value = true
 }
+// Loading modal state
+const loadingModal = ref<{ show: boolean; message: string }>({ show: false, message: '' })
 
 // Pagination state
 const currentPage = ref(1)
@@ -412,8 +417,13 @@ const renderedDescription = computed(() => {
 const toggleFav = async (p: Plant) => {
   const email = localStorage.getItem('plantopia_user_email') || ''
   if (!email) { promptSignIn('Please sign in to use favourites.'); return }
-  if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
-  await store.toggleFavourite(String(p.id))
+  try {
+    loadingModal.value = { show: true, message: 'Saving favourite...' }
+    if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
+    await store.toggleFavourite(String(p.id))
+  } finally {
+    loadingModal.value = { show: false, message: '' }
+  }
 }
 const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
@@ -521,6 +531,7 @@ async function startTracking(plant: Plant) {
     return
   }
   try {
+    loadingModal.value = { show: true, message: 'Starting tracking...' }
     const pid = Number((plant as unknown as { databaseId?: number })?.databaseId || plant.id)
     const nickname = String(plant.name || '').trim() || undefined
     let locationDetails: string | undefined = undefined
@@ -536,10 +547,14 @@ async function startTracking(plant: Plant) {
     console.log('[UI] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI] startTracking response', resp)
-    alert('Please check detail in Journal')
+    const instanceId = Number((resp as unknown as { instance_id?: number })?.instance_id || 0)
+    if (Number.isFinite(instanceId) && instanceId > 0) {
+      try { await plantApiService.startGrowingInstance(instanceId) } catch (e) { console.warn('[UI] startGrowingInstance failed', e) }
+    }
   } catch (e) {
     console.error('[UI] startTracking error', e)
-    alert('Failed to start tracking. Please try again later.')
+  } finally {
+    loadingModal.value = { show: false, message: '' }
   }
   try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
 }
