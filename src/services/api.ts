@@ -677,14 +677,49 @@ export class PlantRecommendationService {
 
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
-    const body = { user_data, plant_id: params.plant_id, plant_nickname: params.plant_nickname, start_date: user_data.start_date, location_details: params.location_details }
-    const response = await this.fetchWithFallback('/api/v1/tracking/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
-    const data = await response.json() as { instance_id?: number }
-    return { instance_id: Number(data.instance_id || 0) }
+    // Match backend schema exactly; include optional fields as empty strings when absent
+    const body: Record<string, unknown> = {
+      user_data,
+      plant_id: params.plant_id,
+      plant_nickname: params.plant_nickname ?? '',
+      start_date: user_data.start_date,
+      location_details: params.location_details ?? ''
+    }
+    try {
+      console.log('[Tracking] POST /api/v1/tracking/start request', body)
+      const response = await this.fetchWithFallback('/api/v1/tracking/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      // Log response body (json or text) without consuming main stream
+      try {
+        const clone = response.clone()
+        try {
+          const loggedJson = await clone.json()
+          console.log('[Tracking] /api/v1/tracking/start response', { status: response.status, ok: response.ok, body: loggedJson })
+        } catch {
+          const loggedText = await clone.text()
+          console.log('[Tracking] /api/v1/tracking/start response (text)', { status: response.status, ok: response.ok, body: loggedText })
+        }
+      } catch {}
+
+      let data: { instance_id?: number; message?: string; error?: string } = {}
+      try { data = await response.json() as { instance_id?: number; message?: string; error?: string } } catch {}
+
+      if (!response.ok) {
+        const message = String(data?.message || data?.error || 'Request failed')
+        const err = new Error(`Tracking start failed: ${response.status} ${message}`)
+        console.error('[Tracking] /api/v1/tracking/start error (http)', err)
+        throw err
+      }
+
+      return { instance_id: Number(data?.instance_id || 0) }
+    } catch (error) {
+      console.error('[Tracking] /api/v1/tracking/start error', error)
+      throw error
+    }
   }
 
   async sendGeneralChatMessage(payload: { chat_id: number; message: string; image?: string | null }): Promise<{ reply: string; token_warning?: boolean; total_tokens?: number }> {

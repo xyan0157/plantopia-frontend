@@ -72,6 +72,27 @@
           <div v-if="journalLoading" class="empty-fav">Loading...</div>
           <div v-else-if="journalError" class="empty-fav">{{ journalError }}</div>
           <div v-else-if="journalPlants.length === 0" class="empty-fav">No journal yet.</div>
+          <div v-else class="journal-scroll" ref="journalScrollRef">
+            <div
+              v-for="jp in journalPlants"
+              :key="jp.instance_id"
+              class="journal-card"
+              :style="getJournalCardStyle(jp)"
+              @click="openJournalTimelineFrom(jp)"
+              style="cursor:pointer;"
+            >
+              <div class="journal-thumb">
+                <img :src="getJournalPreviewImage(jp)" :alt="jp.plant_name" />
+              </div>
+              <div class="journal-meta">
+                <div class="journal-name">{{ jp.plant_name }}</div>
+                <div class="journal-sub">
+                  <span class="chip">Started: {{ jp.start_date || '-' }}</span>
+                  <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         </div>
 
@@ -91,6 +112,54 @@
   </div>
   <!-- Plant Detail Modal -->
   <PlantDetailModal :plant="detailPlant" @close="closeDetailModal" v-if="detailPlant" />
+
+  <!-- Timeline Modal -->
+  <div v-if="timelineModalOpen" class="modal-overlay" @click="timelineModalOpen = false">
+    <div class="modal-content timeline-modal" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">Growth Timeline - {{ timelinePlant?.name || '' }}</h2>
+        <button class="modal-close" @click="timelineModalOpen = false">&times;</button>
+      </div>
+      <div class="modal-body wide">
+        <div v-if="timelineLoading" class="empty-fav">Loading timeline...</div>
+        <div v-else-if="timelineError" class="empty-fav">{{ timelineError }}</div>
+        <div v-else-if="timelineData" class="timeline-visual">
+          <!-- Top hero area: mimic image card, but holds the timeline -->
+          <div class="timeline-hero">
+            <div class="tv-track">
+            <div class="tv-fill" :style="{ width: currentPercent + '%' }"></div>
+            <div
+              v-for="(s, i) in timelineStages"
+              :key="'dot-'+i"
+              class="tv-tick"
+              :style="{ left: (s.start_day / totalDays) * 100 + '%' }"
+              :title="s.stage_name + ' (Day ' + s.start_day + ')'"
+            ></div>
+            <div
+              v-for="(s, i) in timelineStages"
+              :key="'card-'+i"
+              class="tv-stage-card"
+              :class="{ top: i % 2 === 0, bottom: i % 2 === 1 }"
+              :style="{ left: adjustedStagePercents[i] + '%' }"
+            >
+              <div class="tv-stage-title">{{ s.stage_name }}</div>
+              <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
+              <div v-if="s.description" class="tv-stage-desc">{{ s.description }}</div>
+            </div>
+            <div class="tv-marker" :style="{ left: currentPercent + '%' }" title="Today"></div>
+            <div class="tv-end" title="Harvest"></div>
+            </div>
+          </div>
+
+          <!-- Section header under the timeline -->
+          <div class="timeline-section">
+            <div class="timeline-section-title">Detail & Tip</div>
+            <div class="timeline-section-divider"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Edit Profile Modal -->
   <div v-if="showEdit" class="modal-overlay" @click="closeEdit">
@@ -242,10 +311,9 @@ async function loadJournalPlantsFromBackend() {
   journalLoading.value = true
   journalError.value = ''
   try {
-    const idRaw = localStorage.getItem('plantopia_user_id') || ''
-    const userId = parseInt(idRaw, 10)
-    if (!Number.isFinite(userId) || userId <= 0) { journalPlants.value = []; return }
-    const res = await plantApiService.getUserTrackingPlants(String(userId), { active_only: true })
+    const email = userEmail.value
+    if (!email) { journalPlants.value = []; return }
+    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
     journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
   } catch {
     journalError.value = 'Failed to load journal'
@@ -286,9 +354,99 @@ function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   return '/placeholder-plant.svg'
 }
 
+// Journal preview image (from API summary)
+function getJournalPreviewImage(jp: { image_url?: string; plant_name: string; plant_id: number }): string {
+  if (jp.image_url) return jp.image_url
+  // fallback by category unknown -> placeholder
+  return '/placeholder-plant.svg'
+}
+
+// Journal card background style (align with All Plants gradient logic)
+function getJournalCardStyle(jp: { plant_name: string }): Record<string, string> {
+  // very light heuristic based on plant name keywords to pick a palette
+  const name = String(jp.plant_name || '').toLowerCase()
+  const pick = ((): { bgStart: string; bgEnd: string } => {
+    if (name.includes('red') || name.includes('rose')) return { bgStart: '#f87171', bgEnd: '#ef4444' }
+    if (name.includes('pink')) return { bgStart: '#f472b6', bgEnd: '#ec4899' }
+    if (name.includes('purple') || name.includes('blue')) return { bgStart: '#a78bfa', bgEnd: '#8b5cf6' }
+    if (name.includes('yellow')) return { bgStart: '#f59e0b', bgEnd: '#d97706' }
+    if (name.includes('orange')) return { bgStart: '#fb923c', bgEnd: '#f97316' }
+    if (name.includes('white') || name.includes('snow')) return { bgStart: '#e5e7eb', bgEnd: '#d1d5db' }
+    if (name.includes('green')) return { bgStart: '#34d399', bgEnd: '#10b981' }
+    return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0' }
+  })()
+  const background = `linear-gradient(180deg, ${pick.bgStart}33 0%, ${pick.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`
+  return { background }
+}
+
 // Detail modal state (open on favourite click)
 const detailPlant = ref<Plant | null>(null)
 function openPlantDetail(p: Plant) { detailPlant.value = p }
+
+// Timeline modal for journal item
+const timelineModalOpen = ref(false)
+const timelineLoading = ref(false)
+const timelineError = ref('')
+type TimelineStage = { stage_name: string; start_day: number; end_day: number; description?: string }
+type TimelineResponse = { plant_id: number; total_days?: number; stages?: TimelineStage[] }
+const timelineData = ref<TimelineResponse | null>(null)
+const timelinePlant = ref<{ plant_id: number; name: string } | null>(null)
+const totalDays = computed(() => Number(timelineData.value?.total_days || 0) || inferTotalDays())
+const timelineStages = computed<TimelineStage[]>(() => (timelineData.value?.stages || []).slice())
+const currentDay = computed(() => daysFromStart())
+const currentPercent = computed(() => {
+  const t = Math.max(0, Math.min(100, (currentDay.value / Math.max(1, totalDays.value)) * 100))
+  return Number.isFinite(t) ? t : 0
+})
+
+function inferTotalDays(): number {
+  const stages = timelineData.value?.stages || []
+  if (stages.length === 0) return 0
+  return stages[stages.length - 1].end_day || 0
+}
+
+function stageLeftPercent(s: TimelineStage): number {
+  const span = Math.max(0, (s.end_day - s.start_day))
+  const midpoint = s.start_day + span / 2
+  return (midpoint / Math.max(1, totalDays.value)) * 100
+}
+
+// Prevent overlap by enforcing a minimum spacing percentage between stage card midpoints
+const adjustedStagePercents = computed<number[]>(() => {
+  const base = timelineStages.value.map(s => stageLeftPercent(s))
+  if (base.length === 0) return []
+  const minGap = 14 // percentage points of track width between card centers
+  const result: number[] = []
+  for (let i = 0; i < base.length; i++) {
+    const prev = i === 0 ? -Infinity : result[i - 1]
+    const target = base[i]
+    const safe = isFinite(prev) ? Math.max(target, prev + minGap) : target
+    result.push(Math.min(100, safe))
+  }
+  return result
+})
+
+function daysFromStart(): number {
+  // Use start_date from journal if available; otherwise approximate by 0
+  // For now we do not have instance start here; this keeps UI functional
+  return 0
+}
+
+async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
+  timelineModalOpen.value = true
+  timelineLoading.value = true
+  timelineError.value = ''
+  timelineData.value = null
+  timelinePlant.value = { plant_id: Number(jp.plant_id), name: jp.plant_name }
+  try {
+    const data = await plantApiService.getPlantGrowthTimeline(Number(jp.plant_id))
+    timelineData.value = data as unknown as TimelineResponse
+  } catch {
+    timelineError.value = 'Failed to load timeline'
+  } finally {
+    timelineLoading.value = false
+  }
+}
 
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
@@ -324,6 +482,7 @@ onMounted(async () => {
           if (up?.user) {
             if (up.user.name) try { localStorage.setItem('profile_display_name', up.user.name) } catch {}
             if (typeof up.user.suburb_id === 'number') try { localStorage.setItem('profile_suburb_id', String(up.user.suburb_id)) } catch {}
+            if (typeof up.user.id === 'number') try { localStorage.setItem('plantopia_user_id', String(up.user.id)) } catch {}
           }
           if (up?.profile) {
             if (up.profile.experience_level) try { localStorage.setItem('profile_experience', up.profile.experience_level) } catch {}
@@ -492,11 +651,25 @@ function onPlantPointerUp() {
 // Test button handler: call growth timeline API using a sample plant id
 async function testTimeline() {
   try {
-    // Prefer first favourite plant id if present; otherwise fallback to 1
-    const fav = favouritePlants.value?.[0]
-    const plantId = Number((fav as unknown as { databaseId?: number; id?: string })?.databaseId || (fav as unknown as { id?: string })?.id || 1)
-    const data = await plantApiService.getPlantGrowthTimeline(plantId)
-    // Show a light-weight preview (stage names) in console for now
+    // Prefer latest journal plant_id; fallback to favourite or default 1
+    let plantId: number | null = null
+    try {
+      if (journalPlants.value.length === 0) {
+        const email = userEmail.value
+        if (email) {
+          const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 10 })
+          journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
+        }
+      }
+      plantId = Number(journalPlants.value?.[0]?.plant_id || NaN)
+    } catch {}
+
+    if (!Number.isFinite(plantId) || !plantId || plantId <= 0) {
+      const fav = favouritePlants.value?.[0]
+      plantId = Number((fav as unknown as { databaseId?: number; id?: string })?.databaseId || (fav as unknown as { id?: string })?.id || 1)
+    }
+
+    const data = await plantApiService.getPlantGrowthTimeline(plantId as number)
     console.log('[Timeline]', data)
     alert(`Timeline fetched for plant ${plantId}. See console for details.`)
   } catch {
@@ -565,6 +738,46 @@ async function testTimeline() {
 .guide-fav-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
 .guide-fav-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; color:#111827; font-weight:700; font-size:16px; }
 .empty-fav { color:#6b7280; font-style:italic; padding:8px 0; }
+.journal-scroll { display:grid; grid-auto-flow: column; grid-auto-columns: 260px; gap: 12px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.journal-card { position:relative; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; transition: transform .2s ease, box-shadow .2s ease; }
+.journal-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
+.journal-thumb { height: 180px; background:#e5e7eb; display:flex; align-items:center; justify-content:center; }
+.journal-thumb img { width:100%; height:100%; object-fit:cover; }
+.journal-meta { position:static; background: transparent; border:none; border-radius:0; padding:10px; display:flex; flex-direction:column; gap:6px; }
+.journal-name { font-weight:700; color:#065f46; }
+.journal-sub { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { background:#ffffff; border:1px solid #e5e7eb; border-radius:9999px; padding:2px 8px; font-size:12px; color:#374151; }
+
+/* Timeline visual */
+.timeline-visual { display:flex; flex-direction: column; align-items:center; justify-content:flex-start; gap:12px; max-width: 1120px; margin: 0 auto; padding: 0 10px; min-height: 620px; }
+.tv-row { display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom: 64px; position: relative; z-index: 3; }
+.tv-label { font-weight:800; color:#065f46; }
+.tv-value { color:#374151; font-weight:700; }
+.tv-track { position:relative; height:10px; background:#eef2f7; border-radius:9999px; overflow:visible; border:1px solid #e5e7eb; margin:260px auto 260px; width: calc(100% - 160px); max-width: 980px; }
+.tv-fill { position:absolute; left:0; top:0; height:100%; background:#10b981; }
+.tv-tick { position:absolute; top:-4px; width:2px; height:18px; background:#9ca3af; }
+.tv-marker { position:absolute; top:-6px; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:12px solid #065f46; transform: translateX(-50%); z-index: 2; }
+.tv-end { position:absolute; right:0; top:-5px; width:10px; height:10px; border-radius:50%; background:#ef4444; border:2px solid #fff; box-shadow:0 0 0 2px #ef4444; }
+.tv-stats { display:flex; gap:8px; align-items:center; margin-top: 44px; position: relative; z-index: 3; }
+.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; }
+.tv-stage-card.top { bottom:40px; }
+.tv-stage-card.bottom { top:40px; }
+.tv-stage-card.top::after { content:''; position:absolute; left:50%; top:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
+.tv-stage-card.bottom::after { content:''; position:absolute; left:50%; bottom:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
+
+/* remove grid list below track (cards are on track now) */
+.tv-stages { display:none; }
+.tv-stage-title { font-weight:800; color:#065f46; margin-bottom:2px; }
+.tv-stage-range { color:#374151; font-size:12px; }
+.tv-stage-desc { color:#374151; font-size:12px; line-height:1.5; }
+
+/* Hero wrapper similar to Plant detail image card */
+.timeline-hero { width:100%; max-width:1120px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 2px solid #a7f3d0; border-radius: 16px; padding: 16px 12px; position: relative; overflow: visible; min-height: 560px; }
+
+/* Section under timeline */
+.timeline-section { width:100%; max-width: 1120px; z-index: 1; }
+.timeline-section-title { font-weight:800; color:#111827; font-size:22px; margin-top: 8px; }
+.timeline-section-divider { height:1px; background:#e5e7eb; margin-top:8px; }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }
@@ -611,10 +824,12 @@ async function testTimeline() {
 .google-btn-slot { display:inline-block; }
 
 /* Modal styles reused from other views to keep consistency */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 1rem; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:flex-start; justify-content:center; z-index: 1000; padding: 2rem 1rem; overflow-y: auto; }
 .modal-content { background:#ffffff; border-radius:16px; width:min(720px, 96%); max-height:90vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.15); }
+.modal-content.timeline-modal { width:min(1400px, 98%); max-height:none; margin: 2rem auto; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb; }
 .modal-title { font-size:1.25rem; font-weight:800; color:#065f46; }
 .modal-close { background:transparent; border:none; font-size:1.5rem; line-height:1; cursor:pointer; color:#374151; }
 .modal-body { padding:1rem 1.25rem 1.25rem; }
+.modal-body.wide { min-height: 560px; }
 </style>

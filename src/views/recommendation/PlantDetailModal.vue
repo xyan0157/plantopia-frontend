@@ -634,10 +634,27 @@ async function startTracking() {
   try {
     starting.value = true
     const pid = Number((props.plant as unknown as { databaseId?: number })?.databaseId || props.plant.id)
-    const resp = await plantApiService.startPlantTrackingByProfile({ plant_id: pid })
+    // Fill optional fields
+    const nickname = String(resolvedName.value || props.plant.name || '').trim() || undefined
+    let locationDetails: string | undefined = (recStore.lastParams?.location || '').toString().trim() || undefined
+    if (!locationDetails) {
+      try {
+        const sidRaw = localStorage.getItem('profile_suburb_id') || localStorage.getItem('profile_suburb') || ''
+        const sid = parseInt(String(sidRaw), 10)
+        if (Number.isFinite(sid)) {
+          const name = await plantApiService.getSuburbNameById(sid)
+          if (name) locationDetails = name
+        }
+      } catch {}
+    }
+    const req = { plant_id: pid, plant_nickname: nickname, location_details: locationDetails }
+    console.log('[UI][DetailModal] startTracking request', req)
+    const resp = await plantApiService.startPlantTrackingByProfile(req)
+    console.log('[UI][DetailModal] startTracking response', resp)
     alert(`Tracking started. Instance ID: ${resp.instance_id}`)
     try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
-  } catch {
+  } catch (e) {
+    console.error('[UI][DetailModal] startTracking error', e)
     alert('Failed to start tracking. Please try again later.')
   } finally {
     starting.value = false
