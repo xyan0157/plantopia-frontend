@@ -154,7 +154,7 @@ const toPalette = (c: string): Palette => {
 }
 const palette = computed<Palette>(() => toPalette(pickDominantColor()))
 const cardStyle = computed(() => ({
-  background: `linear-gradient(180deg, ${palette.value.bgStart}33 0%, ${palette.value.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`,
+  background: `linear-gradient(180deg, ${palette.value.bgStart}55 0%, ${palette.value.bgEnd}77 55%, rgba(255,255,255,0.98) 100%)`,
   animation: 'cardPulse 6s ease-in-out infinite',
   borderColor: palette.value.border
 }))
