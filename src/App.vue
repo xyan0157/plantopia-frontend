@@ -2,6 +2,7 @@
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
 import { useAuthStore } from './stores/auth'
+import AiChatWidget from '@/components/AiChatWidget.vue'
 import {
   HomeIcon,
   MagnifyingGlassIcon,
@@ -18,6 +19,12 @@ const isDarkNavbar = computed(() => false)
 const showNavbar = computed(() => route.name !== 'login')
 
 // removed logout
+
+function toggleChatbot() {
+  const panel = document.getElementById('chatbot-panel')
+  if (!panel) return
+  panel.classList.toggle('open')
+}
 </script>
 
 <template>
@@ -75,6 +82,17 @@ const showNavbar = computed(() => route.name !== 'login')
         <div class="footer-copy">© 2025 TP34 - All rights reserved.</div>
       </footer>
     </main>
+
+    <!-- Floating Chatbot -->
+    <div id="chatbot-trigger" class="chatbot-trigger" @click="toggleChatbot" title="Chat with us">
+      <!-- simple chat bubble icon -->
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+      </svg>
+    </div>
+    <div id="chatbot-panel" class="chatbot-panel">
+      <AiChatWidget />
+    </div>
   </div>
 </template>
 
@@ -262,6 +280,41 @@ html.no-vertical-scroll, body.no-vertical-scroll {
 .site-footer { margin-top: 3rem; padding: 2rem 1rem; text-align: center; color: #ffffff; position: relative; z-index: 3; }
 .footer-brand { font-weight: 800; font-size: 1.25rem; color: #ffffff; margin-bottom: 0.25rem; }
 .footer-copy { font-size: 0.875rem; color: #ffffff; }
+
+/* Floating chatbot trigger */
+.chatbot-trigger {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #ef4444;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  cursor: pointer;
+  z-index: 1200;
+}
+.chatbot-trigger:hover { background:#dc2626; }
+
+.chatbot-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  width: min(420px, 92vw);
+  height: min(540px, 70vh);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  overflow: hidden;
+  z-index: 1200;
+  display: none;
+}
+.chatbot-panel.open { display:block; }
+.chatbot-panel iframe { width:100%; height:100%; border:0; }
 
 /* Responsive adjustments for smaller screens */
 @media (max-width: 1200px) {

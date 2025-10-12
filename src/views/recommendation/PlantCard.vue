@@ -58,9 +58,11 @@
         </div>
 
         <!-- Action Button to View Plant Details -->
-        <button class="learn-more-button" @click.stop="$emit('select', plant)">
-          Learn More
-        </button>
+        <div class="actions-row">
+          <button class="learn-more-button" @click.stop="$emit('select', plant)">
+            Learn More
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -152,7 +154,7 @@ const toPalette = (c: string): Palette => {
 }
 const palette = computed<Palette>(() => toPalette(pickDominantColor()))
 const cardStyle = computed(() => ({
-  background: `linear-gradient(180deg, ${palette.value.bgStart}33 0%, ${palette.value.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`,
+  background: `linear-gradient(180deg, ${palette.value.bgStart}55 0%, ${palette.value.bgEnd}77 55%, rgba(255,255,255,0.98) 100%)`,
   animation: 'cardPulse 6s ease-in-out infinite',
   borderColor: palette.value.border
 }))
@@ -305,6 +307,8 @@ const handleImageError = (event: Event) => {
 }
 
 // requirement helpers moved to PlantRequirements component
+
+// Grow button moved to detail modal after impact section
 </script>
 
 <style scoped>
@@ -514,4 +518,6 @@ const handleImageError = (event: Event) => {
   transform: translateY(-1px);                     /* Slight lift */
   box-shadow: 0 4px 12px rgba(28, 61, 33, 0.3);   /* Add shadow */
 }
+
+.actions-row { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 </style>

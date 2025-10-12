@@ -41,6 +41,7 @@
               <span class="score-label">Recommendation Score:</span>
               <span class="score-value">{{ plant.score.toFixed(1) }}/100</span>
               <button class="impact-btn" @click="openImpact">View Impact</button>
+              <button class="grow-inline-btn" @click="startTracking" :disabled="starting">I want to grow this plant</button>
             </div>
           </div>
 
@@ -351,6 +352,7 @@ import { addToViewHistory } from '@/services/viewHistory'
 import ViewHistory from './ViewHistory.vue'
 import { renderMarkdown } from '@/services/markdownService'
 import { plantApiService } from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 import { useRecommendationsStore } from '@/stores/recommendations'
 import { usePlantsStore } from '@/stores/plants'
 import { SunIcon, MoonIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
@@ -369,6 +371,7 @@ const emit = defineEmits<{
 const router = useRouter()
 const recStore = useRecommendationsStore()
 const plantStore = usePlantsStore()
+const auth = useAuthStore()
 
 function goToGuides() {
   router.push('/guides')
@@ -619,6 +622,44 @@ watch(() => props.plant?.name, () => {
     fetchImpact()
   }
 })
+
+// Start tracking from detail modal (shown after impact)
+const starting = ref(false)
+async function startTracking() {
+  if (!props.plant) return
+  if (!auth.userIsLoggedIn) {
+    alert('Please sign in first to start tracking this plant.')
+    return
+  }
+  try {
+    starting.value = true
+    const pid = Number((props.plant as unknown as { databaseId?: number })?.databaseId || props.plant.id)
+    // Fill optional fields
+    const nickname = String(resolvedName.value || props.plant.name || '').trim() || undefined
+    let locationDetails: string | undefined = (recStore.lastParams?.location || '').toString().trim() || undefined
+    if (!locationDetails) {
+      try {
+        const sidRaw = localStorage.getItem('profile_suburb_id') || localStorage.getItem('profile_suburb') || ''
+        const sid = parseInt(String(sidRaw), 10)
+        if (Number.isFinite(sid)) {
+          const name = await plantApiService.getSuburbNameById(sid)
+          if (name) locationDetails = name
+        }
+      } catch {}
+    }
+    const req = { plant_id: pid, plant_nickname: nickname, location_details: locationDetails }
+    console.log('[UI][DetailModal] startTracking request', req)
+    const resp = await plantApiService.startPlantTrackingByProfile(req)
+    console.log('[UI][DetailModal] startTracking response', resp)
+    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+    try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
+  } catch (e) {
+    console.error('[UI][DetailModal] startTracking error', e)
+    alert('Failed to start tracking. Please try again later.')
+  } finally {
+    starting.value = false
+  }
+}
 
 // Function to get image source (Base64 or URL)
 const getImageSource = (): string => {
@@ -889,6 +930,8 @@ const resolvedEffortLabel = computed(() => {
 }
 .impact-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
 .impact-btn:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
+.grow-inline-btn { margin-left: 0.5rem; background:#10b981; color:#fff; border:none; border-radius:12px; padding:0.45rem 0.9rem; font-weight:800; cursor:pointer; }
+.grow-inline-btn[disabled] { background:#a7f3d0; cursor:not-allowed; }
 
 .info-grid {
   display: grid;
@@ -1183,6 +1226,10 @@ const resolvedEffortLabel = computed(() => {
 .kpi { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; }
 .kpi-title { color: #065f46; font-weight: 700; margin-bottom: 4px; font-size: 0.9rem; }
 .kpi-value { color: #111827; font-weight: 700; }
+
+/* Floating button bottom-right for All Plants use case */
+.float-grow-btn { position: fixed; right: 24px; bottom: 24px; background:#10b981; color:#fff; border:none; border-radius:12px; padding:0.7rem 1rem; font-weight:800; cursor:pointer; z-index: 130; box-shadow:0 10px 20px rgba(0,0,0,0.15); }
+.float-grow-btn[disabled] { background:#a7f3d0; cursor:not-allowed; }
 
 .w-5 {
   width: 1.25rem;

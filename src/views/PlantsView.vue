@@ -114,6 +114,7 @@
                           :effort="''"
                         />
                       </div>
+                      
                     </div>
                   </div>
                 </div>
@@ -163,6 +164,22 @@
                         Next &rsaquo;
                       </button>
                     </li>
+
+                  <!-- Page jump inside pagination bar -->
+                  <li class="page-jump-item" role="group" aria-label="Jump to page">
+                    <span class="jump-label">Go to</span>
+                    <input
+                      class="jump-input"
+                      type="number"
+                      min="1"
+                      :max="totalPages"
+                      v-model="pageJump"
+                      @keydown.enter.prevent="jumpToPage()"
+                      aria-label="Page number"
+                    />
+                  <span class="jump-total">/ {{ displayTotalPages }}</span>
+                    <button class="jump-btn" @click="jumpToPage" :disabled="!canJump">Go</button>
+                  </li>
                   </ul>
                 </nav>
               </div>
@@ -313,14 +330,17 @@
             </div>
             <div class="plant-tags-detail" v-if="selectedPlant.tags && selectedPlant.tags.length">
               <h4>Tags</h4>
-              <div class="tags-list">
-                <span
-                  v-for="tag in selectedPlant.tags"
-                  :key="tag"
-                  class="tag-item"
-                >
-                  {{ tag }}
-                </span>
+              <div class="tags-list-row">
+                <div class="tags-list">
+                  <span
+                    v-for="tag in selectedPlant.tags"
+                    :key="tag"
+                    class="tag-item"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+                <button class="grow-inline-btn" @click.stop="startTracking(selectedPlant as Plant)">I want to grow this plant</button>
               </div>
             </div>
           </div>
@@ -333,8 +353,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { type Plant } from '@/services/api'
+import { type Plant, plantApiService } from '@/services/api'
 import { usePlantsStore } from '@/stores/plants'
+import { useAuthStore } from '@/stores/auth'
 import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
 import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
@@ -355,32 +376,14 @@ const currentPage = ref(1)
 const plantsPerPage = 12
 const totalFromServer = ref(0)
 
-// Client-side filtering (we loaded all plants once)
-const filteredPlants = computed(() => {
-  let filtered = plants.value
-
-  // Category filter
-  if (selectedCategory.value !== 'all') {
-    filtered = filtered.filter(p => p.category === selectedCategory.value)
-  }
-
-  // Search filter
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) {
-    filtered = filtered.filter(p => {
-      const name = (p.name || '').toLowerCase()
-      const sci = (p.scientific_name || '').toLowerCase()
-      const tags = (p.tags || []).map(t => (t || '').toLowerCase())
-      return name.includes(q) || sci.includes(q) || tags.some(t => t.includes(q))
-    })
-  }
-
-  return filtered
-})
+// Server-side pagination is used; the store already returns the current page
+const filteredPlants = computed(() => plants.value)
 
 // Pagination computed properties
-const totalPlants = computed(() => filteredPlants.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalPlants.value / plantsPerPage)))
+const totalPlants = computed(() => store.totalCount)
+const totalPages = computed(() => Math.max(1, Math.ceil(Math.max(0, totalPlants.value) / plantsPerPage)))
+// Show only pages that the frontend has already loaded (progressive reveal)
+const displayTotalPages = computed(() => Math.max(1, Math.min(totalPages.value, store.loadedPagesMax || 1)))
 
 // Markdown rendering computed property
 const renderedDescription = computed(() => {
@@ -394,21 +397,22 @@ const renderedDescription = computed(() => {
 const toggleFav = (p: Plant) => store.toggleFavourite(String(p.id))
 const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
-const paginatedPlants = computed(() => {
-  const start = (currentPage.value - 1) * plantsPerPage
-  const end = start + plantsPerPage
-  return filteredPlants.value.slice(start, end)
-})
+const paginatedPlants = computed(() => filteredPlants.value)
 
 // Pagination navigation helpers
 const canGoPrevious = computed(() => currentPage.value > 1)
 const canGoNext = computed(() => currentPage.value < totalPages.value)
+const pageJump = ref<number | null>(null)
+const canJump = computed(() => {
+  const v = Number(pageJump.value)
+  return Number.isFinite(v) && v >= 1 && v <= totalPages.value && v !== currentPage.value
+})
 
 const pageNumbers = computed(() => {
   const pages = []
   const maxVisiblePages = 5
   let startPage = Math.max(1, currentPage.value - Math.floor(maxVisiblePages / 2))
-  const endPage = Math.min(totalPages.value, startPage + maxVisiblePages - 1)
+  const endPage = Math.min(displayTotalPages.value, startPage + maxVisiblePages - 1)
 
   // Adjust start page if we're near the end
   if (endPage - startPage + 1 < maxVisiblePages) {
@@ -424,14 +428,15 @@ const pageNumbers = computed(() => {
 
 // Methods
 const loadPlants = async () => {
-  // Load entire dataset once via GET /api/v1/plants; show immediately once loaded
-  const { total } = await store.preloadAllPaginated()
+  const { total } = await store.loadPage(currentPage.value, plantsPerPage, selectedCategory.value, searchQuery.value.trim())
+  // Kick off background prefetch of subsequent pages
+  store.startPrefetch(plantsPerPage, selectedCategory.value, searchQuery.value.trim())
   totalFromServer.value = total
 }
 
 const handleSearch = () => {
-  // Reset to first page when searching
   currentPage.value = 1
+  loadPlants()
 }
 
 const setCategory = (category: 'all' | 'vegetable' | 'herb' | 'flower') => {
@@ -440,15 +445,25 @@ const setCategory = (category: 'all' | 'vegetable' | 'herb' | 'flower') => {
   currentPage.value = 1
   // Keep user at top when switching via navigation
   window.scrollTo({ top: 0, behavior: 'smooth' })
+  loadPlants()
 }
 
 // Pagination methods
 const goToPage = async (page: number) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
+    await loadPlants()
     // Scroll to top of plant results
     scrollToResults()
   }
+}
+
+function jumpToPage() {
+  const v = Number(pageJump.value)
+  if (!Number.isFinite(v)) return
+  const page = Math.min(Math.max(1, Math.trunc(v)), totalPages.value)
+  pageJump.value = page
+  goToPage(page)
 }
 
 const goToPreviousPage = () => {
@@ -476,6 +491,37 @@ const selectPlant = (plant: Plant) => {
 
 const closeModal = () => {
   selectedPlant.value = null
+}
+
+// Start tracking handler
+const auth = useAuthStore()
+async function startTracking(plant: Plant) {
+  if (!auth.userIsLoggedIn) {
+    alert('Please sign in first to start tracking this plant.')
+    return
+  }
+  try {
+    const pid = Number((plant as unknown as { databaseId?: number })?.databaseId || plant.id)
+    const nickname = String(plant.name || '').trim() || undefined
+    let locationDetails: string | undefined = undefined
+    try {
+      const sidRaw = localStorage.getItem('profile_suburb_id') || localStorage.getItem('profile_suburb') || ''
+      const sid = parseInt(String(sidRaw), 10)
+      if (Number.isFinite(sid)) {
+        const name = await plantApiService.getSuburbNameById(sid)
+        if (name) locationDetails = name
+      }
+    } catch {}
+    const req = { plant_id: pid, plant_nickname: nickname, location_details: locationDetails }
+    console.log('[UI] startTracking request', req)
+    const resp = await plantApiService.startPlantTrackingByProfile(req)
+    console.log('[UI] startTracking response', resp)
+    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+  } catch (e) {
+    console.error('[UI] startTracking error', e)
+    alert('Failed to start tracking. Please try again later.')
+  }
+  try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
 }
 
 // Get image + debug step info for diagnostics
@@ -905,6 +951,8 @@ onMounted(() => {
 }
 
 .bottom-stack { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+.grow-btn { margin-top: 6px; padding: 0.5rem; background:#10b981; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; }
+.grow-btn:hover { background:#059669; }
 
 .desc-head { display:flex; align-items:center; gap:8px; }
 .desc-title-row { display:flex; align-items:baseline; justify-content:space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
@@ -1078,7 +1126,7 @@ onMounted(() => {
   color: white;
   background: #10b981;
   border-color: #10b981;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .page-item.disabled .page-link {
@@ -1092,6 +1140,15 @@ onMounted(() => {
   background: transparent;
   border-color: transparent;
 }
+
+/* Page jump styles */
+.page-jump-item { display:flex; align-items:center; gap: 0.5rem; margin-left: 0.75rem; }
+.jump-label { color:#374151; font-weight:500; }
+.jump-input { width: 64px; padding: 0.5rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; text-align:center; background:#ffffff; color:#374151; }
+.jump-input:focus { border-color:#10b981; outline:none; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
+.jump-total { color:#6b7280; }
+.jump-btn { padding: 0.5rem 0.75rem; border: 2px solid #10b981; background:#10b981; color:#fff; border-radius:8px; font-weight:600; cursor:pointer; }
+.jump-btn:disabled { background:#a7f3d0; border-color:#a7f3d0; cursor:not-allowed; }
 
 /* Modal Styles */
 .modal-overlay {
@@ -1349,4 +1406,10 @@ onMounted(() => {
 .loading-text {
   color: #ffffff;
 }
+
+/* Floating grow button specifically for All Plants detail modal */
+/* Row with tags and grow button */
+.tags-list-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.grow-inline-btn { background:#10b981; color:#fff; border:none; border-radius:12px; padding:0.6rem 1rem; font-weight:800; cursor:pointer; }
+.grow-inline-btn:hover { background:#059669; }
 </style>

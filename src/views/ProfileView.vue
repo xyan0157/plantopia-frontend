@@ -1,7 +1,7 @@
 <template>
   <div class="profile-container recommendations-bg">
     <div class="profile-card">
-      <div class="profile-header">
+      <div class="profile-header" v-if="isLoggedIn">
         <h1 class="profile-title">Hi {{ displayName }},</h1>
       </div>
 
@@ -17,48 +17,12 @@
               </div>
               <div class="edit-actions">
                 <button class="btn" @click="openEdit">Edit</button>
+                <button class="btn primary" @click="testTimeline" style="margin-left:8px;">Test Growth Timeline</button>
               </div>
             </div>
           </div>
 
-          <!-- AI Q&A -->
-          <div class="section-card ai-qa">
-            <div class="section-title-row">
-              <h3>AI Q&A</h3>
-            </div>
-            <div v-if="!hasUserId" class="user-id-warning">
-              <div class="warn-text">User ID not set. Please sign in first. For testing you can set a numeric user id manually.</div>
-              <div class="manual-id-row">
-                <input class="input" v-model="manualUserId" placeholder="Enter numeric user id" />
-                <button class="btn primary" @click="saveManualUserId">Save</button>
-              </div>
-            </div>
-            <div class="chat">
-              <div class="chat-window" ref="chatWindowRef">
-                <div v-for="m in chatMessages" :key="m.id" class="msg" :class="m.role">
-                  <div class="bubble">
-                    <img v-if="m.image" :src="m.image" class="msg-img" alt="attachment" />
-                    <div class="text">{{ m.text }}</div>
-                  </div>
-                </div>
-                <div v-if="aiLoading" class="msg assistant">
-                  <div class="bubble typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-                </div>
-              </div>
-              <div class="attach-preview" v-if="attachPreview">
-                <img :src="attachPreview" alt="preview" />
-                <button class="btn small" @click="clearAttach">Remove</button>
-              </div>
-              <div class="chat-input">
-                <label class="attach">
-                  <input type="file" accept="image/*" @change="onAttach" />
-                  +
-                </label>
-                <textarea class="input" rows="2" v-model="inputText" placeholder="Ask about your plant or describe an issue"></textarea>
-                <button class="btn primary" @click="sendMessage" :disabled="aiLoading || (!inputText.trim() && !attachPreview)">Send</button>
-              </div>
-            </div>
-          </div>
+          <!-- AI Q&A moved to floating widget -->
 
           <!-- My Plant List -->
           <div class="section-card plant-list">
@@ -108,6 +72,27 @@
           <div v-if="journalLoading" class="empty-fav">Loading...</div>
           <div v-else-if="journalError" class="empty-fav">{{ journalError }}</div>
           <div v-else-if="journalPlants.length === 0" class="empty-fav">No journal yet.</div>
+          <div v-else class="journal-scroll" ref="journalScrollRef">
+            <div
+              v-for="jp in journalPlants"
+              :key="jp.instance_id"
+              class="journal-card"
+              :style="getJournalCardStyle(jp)"
+              @click="openJournalTimelineFrom(jp)"
+              style="cursor:pointer;"
+            >
+              <div class="journal-thumb">
+                <img :src="getJournalPreviewImage(jp)" :alt="jp.plant_name" />
+              </div>
+              <div class="journal-meta">
+                <div class="journal-name">{{ jp.plant_name }}</div>
+                <div class="journal-sub">
+                  <span class="chip">Started: {{ jp.start_date || '-' }}</span>
+                  <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         </div>
 
@@ -127,6 +112,79 @@
   </div>
   <!-- Plant Detail Modal -->
   <PlantDetailModal :plant="detailPlant" @close="closeDetailModal" v-if="detailPlant" />
+
+  <!-- Timeline Modal -->
+  <div v-if="timelineModalOpen" class="modal-overlay" @click="timelineModalOpen = false">
+    <div class="modal-content timeline-modal" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">Growth Timeline - {{ timelinePlant?.name || '' }}</h2>
+        <button class="modal-close" @click="timelineModalOpen = false">&times;</button>
+      </div>
+      <div class="modal-body wide">
+        <div v-if="timelineLoading" class="empty-fav">Loading timeline...</div>
+        <div v-else-if="timelineError" class="empty-fav">{{ timelineError }}</div>
+        <div v-else-if="timelineData" class="timeline-visual">
+          <!-- Top hero area: mimic image card, but holds the timeline -->
+          <div class="timeline-hero">
+            <div class="tv-track">
+            <!-- Removed tick/marker/fill elements to show a clean baseline only -->
+            <div
+              v-for="(s, i) in timelineStages"
+              :key="'card-'+i"
+              class="tv-stage-card"
+              :class="{ top: i % 2 === 0, bottom: i % 2 === 1 }"
+              :style="{ left: equalCardPercents[i] + '%' }"
+            >
+              <div class="tv-stage-title">{{ s.stage_name }}</div>
+              <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
+              <div v-if="s.description" class="tv-stage-desc">{{ s.description }}</div>
+            </div>
+            
+            </div>
+          </div>
+
+          <!-- Section header under the timeline -->
+          <div class="timeline-section">
+            <div class="timeline-section-title">Detail & Tip</div>
+            <div class="timeline-section-divider"></div>
+            <div class="detail-grid">
+              <!-- Instance overview removed as requested -->
+              <div class="detail-col">
+                <div class="detail-card">
+                  <div class="detail-card-title">Requirements</div>
+                  <div v-if="reqLoading">Loading...</div>
+                  <div v-else-if="reqError" class="empty-fav">{{ reqError }}</div>
+                  <div v-else-if="requirements" class="detail-items">
+                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
+                      <div class="req-title">{{ cat.category }}</div>
+                      <ul class="req-list">
+                        <li v-for="(it, j) in (cat.items || [])" :key="'req-it-'+j">{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="detail-col">
+                <div class="detail-card">
+                  <div class="detail-card-title">Setup Instructions</div>
+                  <div v-if="insLoading">Loading...</div>
+                  <div v-else-if="insError" class="empty-fav">{{ insError }}</div>
+                  <ol v-else-if="instructions && Array.isArray(instructions.instructions)" class="ins-list">
+                    <li v-for="(st, si) in instructions.instructions" :key="'st-'+si">
+                      <div class="ins-step">Step {{ st.step }}: {{ st.title }}</div>
+                      <div class="ins-desc">{{ st.description }}</div>
+                      <div class="ins-meta" v-if="st.duration">Duration: {{ st.duration }}</div>
+                      <ul class="ins-tips" v-if="Array.isArray(st.tips) && st.tips.length"><li v-for="(tp, ti) in st.tips" :key="'tp-'+ti">{{ tp }}</li></ul>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Edit Profile Modal -->
   <div v-if="showEdit" class="modal-overlay" @click="closeEdit">
@@ -183,7 +241,7 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { computed, onMounted, ref, watch, nextTick } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 // import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
@@ -278,10 +336,9 @@ async function loadJournalPlantsFromBackend() {
   journalLoading.value = true
   journalError.value = ''
   try {
-    const idRaw = localStorage.getItem('plantopia_user_id') || ''
-    const userId = parseInt(idRaw, 10)
-    if (!Number.isFinite(userId) || userId <= 0) { journalPlants.value = []; return }
-    const res = await plantApiService.getUserTrackingPlants(String(userId), { active_only: true })
+    const email = userEmail.value
+    if (!email) { journalPlants.value = []; return }
+    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
     journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
   } catch {
     journalError.value = 'Failed to load journal'
@@ -291,88 +348,12 @@ async function loadJournalPlantsFromBackend() {
   }
 }
 
-// --- AI Q&A state and actions ---
-type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; image?: string | null }
-const chatMessages = ref<ChatMsg[]>([])
-const inputText = ref('')
-const attachPreview = ref<string | null>(null)
-const chatWindowRef = ref<HTMLDivElement | null>(null)
-const aiLoading = ref(false)
-const chatId = ref<number | null>(null)
-const manualUserId = ref('')
-const hasUserId = computed(() => {
-  const idRaw = localStorage.getItem('plantopia_user_id') || ''
-  const id = parseInt(idRaw, 10)
-  return Number.isFinite(id) && id > 0
-})
+// AI Q&A moved to global widget
+// Chat moved to global widget
 
-function generateId(): string {
-  try {
-    const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto
-    if (c?.randomUUID) return c.randomUUID()
-  } catch {}
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
+// generateId removed with chat logic
 
-function onAttach(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (!files || !files[0]) { attachPreview.value = null; return }
-  const reader = new FileReader()
-  reader.onload = () => { attachPreview.value = String(reader.result || '') }
-  reader.readAsDataURL(files[0])
-}
-
-function clearAttach() { attachPreview.value = null }
-
-function scrollToBottom() {
-  const el = chatWindowRef.value
-  if (el) el.scrollTop = el.scrollHeight
-}
-
-async function sendMessage() {
-  if (!inputText.value.trim() && !attachPreview.value) return
-  const userMsg: ChatMsg = { id: generateId(), role: 'user', text: inputText.value.trim(), image: attachPreview.value }
-  chatMessages.value.push(userMsg)
-  inputText.value = ''
-  attachPreview.value = null
-  await nextTick(); scrollToBottom()
-
-  aiLoading.value = true
-  try {
-    // Ensure a chat session exists
-    if (!chatId.value) {
-      const savedId = parseInt(localStorage.getItem('plantopia_user_id') || '', 10)
-      const userId = Number.isFinite(savedId) && savedId > 0 ? savedId : 0
-      if (!userId) {
-        throw new Error('Missing user id')
-      }
-      const res = await plantApiService.startGeneralChat(userId)
-      chatId.value = res.chat_id
-    }
-
-    const { reply } = await plantApiService.sendGeneralChatMessage({
-      chat_id: chatId.value!,
-      message: userMsg.text,
-      image: userMsg.image || undefined,
-    })
-    const replyMsg: ChatMsg = { id: generateId(), role: 'assistant', text: reply || 'No reply' }
-    chatMessages.value.push(replyMsg)
-  } catch {
-    const errMsg: ChatMsg = { id: generateId(), role: 'assistant', text: 'Failed to contact AI service. Please try again later.' }
-    chatMessages.value.push(errMsg)
-  } finally {
-    aiLoading.value = false
-    await nextTick(); scrollToBottom()
-  }
-}
-
-function saveManualUserId() {
-  const id = parseInt(manualUserId.value.trim(), 10)
-  if (Number.isFinite(id) && id > 0) {
-    try { localStorage.setItem('plantopia_user_id', String(id)) } catch {}
-    manualUserId.value = ''
-  }
-}
+// removed local chat handlers (handled by AiChatWidget)
 
 function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   // 1) base64 fields
@@ -398,9 +379,164 @@ function getPlantPreviewImage(p: Plant | Record<string, unknown>): string {
   return '/placeholder-plant.svg'
 }
 
+// Journal preview image (from API summary)
+function getJournalPreviewImage(jp: { image_url?: string; plant_name: string; plant_id: number }): string {
+  if (jp.image_url) return jp.image_url
+  // fallback by category unknown -> placeholder
+  return '/placeholder-plant.svg'
+}
+
+// Journal card background style (align with All Plants gradient logic)
+function getJournalCardStyle(jp: { plant_name: string }): Record<string, string> {
+  // very light heuristic based on plant name keywords to pick a palette
+  const name = String(jp.plant_name || '').toLowerCase()
+  const pick = ((): { bgStart: string; bgEnd: string } => {
+    if (name.includes('red') || name.includes('rose')) return { bgStart: '#f87171', bgEnd: '#ef4444' }
+    if (name.includes('pink')) return { bgStart: '#f472b6', bgEnd: '#ec4899' }
+    if (name.includes('purple') || name.includes('blue')) return { bgStart: '#a78bfa', bgEnd: '#8b5cf6' }
+    if (name.includes('yellow')) return { bgStart: '#f59e0b', bgEnd: '#d97706' }
+    if (name.includes('orange')) return { bgStart: '#fb923c', bgEnd: '#f97316' }
+    if (name.includes('white') || name.includes('snow')) return { bgStart: '#e5e7eb', bgEnd: '#d1d5db' }
+    if (name.includes('green')) return { bgStart: '#34d399', bgEnd: '#10b981' }
+    return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0' }
+  })()
+  const background = `linear-gradient(180deg, ${pick.bgStart}33 0%, ${pick.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`
+  return { background }
+}
+
 // Detail modal state (open on favourite click)
 const detailPlant = ref<Plant | null>(null)
 function openPlantDetail(p: Plant) { detailPlant.value = p }
+
+// Timeline modal for journal item
+const timelineModalOpen = ref(false)
+const timelineLoading = ref(false)
+const timelineError = ref('')
+type TimelineStage = { stage_name: string; start_day: number; end_day: number; description?: string }
+type TimelineResponse = { plant_id: number; total_days?: number; stages?: TimelineStage[] }
+const timelineData = ref<TimelineResponse | null>(null)
+const timelinePlant = ref<{ plant_id: number; name: string } | null>(null)
+// totalDays retained for reference but not used in equal-spacing mode
+// Remove unused tracking helpers in equal-spacing mode
+const timelineStages = computed<TimelineStage[]>(() => (timelineData.value?.stages || []).slice())
+// Removed: currentDay/currentPercent not needed
+
+// inferTotalDays not used in equal-spacing mode
+
+// stageLeftPercent removed; equal spacing is used instead
+
+// Deprecated spacing logic retained for reference but not used anymore (equal spacing now)
+
+// Equal spacing for ticks and cards regardless of day ranges
+// ticks removed from UI
+
+const equalCardPercents = computed<number[]>(() => {
+  const n = timelineStages.value.length
+  if (n === 0) return []
+  // center cards between equal ticks
+  return timelineStages.value.map((_, i) => ((i + 0.5) / Math.max(1, n)) * 100)
+})
+
+// Detail & Tip data loading for the selected instance
+const currentInstanceId = ref<number | null>(null)
+const instanceLoading = ref(false)
+const instanceError = ref('')
+type InstanceDetails = {
+  instance_id?: number
+  plant_details?: { plant_id?: number; plant_name?: string; scientific_name?: string; plant_category?: string }
+  tracking_info?: { plant_nickname?: string; start_date?: string; expected_maturity_date?: string; current_stage?: string; days_elapsed?: number; progress_percentage?: number; is_active?: boolean; user_notes?: string; location_details?: string }
+  timeline?: { stages?: Array<{ stage_name?: string; start_day?: number; end_day?: number; description?: string }> }
+  current_tips?: string[]
+}
+const instanceData = ref<InstanceDetails | null>(null)
+
+const reqLoading = ref(false)
+const reqError = ref('')
+type RequirementsResponse = { requirements?: Array<{ category?: string; items?: Array<{ item?: string; quantity?: string; optional?: boolean }> }> }
+const requirements = ref<RequirementsResponse | null>(null)
+
+const insLoading = ref(false)
+const insError = ref('')
+type InstructionsResponse = { instructions?: Array<{ step?: number; title?: string; description?: string; duration?: string; tips?: string[] }> }
+const instructions = ref<InstructionsResponse | null>(null)
+
+async function loadDetailAndTips(plantId: number) {
+  // Ensure we have instance id; try local list, then backend
+  let instanceId = currentInstanceId.value
+  if (!instanceId) {
+    const found = journalPlants.value.find(p => Number(p.plant_id) === Number(plantId))
+    if (found?.instance_id) instanceId = Number(found.instance_id)
+  }
+  if (!instanceId) {
+    try {
+      const email = userEmail.value
+      if (email) {
+        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
+        const found2 = (res?.plants || []).find((p) => Number(p.plant_id) === Number(plantId))
+        if (found2?.instance_id) instanceId = Number(found2.instance_id)
+      }
+    } catch {}
+  }
+
+  if (!instanceId) {
+    instanceError.value = 'Instance not found for this plant'
+    return
+  }
+  currentInstanceId.value = instanceId
+  instanceLoading.value = true
+  instanceError.value = ''
+  try {
+    const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
+    // tips endpoint temporarily removed; rely on detail.current_tips if provided
+    instanceData.value = detail
+  } catch {
+    instanceError.value = 'Failed to load instance details'
+  } finally {
+    instanceLoading.value = false
+  }
+
+  reqLoading.value = true
+  reqError.value = ''
+  try {
+    const r = await plantApiService.getPlantRequirements(plantId) as RequirementsResponse
+    requirements.value = r
+  } catch {
+    reqError.value = 'Failed to load requirements'
+  } finally {
+    reqLoading.value = false
+  }
+
+  insLoading.value = true
+  insError.value = ''
+  try {
+    const ins = await plantApiService.getPlantInstructions(plantId) as InstructionsResponse
+    instructions.value = ins
+  } catch {
+    insError.value = 'Failed to load instructions'
+  } finally {
+    insLoading.value = false
+  }
+}
+
+// daysFromStart removed (not used)
+
+async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
+  timelineModalOpen.value = true
+  timelineLoading.value = true
+  timelineError.value = ''
+  timelineData.value = null
+  timelinePlant.value = { plant_id: Number(jp.plant_id), name: jp.plant_name }
+  try {
+    const data = await plantApiService.getPlantGrowthTimeline(Number(jp.plant_id))
+    timelineData.value = data as unknown as TimelineResponse
+    // Load detail/tip content after timeline data
+    loadDetailAndTips(Number(jp.plant_id))
+  } catch {
+    timelineError.value = 'Failed to load timeline'
+  } finally {
+    timelineLoading.value = false
+  }
+}
 
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
@@ -429,15 +565,28 @@ onMounted(async () => {
       // Call backend to create/get user and store user_id
       ;(async () => {
         try {
-          const login = await plantApiService.googleLogin(resp?.credential || '')
-          const userId = Number(login?.user?.id || 0)
-          if (Number.isFinite(userId) && userId > 0) {
-            localStorage.setItem('plantopia_user_id', String(userId))
-          }
-          auth.userLogin(display, pic, userId)
-        } catch {
           auth.userLogin(display, pic)
-        }
+          // Persist or update user in backend (email required; optional fields included)
+          const up = await plantApiService.upsertUserByProfile()
+          // Reflect latest info from backend (if provided)
+          if (up?.user) {
+            if (up.user.name) try { localStorage.setItem('profile_display_name', up.user.name) } catch {}
+            if (typeof up.user.suburb_id === 'number') try { localStorage.setItem('profile_suburb_id', String(up.user.suburb_id)) } catch {}
+            if (typeof up.user.id === 'number') try { localStorage.setItem('plantopia_user_id', String(up.user.id)) } catch {}
+          }
+          if (up?.profile) {
+            if (up.profile.experience_level) try { localStorage.setItem('profile_experience', up.profile.experience_level) } catch {}
+            if (up.profile.garden_type) try { localStorage.setItem('profile_garden_type', up.profile.garden_type) } catch {}
+            if (typeof up.profile.available_space_m2 === 'number') try { localStorage.setItem('profile_available_space', String(up.profile.available_space_m2)) } catch {}
+            if (up.profile.climate_goals) try { localStorage.setItem('profile_climate_goal', up.profile.climate_goals) } catch {}
+          }
+          // Map id to name and update local suburb display string
+          const sid = Number(localStorage.getItem('profile_suburb_id') || '')
+          if (Number.isFinite(sid) && sid > 0) {
+            const sname = await plantApiService.getSuburbNameById(sid)
+            if (sname) try { localStorage.setItem('profile_suburb', sname) } catch {}
+          }
+        } catch {}
       })()
     },
     auto_select: false,
@@ -467,6 +616,13 @@ watch(isLoggedIn, async (v) => {
     await loadJournalPlantsFromBackend()
   }
 }, { immediate: true })
+
+// Also refresh journal when other pages signal a change
+window.addEventListener('storage', (e: StorageEvent) => {
+  if (e.key === 'journal_refresh_at') {
+    loadJournalPlantsFromBackend()
+  }
+})
 
 // Load saved profile fields
 try {
@@ -525,6 +681,26 @@ function saveEdit() {
     localStorage.setItem('profile_garden_type', gardenType.value)
     localStorage.setItem('profile_available_space', availableSpace.value)
   } catch {}
+  ;(async () => {
+    try {
+      const up = await plantApiService.upsertUserByProfile()
+      if (up?.user) {
+        if (up.user.name) try { localStorage.setItem('profile_display_name', up.user.name) } catch {}
+        if (typeof up.user.suburb_id === 'number') try { localStorage.setItem('profile_suburb_id', String(up.user.suburb_id)) } catch {}
+      }
+      if (up?.profile) {
+        if (up.profile.experience_level) try { localStorage.setItem('profile_experience', up.profile.experience_level) } catch {}
+        if (up.profile.garden_type) try { localStorage.setItem('profile_garden_type', up.profile.garden_type) } catch {}
+        if (typeof up.profile.available_space_m2 === 'number') try { localStorage.setItem('profile_available_space', String(up.profile.available_space_m2)) } catch {}
+        if (up.profile.climate_goals) try { localStorage.setItem('profile_climate_goal', up.profile.climate_goals) } catch {}
+      }
+      const sid = Number(localStorage.getItem('profile_suburb_id') || '')
+      if (Number.isFinite(sid) && sid > 0) {
+        const sname = await plantApiService.getSuburbNameById(sid)
+        if (sname) try { localStorage.setItem('profile_suburb', sname) } catch {}
+      }
+    } catch {}
+  })()
   editing.value = false
   showEdit.value = false
 }
@@ -560,6 +736,35 @@ function onPlantPointerMove(e: PointerEvent) {
 function onPlantPointerUp() {
   if (!plantDragging.value) return
   plantDragging.value = false
+}
+
+// Test button handler: call growth timeline API using a sample plant id
+async function testTimeline() {
+  try {
+    // Prefer latest journal plant_id; fallback to favourite or default 1
+    let plantId: number | null = null
+    try {
+      if (journalPlants.value.length === 0) {
+        const email = userEmail.value
+        if (email) {
+          const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 10 })
+          journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
+        }
+      }
+      plantId = Number(journalPlants.value?.[0]?.plant_id || NaN)
+    } catch {}
+
+    if (!Number.isFinite(plantId) || !plantId || plantId <= 0) {
+      const fav = favouritePlants.value?.[0]
+      plantId = Number((fav as unknown as { databaseId?: number; id?: string })?.databaseId || (fav as unknown as { id?: string })?.id || 1)
+    }
+
+    const data = await plantApiService.getPlantGrowthTimeline(plantId as number)
+    console.log('[Timeline]', data)
+    alert(`Timeline fetched for plant ${plantId}. See console for details.`)
+  } catch {
+    alert('Failed to fetch growth timeline.')
+  }
 }
 </script>
 
@@ -623,6 +828,57 @@ function onPlantPointerUp() {
 .guide-fav-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
 .guide-fav-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; color:#111827; font-weight:700; font-size:16px; }
 .empty-fav { color:#6b7280; font-style:italic; padding:8px 0; }
+.journal-scroll { display:grid; grid-auto-flow: column; grid-auto-columns: 260px; gap: 12px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.journal-card { position:relative; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; transition: transform .2s ease, box-shadow .2s ease; }
+.journal-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
+.journal-thumb { height: 180px; background:#e5e7eb; display:flex; align-items:center; justify-content:center; }
+.journal-thumb img { width:100%; height:100%; object-fit:cover; }
+.journal-meta { position:static; background: transparent; border:none; border-radius:0; padding:10px; display:flex; flex-direction:column; gap:6px; }
+.journal-name { font-weight:700; color:#065f46; }
+.journal-sub { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { background:#ffffff; border:1px solid #e5e7eb; border-radius:9999px; padding:2px 8px; font-size:12px; color:#374151; }
+
+/* Timeline visual */
+.timeline-visual { display:flex; flex-direction: column; align-items:center; justify-content:flex-start; gap:12px; max-width: 1120px; margin: 0 auto; padding: 0 10px; min-height: 620px; }
+.tv-row { display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom: 64px; position: relative; z-index: 3; }
+.tv-label { font-weight:800; color:#065f46; }
+.tv-value { color:#374151; font-weight:700; }
+.tv-track { position:relative; height:10px; background:#eef2f7; border-radius:9999px; overflow:visible; border:1px solid #e5e7eb; margin:260px auto 260px; width: calc(100% - 160px); max-width: 980px; }
+.tv-fill, .tv-tick, .tv-marker, .tv-end { display: none; }
+.tv-stats { display:flex; gap:8px; align-items:center; margin-top: 44px; position: relative; z-index: 3; }
+.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; }
+.tv-stage-card.top { bottom:40px; }
+.tv-stage-card.bottom { top:40px; }
+.tv-stage-card.top::after { content:''; position:absolute; left:50%; top:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
+.tv-stage-card.bottom::after { content:''; position:absolute; left:50%; bottom:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
+
+/* remove grid list below track (cards are on track now) */
+.tv-stages { display:none; }
+.tv-stage-title { font-weight:800; color:#065f46; margin-bottom:2px; }
+.tv-stage-range { color:#374151; font-size:12px; }
+.tv-stage-desc { color:#374151; font-size:12px; line-height:1.5; }
+
+/* Hero wrapper similar to Plant detail image card */
+.timeline-hero { width:100%; max-width:1120px; background: transparent; border: none; border-radius: 0; padding: 0; position: relative; overflow: visible; min-height: 560px; }
+
+/* Section under timeline */
+.timeline-section { width:100%; max-width: 1120px; z-index: 1; margin: 0 auto; }
+.timeline-section-title { font-weight:800; color:#111827; font-size:22px; margin-top: 8px; }
+.timeline-section-divider { height:1px; background:#e5e7eb; margin-top:8px; }
+
+.detail-grid { display:grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; align-items: start; width: 100%; margin-left: 0; margin-right: 0; }
+.detail-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; max-width: 1120px; margin: 0 auto; }
+.detail-card-title { font-weight:800; color:#065f46; margin-bottom:6px; }
+.detail-items { display:grid; gap:6px; }
+.detail-item { display:flex; gap:6px; color:#374151; }
+.detail-item .k { color:#065f46; font-weight:700; min-width:110px; }
+.tips-list, .req-list, .ins-tips { margin:6px 0 0 18px; color:#374151; }
+.req-cat { margin-top:6px; }
+.req-title { font-weight:700; color:#111827; }
+.ins-list { margin:6px 0 0 16px; color:#374151; }
+.ins-step { font-weight:700; color:#111827; }
+.ins-desc { margin-top:2px; }
+.ins-meta { font-size:12px; color:#6b7280; }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }
@@ -669,10 +925,12 @@ function onPlantPointerUp() {
 .google-btn-slot { display:inline-block; }
 
 /* Modal styles reused from other views to keep consistency */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 1rem; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:flex-start; justify-content:center; z-index: 1000; padding: 2rem 1rem; overflow-y: auto; }
 .modal-content { background:#ffffff; border-radius:16px; width:min(720px, 96%); max-height:90vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.15); }
+.modal-content.timeline-modal { width:min(1400px, 98%); max-height:none; margin: 2rem auto; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb; }
 .modal-title { font-size:1.25rem; font-weight:800; color:#065f46; }
 .modal-close { background:transparent; border:none; font-size:1.5rem; line-height:1; cursor:pointer; color:#374151; }
 .modal-body { padding:1rem 1.25rem 1.25rem; }
+.modal-body.wide { min-height: 560px; }
 </style>
