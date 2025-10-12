@@ -17,6 +17,7 @@
               </div>
               <div class="edit-actions">
                 <button class="btn" @click="openEdit">Edit</button>
+                <button class="btn primary" @click="testTimeline" style="margin-left:8px;">Test Growth Timeline</button>
               </div>
             </div>
           </div>
@@ -367,6 +368,13 @@ watch(isLoggedIn, async (v) => {
   }
 }, { immediate: true })
 
+// Also refresh journal when other pages signal a change
+window.addEventListener('storage', (e: StorageEvent) => {
+  if (e.key === 'journal_refresh_at') {
+    loadJournalPlantsFromBackend()
+  }
+})
+
 // Load saved profile fields
 try {
   const savedPref = localStorage.getItem('profile_preferences')
@@ -479,6 +487,21 @@ function onPlantPointerMove(e: PointerEvent) {
 function onPlantPointerUp() {
   if (!plantDragging.value) return
   plantDragging.value = false
+}
+
+// Test button handler: call growth timeline API using a sample plant id
+async function testTimeline() {
+  try {
+    // Prefer first favourite plant id if present; otherwise fallback to 1
+    const fav = favouritePlants.value?.[0]
+    const plantId = Number((fav as unknown as { databaseId?: number; id?: string })?.databaseId || (fav as unknown as { id?: string })?.id || 1)
+    const data = await plantApiService.getPlantGrowthTimeline(plantId)
+    // Show a light-weight preview (stage names) in console for now
+    console.log('[Timeline]', data)
+    alert(`Timeline fetched for plant ${plantId}. See console for details.`)
+  } catch {
+    alert('Failed to fetch growth timeline.')
+  }
 }
 </script>
 

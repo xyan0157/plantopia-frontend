@@ -58,9 +58,11 @@
         </div>
 
         <!-- Action Button to View Plant Details -->
-        <button class="learn-more-button" @click.stop="$emit('select', plant)">
-          Learn More
-        </button>
+        <div class="actions-row">
+          <button class="learn-more-button" @click.stop="$emit('select', plant)">
+            Learn More
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -305,6 +307,8 @@ const handleImageError = (event: Event) => {
 }
 
 // requirement helpers moved to PlantRequirements component
+
+// Grow button moved to detail modal after impact section
 </script>
 
 <style scoped>
@@ -514,4 +518,6 @@ const handleImageError = (event: Event) => {
   transform: translateY(-1px);                     /* Slight lift */
   box-shadow: 0 4px 12px rgba(28, 61, 33, 0.3);   /* Add shadow */
 }
+
+.actions-row { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 </style>

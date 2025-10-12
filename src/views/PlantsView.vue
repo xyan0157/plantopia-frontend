@@ -114,6 +114,7 @@
                           :effort="''"
                         />
                       </div>
+                      
                     </div>
                   </div>
                 </div>
@@ -313,14 +314,17 @@
             </div>
             <div class="plant-tags-detail" v-if="selectedPlant.tags && selectedPlant.tags.length">
               <h4>Tags</h4>
-              <div class="tags-list">
-                <span
-                  v-for="tag in selectedPlant.tags"
-                  :key="tag"
-                  class="tag-item"
-                >
-                  {{ tag }}
-                </span>
+              <div class="tags-list-row">
+                <div class="tags-list">
+                  <span
+                    v-for="tag in selectedPlant.tags"
+                    :key="tag"
+                    class="tag-item"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+                <button class="grow-inline-btn" @click.stop="startTracking(selectedPlant as Plant)">I want to grow this plant</button>
               </div>
             </div>
           </div>
@@ -333,8 +337,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { type Plant } from '@/services/api'
+import { type Plant, plantApiService } from '@/services/api'
 import { usePlantsStore } from '@/stores/plants'
+import { useAuthStore } from '@/stores/auth'
 import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
 import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
@@ -476,6 +481,23 @@ const selectPlant = (plant: Plant) => {
 
 const closeModal = () => {
   selectedPlant.value = null
+}
+
+// Start tracking handler
+const auth = useAuthStore()
+async function startTracking(plant: Plant) {
+  if (!auth.userIsLoggedIn) {
+    alert('Please sign in first to start tracking this plant.')
+    return
+  }
+  try {
+    const pid = Number((plant as unknown as { databaseId?: number })?.databaseId || plant.id)
+    const resp = await plantApiService.startPlantTrackingByProfile({ plant_id: pid })
+    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+  } catch {
+    alert('Failed to start tracking. Please try again later.')
+  }
+  try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
 }
 
 // Get image + debug step info for diagnostics
@@ -905,6 +927,8 @@ onMounted(() => {
 }
 
 .bottom-stack { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+.grow-btn { margin-top: 6px; padding: 0.5rem; background:#10b981; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; }
+.grow-btn:hover { background:#059669; }
 
 .desc-head { display:flex; align-items:center; gap:8px; }
 .desc-title-row { display:flex; align-items:baseline; justify-content:space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
@@ -1349,4 +1373,10 @@ onMounted(() => {
 .loading-text {
   color: #ffffff;
 }
+
+/* Floating grow button specifically for All Plants detail modal */
+/* Row with tags and grow button */
+.tags-list-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.grow-inline-btn { background:#10b981; color:#fff; border:none; border-radius:12px; padding:0.6rem 1rem; font-weight:800; cursor:pointer; }
+.grow-inline-btn:hover { background:#059669; }
 </style>

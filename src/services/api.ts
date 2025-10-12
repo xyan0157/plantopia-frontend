@@ -664,6 +664,17 @@ export class PlantRecommendationService {
     return found?.name || null
   }
 
+  // --- Tracking timeline for a plant (growth stages template) ---
+  async getPlantGrowthTimeline(plantId: number): Promise<Record<string, unknown>> {
+    try {
+      const resp = await this.fetchWithFallback(`/api/v1/tracking/timeline/${encodeURIComponent(String(plantId))}`)
+      return await resp.json()
+    } catch (e) {
+      console.error('Failed to fetch growth timeline', e)
+      throw e
+    }
+  }
+
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
     const body = { user_data, plant_id: params.plant_id, plant_nickname: params.plant_nickname, start_date: user_data.start_date, location_details: params.location_details }
@@ -722,6 +733,19 @@ export class PlantRecommendationService {
     if (options?.limit) qp.set('limit', String(options.limit))
     const qs = qp.toString()
     const path = `/api/v1/tracking/user/${encodeURIComponent(String(userId))}${qs ? `?${qs}` : ''}`
+    const response = await this.fetchWithFallback(path)
+    const data = await response.json()
+    return data as ApiUserPlantsResponse
+  }
+
+  // New: fetch user tracking plants by email (preferred in new API spec)
+  async getUserTrackingPlantsByEmail(email: string, options?: { active_only?: boolean; page?: number; limit?: number }): Promise<ApiUserPlantsResponse> {
+    const qp = new URLSearchParams()
+    if (options?.active_only !== undefined) qp.set('active_only', String(Boolean(options.active_only)))
+    if (options?.page) qp.set('page', String(options.page))
+    if (options?.limit) qp.set('limit', String(options.limit))
+    const qs = qp.toString()
+    const path = `/api/v1/tracking/user/${encodeURIComponent(String(email))}${qs ? `?${qs}` : ''}`
     const response = await this.fetchWithFallback(path)
     const data = await response.json()
     return data as ApiUserPlantsResponse
