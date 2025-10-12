@@ -127,27 +127,19 @@
           <!-- Top hero area: mimic image card, but holds the timeline -->
           <div class="timeline-hero">
             <div class="tv-track">
-            <div class="tv-fill" :style="{ width: currentPercent + '%' }"></div>
-            <div
-              v-for="(s, i) in timelineStages"
-              :key="'dot-'+i"
-              class="tv-tick"
-              :style="{ left: (s.start_day / totalDays) * 100 + '%' }"
-              :title="s.stage_name + ' (Day ' + s.start_day + ')'"
-            ></div>
+            <!-- Removed tick/marker/fill elements to show a clean baseline only -->
             <div
               v-for="(s, i) in timelineStages"
               :key="'card-'+i"
               class="tv-stage-card"
               :class="{ top: i % 2 === 0, bottom: i % 2 === 1 }"
-              :style="{ left: adjustedStagePercents[i] + '%' }"
+              :style="{ left: equalCardPercents[i] + '%' }"
             >
               <div class="tv-stage-title">{{ s.stage_name }}</div>
               <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
               <div v-if="s.description" class="tv-stage-desc">{{ s.description }}</div>
             </div>
-            <div class="tv-marker" :style="{ left: currentPercent + '%' }" title="Today"></div>
-            <div class="tv-end" title="Harvest"></div>
+            
             </div>
           </div>
 
@@ -424,39 +416,25 @@ type TimelineStage = { stage_name: string; start_day: number; end_day: number; d
 type TimelineResponse = { plant_id: number; total_days?: number; stages?: TimelineStage[] }
 const timelineData = ref<TimelineResponse | null>(null)
 const timelinePlant = ref<{ plant_id: number; name: string } | null>(null)
-const totalDays = computed(() => Number(timelineData.value?.total_days || 0) || inferTotalDays())
+// totalDays retained for reference but not used in equal-spacing mode
+// Remove unused tracking helpers in equal-spacing mode
 const timelineStages = computed<TimelineStage[]>(() => (timelineData.value?.stages || []).slice())
-const currentDay = computed(() => daysFromStart())
-const currentPercent = computed(() => {
-  const t = Math.max(0, Math.min(100, (currentDay.value / Math.max(1, totalDays.value)) * 100))
-  return Number.isFinite(t) ? t : 0
-})
+// Removed: currentDay/currentPercent not needed
 
-function inferTotalDays(): number {
-  const stages = timelineData.value?.stages || []
-  if (stages.length === 0) return 0
-  return stages[stages.length - 1].end_day || 0
-}
+// inferTotalDays not used in equal-spacing mode
 
-function stageLeftPercent(s: TimelineStage): number {
-  const span = Math.max(0, (s.end_day - s.start_day))
-  const midpoint = s.start_day + span / 2
-  return (midpoint / Math.max(1, totalDays.value)) * 100
-}
+// stageLeftPercent removed; equal spacing is used instead
 
-// Prevent overlap by enforcing a minimum spacing percentage between stage card midpoints
-const adjustedStagePercents = computed<number[]>(() => {
-  const base = timelineStages.value.map(s => stageLeftPercent(s))
-  if (base.length === 0) return []
-  const minGap = 14 // percentage points of track width between card centers
-  const result: number[] = []
-  for (let i = 0; i < base.length; i++) {
-    const prev = i === 0 ? -Infinity : result[i - 1]
-    const target = base[i]
-    const safe = isFinite(prev) ? Math.max(target, prev + minGap) : target
-    result.push(Math.min(100, safe))
-  }
-  return result
+// Deprecated spacing logic retained for reference but not used anymore (equal spacing now)
+
+// Equal spacing for ticks and cards regardless of day ranges
+// ticks removed from UI
+
+const equalCardPercents = computed<number[]>(() => {
+  const n = timelineStages.value.length
+  if (n === 0) return []
+  // center cards between equal ticks
+  return timelineStages.value.map((_, i) => ((i + 0.5) / Math.max(1, n)) * 100)
 })
 
 // Detail & Tip data loading for the selected instance
@@ -540,11 +518,7 @@ async function loadDetailAndTips(plantId: number) {
   }
 }
 
-function daysFromStart(): number {
-  // Use start_date from journal if available; otherwise approximate by 0
-  // For now we do not have instance start here; this keeps UI functional
-  return 0
-}
+// daysFromStart removed (not used)
 
 async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
   timelineModalOpen.value = true
@@ -870,10 +844,7 @@ async function testTimeline() {
 .tv-label { font-weight:800; color:#065f46; }
 .tv-value { color:#374151; font-weight:700; }
 .tv-track { position:relative; height:10px; background:#eef2f7; border-radius:9999px; overflow:visible; border:1px solid #e5e7eb; margin:260px auto 260px; width: calc(100% - 160px); max-width: 980px; }
-.tv-fill { position:absolute; left:0; top:0; height:100%; background:#10b981; }
-.tv-tick { position:absolute; top:-4px; width:2px; height:18px; background:#9ca3af; }
-.tv-marker { position:absolute; top:-6px; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:12px solid #065f46; transform: translateX(-50%); z-index: 2; }
-.tv-end { position:absolute; right:0; top:-5px; width:10px; height:10px; border-radius:50%; background:#ef4444; border:2px solid #fff; box-shadow:0 0 0 2px #ef4444; }
+.tv-fill, .tv-tick, .tv-marker, .tv-end { display: none; }
 .tv-stats { display:flex; gap:8px; align-items:center; margin-top: 44px; position: relative; z-index: 3; }
 .tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; }
 .tv-stage-card.top { bottom:40px; }
