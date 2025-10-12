@@ -341,6 +341,13 @@
       </div>
     </div>
   </div>
+
+  <!-- Sign-in Modal -->
+  <SignInModal
+    v-if="showSignIn"
+    :message="signInMessage"
+    @close="showSignIn = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -356,6 +363,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRecommendationsStore } from '@/stores/recommendations'
 import { usePlantsStore } from '@/stores/plants'
 import { SunIcon, MoonIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
+import SignInModal from '@/components/SignInModal.vue'
 
 // Component props - receives plant data or null when modal is closed
 const props = defineProps<{
@@ -372,6 +380,13 @@ const router = useRouter()
 const recStore = useRecommendationsStore()
 const plantStore = usePlantsStore()
 const auth = useAuthStore()
+// Sign-in modal state
+const showSignIn = ref(false)
+const signInMessage = ref('')
+function promptSignIn(message: string) {
+  signInMessage.value = message
+  showSignIn.value = true
+}
 
 function goToGuides() {
   router.push('/guides')
@@ -391,7 +406,7 @@ const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.p
 async function toggleFav() {
   if (!props.plant) return
   const email = localStorage.getItem('plantopia_user_email') || ''
-  if (!email) { alert('Please sign in to use favourites.'); return }
+  if (!email) { promptSignIn('Please sign in to use favourites.'); return }
   if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
   await plantStore.toggleFavourite(String(props.plant.id))
 }
@@ -637,7 +652,7 @@ const starting = ref(false)
 async function startTracking() {
   if (!props.plant) return
   if (!auth.userIsLoggedIn) {
-    alert('Please sign in first to start tracking this plant.')
+    promptSignIn('Please sign in first to start tracking this plant.')
     return
   }
   try {
@@ -669,6 +684,8 @@ async function startTracking() {
     starting.value = false
   }
 }
+
+// No explicit sign-in redirect per request; OK simply closes
 
 // Function to get image source (Base64 or URL)
 const getImageSource = (): string => {

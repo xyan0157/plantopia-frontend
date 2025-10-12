@@ -111,20 +111,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Sign-in Modal -->
+    <SignInModal
+      v-if="showSignIn"
+      :message="signInMessage"
+      @close="showSignIn = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+// router import removed; not used for OK-only modal
 import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/markdownApi'
 import { renderMarkdown } from '@/services/markdownService'
 import { useGuidesStore } from '@/stores/guides'
+import SignInModal from '@/components/SignInModal.vue'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const files = ref<MarkdownFileSummary[]>([])
 const guides = useGuidesStore()
+// Sign-in modal state
+const showSignIn = ref(false)
+const signInMessage = ref('')
+function promptSignIn(message: string) {
+  signInMessage.value = message
+  showSignIn.value = true
+}
+// No explicit sign-in redirect per request; OK simply closes
 const categories = computed<MarkdownCategory[]>(() => guides.categories)
 const selectedCategory = ref<string>('')
 const mode = ref<'categories' | 'category'>('categories')
@@ -350,7 +367,7 @@ const isFavActive = computed(() => {
 async function toggleFavActive() {
   if (!activeFile.value) return
   const email = localStorage.getItem('plantopia_user_email') || ''
-  if (!email) { alert('Please sign in to use favourites.'); return }
+  if (!email) { promptSignIn('Please sign in to use favourites.'); return }
   await guides.toggleFavouriteGuide(selectedCategory.value, activeFile.value.filename)
 }
 
