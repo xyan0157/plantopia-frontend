@@ -215,8 +215,8 @@
         <button class="modal-close" @click="timelineModalOpen = false">&times;</button>
       </div>
       <div class="modal-body wide">
-        <div v-if="timelineLoading" class="empty-fav">Loading timeline...</div>
-        <div v-else-if="timelineError" class="empty-fav">{{ timelineError }}</div>
+        <!-- Inline loading removed; blocking LoadingModal is used instead -->
+        <div v-if="timelineError" class="empty-fav">{{ timelineError }}</div>
         <div v-else-if="timelineData" class="timeline-visual">
           <!-- Top hero area: mimic image card, but holds the timeline -->
           <div class="timeline-hero">
@@ -267,8 +267,8 @@
                   @click="openHelpChat"
                 >Help</button>
               </div>
-                  <div v-if="reqLoading">Loading...</div>
-                  <div v-else-if="reqError" class="empty-fav">{{ reqError }}</div>
+                  <!-- Inline loading removed; rely on LoadingModal -->
+                  <div v-if="reqError" class="empty-fav">{{ reqError }}</div>
                   <div v-else-if="requirements && !showChecklist" class="detail-items">
                     <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
                       <div class="req-title">{{ cat.category }}</div>
@@ -299,8 +299,8 @@
               <div class="detail-col">
                 <div class="detail-card">
                   <div class="detail-card-title">Setup Instructions</div>
-                  <div v-if="insLoading">Loading...</div>
-                  <div v-else-if="insError" class="empty-fav">{{ insError }}</div>
+                  <!-- Inline loading removed; rely on LoadingModal -->
+                  <div v-if="insError" class="empty-fav">{{ insError }}</div>
                   <ol v-else-if="instructions && Array.isArray(instructions.instructions)" class="ins-list">
                     <li v-for="(st, si) in instructions.instructions" :key="'st-'+si">
                       <div class="ins-step">Step {{ st.step }}: {{ st.title }}</div>
@@ -836,6 +836,8 @@ async function startGrowing() {
 async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
   timelineModalOpen.value = true
   timelineLoading.value = true
+  // Show blocking loading overlay until timeline + details + requirements + instructions are all loaded
+  loadingModal.value = { show: true, message: 'Loading timeline...' }
   timelineError.value = ''
   timelineData.value = null
   timelinePlant.value = { plant_id: Number(jp.plant_id), name: jp.plant_name }
@@ -843,13 +845,14 @@ async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: strin
     const data = await plantApiService.getPlantGrowthTimeline(Number(jp.plant_id))
     timelineData.value = data as unknown as TimelineResponse
     // Load detail/tip content after timeline data
-    loadDetailAndTips(Number(jp.plant_id))
+    await loadDetailAndTips(Number(jp.plant_id))
     // Daily auto update check when opening timeline
     await ensureDailyAutoUpdate()
   } catch {
     timelineError.value = 'Failed to load timeline'
   } finally {
     timelineLoading.value = false
+    loadingModal.value = { show: false, message: '' }
   }
 }
 
