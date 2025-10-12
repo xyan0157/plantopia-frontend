@@ -155,6 +155,39 @@
           <div class="timeline-section">
             <div class="timeline-section-title">Detail & Tip</div>
             <div class="timeline-section-divider"></div>
+            <div class="detail-grid">
+              <!-- Instance overview removed as requested -->
+              <div class="detail-col">
+                <div class="detail-card">
+                  <div class="detail-card-title">Requirements</div>
+                  <div v-if="reqLoading">Loading...</div>
+                  <div v-else-if="reqError" class="empty-fav">{{ reqError }}</div>
+                  <div v-else-if="requirements" class="detail-items">
+                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
+                      <div class="req-title">{{ cat.category }}</div>
+                      <ul class="req-list">
+                        <li v-for="(it, j) in (cat.items || [])" :key="'req-it-'+j">{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="detail-col">
+                <div class="detail-card">
+                  <div class="detail-card-title">Setup Instructions</div>
+                  <div v-if="insLoading">Loading...</div>
+                  <div v-else-if="insError" class="empty-fav">{{ insError }}</div>
+                  <ol v-else-if="instructions && Array.isArray(instructions.instructions)" class="ins-list">
+                    <li v-for="(st, si) in instructions.instructions" :key="'st-'+si">
+                      <div class="ins-step">Step {{ st.step }}: {{ st.title }}</div>
+                      <div class="ins-desc">{{ st.description }}</div>
+                      <div class="ins-meta" v-if="st.duration">Duration: {{ st.duration }}</div>
+                      <ul class="ins-tips" v-if="Array.isArray(st.tips) && st.tips.length"><li v-for="(tp, ti) in st.tips" :key="'tp-'+ti">{{ tp }}</li></ul>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -426,6 +459,87 @@ const adjustedStagePercents = computed<number[]>(() => {
   return result
 })
 
+// Detail & Tip data loading for the selected instance
+const currentInstanceId = ref<number | null>(null)
+const instanceLoading = ref(false)
+const instanceError = ref('')
+type InstanceDetails = {
+  instance_id?: number
+  plant_details?: { plant_id?: number; plant_name?: string; scientific_name?: string; plant_category?: string }
+  tracking_info?: { plant_nickname?: string; start_date?: string; expected_maturity_date?: string; current_stage?: string; days_elapsed?: number; progress_percentage?: number; is_active?: boolean; user_notes?: string; location_details?: string }
+  timeline?: { stages?: Array<{ stage_name?: string; start_day?: number; end_day?: number; description?: string }> }
+  current_tips?: string[]
+}
+const instanceData = ref<InstanceDetails | null>(null)
+
+const reqLoading = ref(false)
+const reqError = ref('')
+type RequirementsResponse = { requirements?: Array<{ category?: string; items?: Array<{ item?: string; quantity?: string; optional?: boolean }> }> }
+const requirements = ref<RequirementsResponse | null>(null)
+
+const insLoading = ref(false)
+const insError = ref('')
+type InstructionsResponse = { instructions?: Array<{ step?: number; title?: string; description?: string; duration?: string; tips?: string[] }> }
+const instructions = ref<InstructionsResponse | null>(null)
+
+async function loadDetailAndTips(plantId: number) {
+  // Ensure we have instance id; try local list, then backend
+  let instanceId = currentInstanceId.value
+  if (!instanceId) {
+    const found = journalPlants.value.find(p => Number(p.plant_id) === Number(plantId))
+    if (found?.instance_id) instanceId = Number(found.instance_id)
+  }
+  if (!instanceId) {
+    try {
+      const email = userEmail.value
+      if (email) {
+        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
+        const found2 = (res?.plants || []).find((p) => Number(p.plant_id) === Number(plantId))
+        if (found2?.instance_id) instanceId = Number(found2.instance_id)
+      }
+    } catch {}
+  }
+
+  if (!instanceId) {
+    instanceError.value = 'Instance not found for this plant'
+    return
+  }
+  currentInstanceId.value = instanceId
+  instanceLoading.value = true
+  instanceError.value = ''
+  try {
+    const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
+    // tips endpoint temporarily removed; rely on detail.current_tips if provided
+    instanceData.value = detail
+  } catch {
+    instanceError.value = 'Failed to load instance details'
+  } finally {
+    instanceLoading.value = false
+  }
+
+  reqLoading.value = true
+  reqError.value = ''
+  try {
+    const r = await plantApiService.getPlantRequirements(plantId) as RequirementsResponse
+    requirements.value = r
+  } catch {
+    reqError.value = 'Failed to load requirements'
+  } finally {
+    reqLoading.value = false
+  }
+
+  insLoading.value = true
+  insError.value = ''
+  try {
+    const ins = await plantApiService.getPlantInstructions(plantId) as InstructionsResponse
+    instructions.value = ins
+  } catch {
+    insError.value = 'Failed to load instructions'
+  } finally {
+    insLoading.value = false
+  }
+}
+
 function daysFromStart(): number {
   // Use start_date from journal if available; otherwise approximate by 0
   // For now we do not have instance start here; this keeps UI functional
@@ -441,6 +555,8 @@ async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: strin
   try {
     const data = await plantApiService.getPlantGrowthTimeline(Number(jp.plant_id))
     timelineData.value = data as unknown as TimelineResponse
+    // Load detail/tip content after timeline data
+    loadDetailAndTips(Number(jp.plant_id))
   } catch {
     timelineError.value = 'Failed to load timeline'
   } finally {
@@ -772,12 +888,26 @@ async function testTimeline() {
 .tv-stage-desc { color:#374151; font-size:12px; line-height:1.5; }
 
 /* Hero wrapper similar to Plant detail image card */
-.timeline-hero { width:100%; max-width:1120px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 2px solid #a7f3d0; border-radius: 16px; padding: 16px 12px; position: relative; overflow: visible; min-height: 560px; }
+.timeline-hero { width:100%; max-width:1120px; background: transparent; border: none; border-radius: 0; padding: 0; position: relative; overflow: visible; min-height: 560px; }
 
 /* Section under timeline */
-.timeline-section { width:100%; max-width: 1120px; z-index: 1; }
+.timeline-section { width:100%; max-width: 1120px; z-index: 1; margin: 0 auto; }
 .timeline-section-title { font-weight:800; color:#111827; font-size:22px; margin-top: 8px; }
 .timeline-section-divider { height:1px; background:#e5e7eb; margin-top:8px; }
+
+.detail-grid { display:grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; align-items: start; width: 100%; margin-left: 0; margin-right: 0; }
+.detail-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; max-width: 1120px; margin: 0 auto; }
+.detail-card-title { font-weight:800; color:#065f46; margin-bottom:6px; }
+.detail-items { display:grid; gap:6px; }
+.detail-item { display:flex; gap:6px; color:#374151; }
+.detail-item .k { color:#065f46; font-weight:700; min-width:110px; }
+.tips-list, .req-list, .ins-tips { margin:6px 0 0 18px; color:#374151; }
+.req-cat { margin-top:6px; }
+.req-title { font-weight:700; color:#111827; }
+.ins-list { margin:6px 0 0 16px; color:#374151; }
+.ins-step { font-weight:700; color:#111827; }
+.ins-desc { margin-top:2px; }
+.ins-meta { font-size:12px; color:#6b7280; }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }

@@ -675,6 +675,60 @@ export class PlantRecommendationService {
     }
   }
 
+  // --- Tracking: Instance details & operations ---
+  async getPlantInstanceDetails(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}`)
+    return await resp.json()
+  }
+
+  async getPlantInstanceTips(instanceId: number, limit: number = 3): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams()
+    if (limit) qs.set('limit', String(limit))
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/tips${qs.toString() ? `?${qs.toString()}` : ''}`)
+    return await resp.json()
+  }
+
+  async updatePlantInstanceProgress(instanceId: number, body: { current_stage?: string; user_notes?: string; location_details?: string }): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/progress`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    return await resp.json()
+  }
+
+  async initializeChecklistForInstance(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/initialize-checklist`, { method: 'POST' })
+    return await resp.json()
+  }
+
+  async completeChecklistItem(payload: { instance_id: number; checklist_item_key: string; is_completed: boolean; user_notes?: string }): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback('/api/v1/tracking/checklist/complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    })
+    return await resp.json()
+  }
+
+  async updateInstanceNickname(instanceId: number, plant_nickname: string): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/nickname`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_nickname })
+    })
+    return await resp.json()
+  }
+
+  async autoUpdateInstanceStage(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/auto-update-stage`, { method: 'POST' })
+    return await resp.json()
+  }
+
+  async getPlantRequirements(plantId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/requirements/${encodeURIComponent(String(plantId))}`)
+    return await resp.json()
+  }
+
+  async getPlantInstructions(plantId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instructions/${encodeURIComponent(String(plantId))}`)
+    return await resp.json()
+  }
+
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
     // Match backend schema exactly; include optional fields as empty strings when absent
