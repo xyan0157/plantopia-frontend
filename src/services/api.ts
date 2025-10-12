@@ -688,7 +688,7 @@ export class PlantRecommendationService {
     return await resp.json()
   }
 
-  async updatePlantInstanceProgress(instanceId: number, body: { current_stage?: string; user_notes?: string; location_details?: string }): Promise<Record<string, unknown>> {
+  async updatePlantInstanceProgress(instanceId: number, body: { current_stage?: string; user_notes?: string; location_details?: string; align_to_stage_start?: boolean }): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/progress`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     })
@@ -719,6 +719,15 @@ export class PlantRecommendationService {
     return await resp.json()
   }
 
+  // New: explicitly mark an instance as started growing
+  async startGrowingInstance(instanceId: number, startDate?: string): Promise<Record<string, unknown>> {
+    const body = startDate ? { start_date: startDate } : {}
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/start-growing`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    try { return await resp.json() } catch { return {} }
+  }
+
   async getPlantRequirements(plantId: number): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/requirements/${encodeURIComponent(String(plantId))}`)
     return await resp.json()
@@ -727,6 +736,13 @@ export class PlantRecommendationService {
   async getPlantInstructions(plantId: number): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/instructions/${encodeURIComponent(String(plantId))}`)
     return await resp.json()
+  }
+
+  // --- Tracking: Delete/Deactivate a plant instance (remove from journal) ---
+  async deletePlantInstance(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}`, { method: 'DELETE' })
+    // Backend may return empty body; try json, else return {}
+    try { return await resp.json() } catch { return {} }
   }
 
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
@@ -812,7 +828,7 @@ export class PlantRecommendationService {
     return { reply: data.ai_response || '', token_warning: Boolean(data.token_warning), total_tokens: data.total_tokens }
   }
 
-  // (temporary suburbs helper removed)
+    // (temporary suburbs helper removed)
 
   // --- Tracking: Get user's plant instances (by email as user_id) ---
   async getUserTrackingPlants(userId: string, options?: { active_only?: boolean; page?: number; limit?: number }): Promise<ApiUserPlantsResponse> {
@@ -850,6 +866,52 @@ export class PlantRecommendationService {
       // If unauthorized or endpoint missing, return empty list gracefully
       return []
     }
+  }
+
+  // Favorites (email-scoped)
+  async getFavoritesByEmail(email: string): Promise<ApiFavoriteItem[]> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites?${qp.toString()}`)
+      const data = await resp.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch { return [] }
+  }
+
+  async addFavoriteByEmail(email: string, plantId: number, notes?: string): Promise<ApiFavoriteItem | null> {
+    try {
+      const body = { email, plant_id: Number(plantId), ...(notes ? { notes } : {}) }
+      try { console.log('[Favorites][Plant] POST /api/v1/favorites request', body) } catch {}
+      const resp = await this.fetchWithFallback('/api/v1/favorites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await resp.json()
+      try { console.log('[Favorites][Plant] response', data) } catch {}
+      return (data || null) as ApiFavoriteItem | null
+    } catch { return null }
+  }
+
+  async removeFavoriteByEmail(plantId: number, email: string): Promise<{ removed: boolean }> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites/${encodeURIComponent(String(plantId))}?${qp.toString()}`, { method: 'DELETE' })
+      try { return await resp.json() } catch { return { removed: true } }
+    } catch { return { removed: false } }
+  }
+
+  async syncFavoritesByEmail(email: string, favoritePlantIds: number[]): Promise<ApiFavoriteItem[]> {
+    try {
+      const resp = await this.fetchWithFallback('/api/v1/favorites/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, favorite_plant_ids: favoritePlantIds }) })
+      const data = await resp.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch { return [] }
+  }
+
+  async checkFavoriteByEmail(plantId: number, email: string): Promise<{ is_favorite: boolean }> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites/check/${encodeURIComponent(String(plantId))}?${qp.toString()}`)
+      const data = await resp.json()
+      return { is_favorite: Boolean((data as { is_favorite?: boolean }).is_favorite) }
+    } catch { return { is_favorite: false } }
   }
 
   // Transform All Plants API response to frontend Plant interface

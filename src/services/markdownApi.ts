@@ -67,6 +67,43 @@ export class MarkdownApiService {
     const res = await this.fetchWithFallback(endpoint)
     return res.json()
   }
+
+  // --- Guides Favorites (email-scoped) ---
+  async addGuideFavorite(email: string, guideName: string, category?: string, notes?: string): Promise<Record<string, unknown> | null> {
+    const body: Record<string, unknown> = { email, guide_name: guideName }
+    if (category) body.category = category
+    if (notes) body.notes = notes
+    try { console.log('[Guides][Favorite] POST /api/v1/guides/favorites request', body) } catch {}
+    const res = await this.fetchWithFallback('/api/v1/guides/favorites', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    try {
+      const json = await res.json()
+      try { console.log('[Guides][Favorite] response', json) } catch {}
+      return json
+    } catch { return null }
+  }
+
+  async removeGuideFavorite(guideName: string, email: string): Promise<{ removed: boolean }> {
+    const qp = new URLSearchParams({ email })
+    const res = await this.fetchWithFallback(`/api/v1/guides/favorites/${encodeURIComponent(guideName)}?${qp.toString()}`, { method: 'DELETE' })
+    try { return await res.json() } catch { return { removed: true } }
+  }
+
+  async getGuideFavoritesByEmail(email: string): Promise<Array<{ id: number; guide_name: string; category?: string; notes?: string; created_at?: string }>> {
+    const qp = new URLSearchParams({ email })
+    const res = await this.fetchWithFallback(`/api/v1/guides/favorites/user?${qp.toString()}`)
+    const json = await res.json()
+    const list = (json as { favorites?: unknown }).favorites
+    return Array.isArray(list) ? (list as Array<{ id: number; guide_name: string; category?: string; notes?: string; created_at?: string }>) : []
+  }
+
+  async checkGuideFavorite(guideName: string, email: string): Promise<{ is_favorite: boolean }> {
+    const qp = new URLSearchParams({ email })
+    const res = await this.fetchWithFallback(`/api/v1/guides/favorites/check/${encodeURIComponent(guideName)}?${qp.toString()}`)
+    const json = await res.json()
+    return { is_favorite: Boolean((json as { is_favorite?: boolean }).is_favorite) }
+  }
 }
 
 export const markdownApiService = new MarkdownApiService()

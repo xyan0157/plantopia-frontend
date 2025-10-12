@@ -388,7 +388,13 @@ const renderedDescription = computed(() => {
 })
 
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
-function toggleFav() { if (props.plant) plantStore.toggleFavourite(String(props.plant.id)) }
+async function toggleFav() {
+  if (!props.plant) return
+  const email = localStorage.getItem('plantopia_user_email') || ''
+  if (!email) { alert('Please sign in to use favourites.'); return }
+  if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
+  await plantStore.toggleFavourite(String(props.plant.id))
+}
 
 // Companion planting parsing (fields provided in plant API responses as comma-separated strings)
 const parseCompanions = (s?: string): string[] => {
@@ -454,6 +460,9 @@ watch(() => props.plant, (newPlant) => {
     }, 100)
   }
 }, { immediate: true })
+
+// Ensure favourites loaded when modal opens
+watch(() => props.plant?.id, async (id) => { if (id) await plantStore.loadFavouritesFromApi() })
 
 // Handle plant selection from history
 const handleHistoryPlantSelect = (plant: Plant) => {
@@ -651,7 +660,7 @@ async function startTracking() {
     console.log('[UI][DetailModal] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI][DetailModal] startTracking response', resp)
-    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+    alert('Please check detail in Journal')
     try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
   } catch (e) {
     console.error('[UI][DetailModal] startTracking error', e)

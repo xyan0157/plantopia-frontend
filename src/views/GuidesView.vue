@@ -89,7 +89,16 @@
               <div class="guide-modal-dialog" role="dialog" aria-modal="true">
               <div class="guide-modal-header">
                 <div class="guide-modal-title">{{ (activeFile && (activeFile.title || activeFile.filename)) || '' }}</div>
-                <button class="guide-modal-close" @click="closeModal" aria-label="Close">&times;</button>
+                <div class="guide-fav-actions">
+                  <button class="fav-btn" :class="{ active: isFavActive }" @click.stop="toggleFavActive" aria-label="favourite">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"
+                        :fill="isFavActive ? 'currentColor' : 'none'"
+                        :stroke="isFavActive ? 'none' : 'currentColor'" stroke-width="2"/>
+                    </svg>
+                  </button>
+                  <button class="guide-modal-close" @click="closeModal" aria-label="Close">&times;</button>
+                </div>
               </div>
                 <div class="guide-modal-body">
                   <div v-if="fileLoading" class="placeholder-text">Loading article...</div>
@@ -137,6 +146,7 @@ onMounted(async () => {
   error.value = null
   try {
     await guides.ensureLoaded()
+    await guides.ensureFavouritesLoaded()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load guides'
   } finally {
@@ -331,6 +341,18 @@ const fileLoading = ref(false)
 const fileError = ref<string | null>(null)
 const renderedContent = ref('')
 const readingMinutes = ref(1)
+
+// favourite state for active file
+const isFavActive = computed(() => {
+  if (!activeFile.value) return false
+  return guides.isFavouriteGuide(selectedCategory.value, activeFile.value.filename)
+})
+async function toggleFavActive() {
+  if (!activeFile.value) return
+  const email = localStorage.getItem('plantopia_user_email') || ''
+  if (!email) { alert('Please sign in to use favourites.'); return }
+  await guides.toggleFavouriteGuide(selectedCategory.value, activeFile.value.filename)
+}
 
 async function openFile(f: MarkdownFileSummary) {
   activeFile.value = f
@@ -556,6 +578,10 @@ function onKeydown(e: KeyboardEvent) {
 .guide-modal-dialog { width: min(960px, 100%); max-height: 85vh; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35); display: flex; flex-direction: column; }
 .guide-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
 .guide-modal-title { font-weight: 700; color: #065f46; }
+.guide-fav-actions { display:flex; align-items:center; gap:8px; }
+.fav-btn { border:none; background:transparent; line-height:1; cursor:pointer; color:#9ca3af; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+.fav-btn svg { width:18px; height:18px; }
+.fav-btn.active { color:#10b981; }
 .guide-meta { color:#6b7280; font-size:12px; margin-top:2px; display:flex; align-items:center; gap:6px; }
 .guide-chip { background:#e8f6ee; color:#065f46; border:1px solid #a7f3d0; padding:2px 8px; border-radius:9999px; font-weight:700; }
 .dot { opacity:.6; }

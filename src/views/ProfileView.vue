@@ -17,7 +17,7 @@
               </div>
               <div class="edit-actions">
                 <button class="btn" @click="openEdit">Edit</button>
-                <button class="btn primary" @click="testTimeline" style="margin-left:8px;">Test Growth Timeline</button>
+                
               </div>
             </div>
           </div>
@@ -29,7 +29,8 @@
             <div class="section-title-row">
               <h3>Favourite Plants</h3>
             </div>
-            <div v-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
+            <div v-if="!plantsStore.favouritesLoaded" class="empty-fav">Loading...</div>
+            <div v-else-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
             <div v-else>
               <div
                 class="plant-scroll"
@@ -56,7 +57,8 @@
           <div class="section-title-row">
             <h3>My Guide List</h3>
           </div>
-          <div v-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
+          <div v-if="guidesStore.favouritesLoading || !guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
+          <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
           <ul v-else class="guide-fav-ul">
             <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
               {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
@@ -87,8 +89,16 @@
               <div class="journal-meta">
                 <div class="journal-name">{{ jp.plant_name }}</div>
                 <div class="journal-sub">
+                  <div class="journal-row" v-if="isJournalStarted(jp.instance_id)">
                   <span class="chip">Started: {{ jp.start_date || '-' }}</span>
+                  </div>
+                  <div class="journal-row stage-row" v-if="isJournalStarted(jp.instance_id)">
                   <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
+                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                  </div>
+                  <div class="journal-row stage-row" v-else>
+                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -110,6 +120,46 @@
       </div>
     </div>
   </div>
+
+  <!-- Info Modal (generic) -->
+  <div v-if="infoOpen" class="info-overlay" @click="closeInfo">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">{{ infoTitle }}</h2>
+        <button class="modal-close" @click="closeInfo">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="placeholder-text">{{ infoMessage }}</div>
+        <div style="text-align:right; margin-top: 8px;">
+          <button class="btn-green" @click="closeInfo">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Chat Modal -->
+  <div v-if="helpChatOpen" class="help-overlay" @click="closeHelpChat">
+    <div class="modal-content help-modal" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">Help Chat</h2>
+        <button class="modal-close" @click="closeHelpChat">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div v-if="chatLoading" class="placeholder-text">Connecting...</div>
+        <div v-else class="chat-box">
+          <div class="chat-messages">
+            <div v-for="(m,i) in chatMessages" :key="'m-'+i" class="msg" :class="m.role">
+              <div class="bubble" v-html="renderChat(m.text)"></div>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <input class="chat-input" v-model="chatInput" @keydown.enter.prevent="" placeholder="Type your question..." />
+            <button class="btn-green" :disabled="chatInput.trim().length===0" @click="sendChatHandler">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- Plant Detail Modal -->
   <PlantDetailModal :plant="detailPlant" @close="closeDetailModal" v-if="detailPlant" />
 
@@ -126,39 +176,77 @@
         <div v-else-if="timelineData" class="timeline-visual">
           <!-- Top hero area: mimic image card, but holds the timeline -->
           <div class="timeline-hero">
-            <div class="tv-track">
+            <div class="tv-track" :class="{ growing }">
+              <div class="tv-progress" :style="{ width: progressPercent + '%' }"></div>
             <!-- Removed tick/marker/fill elements to show a clean baseline only -->
             <div
               v-for="(s, i) in timelineStages"
               :key="'card-'+i"
               class="tv-stage-card"
-              :class="{ top: i % 2 === 0, bottom: i % 2 === 1 }"
+              :class="{ top: i % 2 === 0, bottom: i % 2 === 1, selected: isStageSelected(s.stage_name) }"
               :style="{ left: equalCardPercents[i] + '%' }"
+              @click="onSelectStage(s.stage_name)"
             >
               <div class="tv-stage-title">{{ s.stage_name }}</div>
               <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
               <div v-if="s.description" class="tv-stage-desc">{{ s.description }}</div>
-            </div>
-            
+          </div>
+
             </div>
           </div>
 
           <!-- Section header under the timeline -->
           <div class="timeline-section">
-            <div class="timeline-section-title">Detail & Tip</div>
+            <div class="timeline-section-title-row">
+              <div class="timeline-section-title">Detail & Tip</div>
+              <div class="stage-controls">
+                <span v-if="growing" class="chip">Day: {{ dayElapsed }}</span>
+                <span v-if="growing && currentStageDisplay" class="chip">Stage: {{ currentStageDisplay }}</span>
+                <button class="btn-green" :class="{ disabled: growing }" :disabled="growing" @click="startGrowing">{{ growing ? 'In Progress' : 'Start Growing' }}</button>
+        </div>
+      </div>
             <div class="timeline-section-divider"></div>
             <div class="detail-grid">
               <!-- Instance overview removed as requested -->
               <div class="detail-col">
                 <div class="detail-card">
-                  <div class="detail-card-title">Requirements</div>
+              <div class="detail-card-title-row">
+                <div class="detail-card-title">Requirements</div>
+                <button
+                  v-if="!growing"
+                  class="btn-green"
+                  @click="toggleChecklist"
+                >{{ showChecklist ? 'Hide Checklist' : 'Checklist' }}</button>
+                <button
+                  v-else
+                  class="btn-green"
+                  @click="openHelpChat"
+                >Help</button>
+              </div>
                   <div v-if="reqLoading">Loading...</div>
                   <div v-else-if="reqError" class="empty-fav">{{ reqError }}</div>
-                  <div v-else-if="requirements" class="detail-items">
+                  <div v-else-if="requirements && !showChecklist" class="detail-items">
                     <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
                       <div class="req-title">{{ cat.category }}</div>
                       <ul class="req-list">
                         <li v-for="(it, j) in (cat.items || [])" :key="'req-it-'+j">{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <!-- Checklist view -->
+                  <div v-else-if="requirements && showChecklist" class="checklist">
+                    <div class="checklist-summary">Completed {{ checklistCompleted }} / {{ checklistTotal }} ({{ checklistPercent }}%)</div>
+                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'ck-'+idx" class="ck-cat">
+                      <div class="ck-title">{{ cat.category }}</div>
+                      <ul class="ck-list">
+                        <li v-for="(it, j) in (cat.items || [])" :key="'ck-it-'+j">
+                          <label class="ck-item">
+                            <input type="checkbox"
+                              :checked="isChecklistChecked(keyFor(cat.category, it.item))"
+                              @change="onChecklistChange(keyFor(cat.category, it.item), ($event.target as HTMLInputElement).checked)"/>
+                            <span>{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></span>
+                          </label>
+                        </li>
                       </ul>
                     </div>
                   </div>
@@ -247,6 +335,7 @@ import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googl
 import { usePlantsStore } from '@/stores/plants'
 import { plantApiService } from '@/services/api'
 import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
+import { renderMarkdown } from '@/services/markdownService'
 import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 
@@ -255,6 +344,14 @@ const auth = useAuthStore()
 
 const isLoggedIn = computed(() => auth.userIsLoggedIn)
 const username = computed(() => auth.userUsername)
+// Reactive display name override loaded from localStorage
+const displayNameOverride = ref<string>('')
+function loadDisplayNameOverride() {
+  try {
+    const v = localStorage.getItem('profile_display_name') || ''
+    displayNameOverride.value = v
+  } catch { displayNameOverride.value = '' }
+}
 // Avatar no longer displayed here
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
 const showGsiFallback = ref(false)
@@ -305,7 +402,9 @@ function getEmailPrefix(): string {
   } catch { return '' }
 }
 
-const displayName = computed(() => (username.value || getEmailPrefix() || 'None'))
+const displayName = computed(() => (displayNameOverride.value && displayNameOverride.value.trim())
+  ? displayNameOverride.value
+  : (username.value || getEmailPrefix() || 'None'))
 const userEmail = computed(() => {
   try { return localStorage.getItem('plantopia_user_email') || '' } catch { return '' }
 })
@@ -338,7 +437,7 @@ async function loadJournalPlantsFromBackend() {
   try {
     const email = userEmail.value
     if (!email) { journalPlants.value = []; return }
-    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
+    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: false, page: 1, limit: 50 })
     journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
   } catch {
     journalError.value = 'Failed to load journal'
@@ -460,6 +559,48 @@ const insError = ref('')
 type InstructionsResponse = { instructions?: Array<{ step?: number; title?: string; description?: string; duration?: string; tips?: string[] }> }
 const instructions = ref<InstructionsResponse | null>(null)
 
+// UI flags for started growing and display chips
+const growing = ref(false)
+const dayElapsed = ref<number>(0)
+const currentStageDisplay = ref<string>('')
+
+// Generic info modal (replaces all toasts/alerts)
+const infoTitle = ref('')
+const infoMessage = ref('')
+const infoOpen = ref(false)
+function showInfo(title: string, message: string) { infoTitle.value = title; infoMessage.value = message; infoOpen.value = true }
+function closeInfo() { infoOpen.value = false }
+
+// Help chat state
+const helpChatOpen = ref(false)
+const chatId = ref<number | null>(null)
+const chatLoading = ref(false)
+const chatInput = ref('')
+type ChatMsg = { role: 'user' | 'ai'; text: string }
+const chatMessages = ref<ChatMsg[]>([])
+function closeHelpChat() { helpChatOpen.value = false }
+
+async function sendChatFn() {
+  const text = chatInput.value.trim()
+  if (!text) return
+  const id = chatId.value
+  if (!id) { showInfo('No chat', 'Please start the chat first.'); return }
+  chatMessages.value.push({ role: 'user', text })
+  chatInput.value = ''
+  try {
+    const res = await plantApiService.sendPlantChatMessage({ chat_id: id, message: text })
+    chatMessages.value.push({ role: 'ai', text: res.reply || '...' })
+  } catch {
+    showInfo('Failed', 'Failed to send message.')
+  }
+}
+const sendChatHandler = () => { void sendChatFn() }
+
+function renderChat(text: string): string {
+  // Render markdown to HTML for display in chat bubble
+  return renderMarkdown(String(text || ''))
+}
+
 async function loadDetailAndTips(plantId: number) {
   // Ensure we have instance id; try local list, then backend
   let instanceId = currentInstanceId.value
@@ -471,7 +612,7 @@ async function loadDetailAndTips(plantId: number) {
     try {
       const email = userEmail.value
       if (email) {
-        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
+        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: false, page: 1, limit: 50 })
         const found2 = (res?.plants || []).find((p) => Number(p.plant_id) === Number(plantId))
         if (found2?.instance_id) instanceId = Number(found2.instance_id)
       }
@@ -489,6 +630,12 @@ async function loadDetailAndTips(plantId: number) {
     const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
     // tips endpoint temporarily removed; rely on detail.current_tips if provided
     instanceData.value = detail
+    // Call start-growing with empty body to fetch latest is_active without changing anything
+    try {
+      const res = await plantApiService.startGrowingInstance(instanceId)
+      const isActive = Boolean((res as { is_active?: boolean }).is_active ?? detail?.tracking_info?.is_active)
+      growing.value = isActive
+    } catch {}
   } catch {
     instanceError.value = 'Failed to load instance details'
   } finally {
@@ -518,6 +665,128 @@ async function loadDetailAndTips(plantId: number) {
   }
 }
 
+// Checklist state and helpers
+const showChecklist = ref(false)
+function toggleChecklist() { showChecklist.value = !showChecklist.value }
+function slugify(s: string): string { return String(s || '').toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-') }
+function keyFor(category?: string, item?: string): string { return `${slugify(category || '')}::${slugify(item || '')}` }
+
+const checklistCompletedSet = ref<Set<string>>(new Set<string>())
+// Read local checklist on demand (currently not auto-used; kept for future)
+// function loadChecklistLocal(instanceId: number) {
+//   try {
+//     const raw = localStorage.getItem(`checklist:completed:${instanceId}`)
+//     const arr = raw ? (JSON.parse(raw) as string[]) : []
+//     checklistCompletedSet.value = new Set(arr)
+//   } catch { checklistCompletedSet.value = new Set() }
+// }
+function saveChecklistLocal(instanceId: number) {
+  try { localStorage.setItem(`checklist:completed:${instanceId}`, JSON.stringify(Array.from(checklistCompletedSet.value))) } catch {}
+}
+
+function isChecklistChecked(key: string): boolean { return checklistCompletedSet.value.has(key) }
+
+const checklistTotal = computed(() => {
+  const groups = requirements.value?.requirements || []
+  return groups.reduce((sum, g) => sum + (Array.isArray(g.items) ? g.items.length : 0), 0)
+})
+const checklistCompleted = computed(() => checklistCompletedSet.value.size)
+const checklistPercent = computed(() => (checklistTotal.value > 0 ? Math.round((checklistCompleted.value / checklistTotal.value) * 100) : 0))
+
+async function onChecklistChange(key: string, checked: boolean) {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) return
+  // optimistic update
+  if (checked) checklistCompletedSet.value.add(key); else checklistCompletedSet.value.delete(key)
+  saveChecklistLocal(instanceId)
+  try {
+    const payload: { instance_id: number; checklist_item_key: string; is_completed: boolean } = { instance_id: instanceId, checklist_item_key: key, is_completed: checked }
+    const res: Record<string, unknown> = await plantApiService.completeChecklistItem(payload)
+    const ps = (res as { progress_summary?: { completed_items?: number; total_items?: number } }).progress_summary
+    if (ps && typeof ps.completed_items === 'number' && typeof ps.total_items === 'number') {
+      // keep local count close to backend result if needed (no hard sync of keys due to missing API)
+    }
+  } catch {
+    // rollback
+    if (checked) checklistCompletedSet.value.delete(key); else checklistCompletedSet.value.add(key)
+    saveChecklistLocal(instanceId)
+    showInfo('Failed', 'Failed to update checklist. Please try again later.')
+  }
+}
+
+const selectedStage = ref<string>('')
+function isStageSelected(name?: string): boolean {
+  if (!growing.value) return false
+  return String(selectedStage.value || '') === String(name || '')
+}
+async function onSelectStage(name?: string) {
+  const stage = String(name || '').trim()
+  if (!stage) return
+  if (!growing.value) { showInfo('Action required', 'Please click Start Growing first.'); return }
+  selectedStage.value = stage
+  // set day to stage start day
+  try {
+    const found = (timelineData.value?.stages || []).find(s => String(s.stage_name) === stage)
+    if (found && typeof found.start_day === 'number') {
+      dayElapsed.value = Number(found.start_day)
+    }
+  } catch {}
+  const instanceId = currentInstanceId.value
+  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  try {
+    await plantApiService.updatePlantInstanceProgress(instanceId, { current_stage: stage, align_to_stage_start: true })
+    showInfo('Updated', 'Stage updated to ' + stage)
+    await refreshInstanceAfterProgress()
+  } catch {
+    showInfo('Failed', 'Failed to update stage.')
+  }
+}
+
+const progressPercent = computed(() => {
+  if (!growing.value) return 0
+  if (dayElapsed.value <= 0) return 0
+  const stages = timelineData.value?.stages || []
+  if (!stages.length) return 0
+  const idx = stages.findIndex(s => String(s.stage_name) === String(selectedStage.value || currentStageDisplay.value))
+  if (idx < 0) return 0
+  // Equal-spacing: align progress to the center of the current stage card
+  const centers = equalCardPercents.value || []
+  const centerPct = Number(centers[idx] || 0)
+  const isLast = idx === stages.length - 1
+  const lastEnd = Number(stages[stages.length - 1]?.end_day || 0)
+  const currEnd = Number(stages[idx]?.end_day || lastEnd)
+  if (isLast && dayElapsed.value >= currEnd && currEnd > 0) return 100
+  return Math.max(0, Math.min(100, centerPct))
+})
+
+// Start growing: require checklist >= 80%, then call auto-update-stage
+async function startGrowing() {
+  const percent = checklistPercent.value
+  if (percent < 80) {
+    showInfo('Checklist required', 'Please complete at least 80% of the checklist before starting.')
+    return
+  }
+  const instanceId = currentInstanceId.value
+  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  try {
+    // Call new API to explicitly start growing with today's date
+    const today = new Date()
+    const startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0, 10)
+    await plantApiService.startGrowingInstance(instanceId, startDate)
+    // Mark as started locally regardless; backend sets is_active=true and resets stage
+    showInfo('Started', 'Growth started.')
+    try { localStorage.setItem(`journal_started:${instanceId}`, '1') } catch {}
+    // Mark last auto-update time to now to ensure next run occurs ~24h later
+    try { localStorage.setItem(`auto_update_last:${instanceId}`, String(Date.now())) } catch {}
+    growing.value = true
+    await refreshInstanceAfterProgress()
+    // Ensure daily auto update will run when needed
+    await ensureDailyAutoUpdate(instanceId)
+  } catch {
+    showInfo('Failed', 'Failed to start growing. Please try again later.')
+  }
+}
+
 // daysFromStart removed (not used)
 
 async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
@@ -531,6 +800,8 @@ async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: strin
     timelineData.value = data as unknown as TimelineResponse
     // Load detail/tip content after timeline data
     loadDetailAndTips(Number(jp.plant_id))
+    // Daily auto update check when opening timeline
+    await ensureDailyAutoUpdate()
   } catch {
     timelineError.value = 'Failed to load timeline'
   } finally {
@@ -538,14 +809,66 @@ async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: strin
   }
 }
 
+// After progress update, refresh instance details and sync journal row
+async function refreshInstanceAfterProgress() {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) return
+  try {
+    const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
+    instanceData.value = detail
+    // Sync journal list stage label
+    const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(instanceId))
+    if (idx >= 0) {
+      const st = String(detail?.tracking_info?.current_stage || '')
+      if (st) journalPlants.value[idx].current_stage = st
+    }
+  } catch {}
+}
+
+// Ensure auto-update is called at most once per 24h when growing
+async function ensureDailyAutoUpdate(instanceIdParam?: number) {
+  try {
+    const instanceId = Number(instanceIdParam || currentInstanceId.value || 0)
+    if (!instanceId || !growing.value) return
+    const key = `auto_update_last:${instanceId}`
+    const last = Number(localStorage.getItem(key) || '0')
+    const now = Date.now()
+    const ONE_DAY = 24 * 60 * 60 * 1000
+    if (!Number.isFinite(last) || now - last > ONE_DAY) {
+      await plantApiService.autoUpdateInstanceStage(instanceId)
+      try { localStorage.setItem(key, String(now)) } catch {}
+      await refreshInstanceAfterProgress()
+    }
+  } catch {}
+}
+
+function isJournalStarted(instanceId: number): boolean {
+  try { return localStorage.getItem(`journal_started:${instanceId}`) === '1' } catch { return false }
+}
+
+// Delete/deactivate a plant instance from journal
+async function deleteInstance(instanceId: number) {
+  if (!confirm('Remove this plant from your journal?')) return
+  try {
+    await plantApiService.deletePlantInstance(Number(instanceId))
+  } catch {}
+  // Remove locally
+  const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(instanceId))
+  if (idx >= 0) journalPlants.value.splice(idx, 1)
+}
+
 const ensurePlantsLoaded = async () => {
   try { await plantsStore.ensureLoaded() } catch {}
 }
 
 onMounted(async () => {
+  loadDisplayNameOverride()
   // Load journal plants for logged-in users (by email)
   if (isLoggedIn.value) {
     await loadJournalPlantsFromBackend()
+    // Always refresh favourites from API when opening profile
+    try { await plantsStore.loadFavouritesFromApi() } catch {}
+    try { await guidesStore.syncFavouritesFromServer() } catch {}
     return
   }
   await ensureGoogleIdentityLoaded().catch(() => { showGsiFallback.value = true })
@@ -614,6 +937,15 @@ watch(isLoggedIn, async (v) => {
   if (v) {
     await ensurePlantsLoaded()
     await loadJournalPlantsFromBackend()
+    // Migrate local favourites to server, then load favourites
+    try { await plantsStore.syncLocalFavouritesToServer() } catch {}
+    try { await plantsStore.loadFavouritesFromApi() } catch {}
+    // Load guide favourites from server for current user with visible loading state
+    try {
+      ;(guidesStore as unknown as { favouritesLoading?: boolean; favouritesLoaded?: boolean }).favouritesLoading = true
+      ;(guidesStore as unknown as { favouritesLoaded?: boolean }).favouritesLoaded = false
+      await guidesStore.syncFavouritesFromServer()
+    } catch {}
   }
 }, { immediate: true })
 
@@ -621,6 +953,10 @@ watch(isLoggedIn, async (v) => {
 window.addEventListener('storage', (e: StorageEvent) => {
   if (e.key === 'journal_refresh_at') {
     loadJournalPlantsFromBackend()
+  }
+  if (e.key === 'favourites_refresh_at') {
+    try { plantsStore.loadFavouritesFromApi() } catch {}
+    try { guidesStore.syncFavouritesFromServer() } catch {}
   }
 })
 
@@ -647,7 +983,12 @@ const doLogout = () => {
 }
 
 function startEdit() {
-  editName.value = username.value || 'User'
+  try {
+    const override = localStorage.getItem('profile_display_name')
+    editName.value = (override && override.trim()) ? override : (username.value || 'User')
+  } catch {
+    editName.value = username.value || 'User'
+  }
   editPref.value = preferences.value
   editGoal.value = climateGoal.value
   editSuburb.value = suburb.value
@@ -701,6 +1042,13 @@ function saveEdit() {
       }
     } catch {}
   })()
+  // update UI immediately (page-only refresh of name)
+  try {
+    if (editName.value && editName.value.trim()) {
+      localStorage.setItem('profile_display_name', editName.value.trim())
+      loadDisplayNameOverride()
+    }
+  } catch {}
   editing.value = false
   showEdit.value = false
 }
@@ -738,33 +1086,23 @@ function onPlantPointerUp() {
   plantDragging.value = false
 }
 
-// Test button handler: call growth timeline API using a sample plant id
-async function testTimeline() {
-  try {
-    // Prefer latest journal plant_id; fallback to favourite or default 1
-    let plantId: number | null = null
+// expose helper for template
+const openHelpChat = () => {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  ;(async () => {
     try {
-      if (journalPlants.value.length === 0) {
-        const email = userEmail.value
-        if (email) {
-          const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 10 })
-          journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
-        }
-      }
-      plantId = Number(journalPlants.value?.[0]?.plant_id || NaN)
-    } catch {}
-
-    if (!Number.isFinite(plantId) || !plantId || plantId <= 0) {
-      const fav = favouritePlants.value?.[0]
-      plantId = Number((fav as unknown as { databaseId?: number; id?: string })?.databaseId || (fav as unknown as { id?: string })?.id || 1)
+      const email = userEmail.value
+      chatLoading.value = true
+      const started = await plantApiService.startPlantChat(instanceId, String(email || ''))
+      chatId.value = Number(started.chat_id || 0)
+      chatMessages.value = [{ role: 'ai', text: 'Hi! How can I help with your plant today?' }]
+      helpChatOpen.value = true
+    } catch {
+      showInfo('Failed', 'Failed to start help chat.')
     }
-
-    const data = await plantApiService.getPlantGrowthTimeline(plantId as number)
-    console.log('[Timeline]', data)
-    alert(`Timeline fetched for plant ${plantId}. See console for details.`)
-  } catch {
-    alert('Failed to fetch growth timeline.')
-  }
+    chatLoading.value = false
+  })()
 }
 </script>
 
@@ -834,9 +1172,15 @@ async function testTimeline() {
 .journal-thumb { height: 180px; background:#e5e7eb; display:flex; align-items:center; justify-content:center; }
 .journal-thumb img { width:100%; height:100%; object-fit:cover; }
 .journal-meta { position:static; background: transparent; border:none; border-radius:0; padding:10px; display:flex; flex-direction:column; gap:6px; }
+.journal-meta { padding-bottom: 52px; }
 .journal-name { font-weight:700; color:#065f46; }
-.journal-sub { display:flex; flex-wrap:wrap; gap:6px; }
+.journal-sub { display:flex; flex-direction:column; gap:6px; }
+.journal-row { display:flex; align-items:center; gap:6px; }
+.journal-row.stage-row { justify-content:space-between; }
 .chip { background:#ffffff; border:1px solid #e5e7eb; border-radius:9999px; padding:2px 8px; font-size:12px; color:#374151; }
+.btn-danger.small { background:#ef4444; color:#fff; border:none; border-radius:9999px; padding:6px 10px; font-weight:700; cursor:pointer; }
+.journal-card .btn-danger.small { position:absolute; right:10px; bottom:10px; }
+.btn-danger.small:hover { background:#dc2626; }
 
 /* Timeline visual */
 .timeline-visual { display:flex; flex-direction: column; align-items:center; justify-content:flex-start; gap:12px; max-width: 1120px; margin: 0 auto; padding: 0 10px; min-height: 620px; }
@@ -844,9 +1188,13 @@ async function testTimeline() {
 .tv-label { font-weight:800; color:#065f46; }
 .tv-value { color:#374151; font-weight:700; }
 .tv-track { position:relative; height:10px; background:#eef2f7; border-radius:9999px; overflow:visible; border:1px solid #e5e7eb; margin:260px auto 260px; width: calc(100% - 160px); max-width: 980px; }
+.tv-track.growing { background:#d1fae5; border-color:#10b981; }
+.tv-progress { position:absolute; left:0; top:0; height:100%; background:#10b981; border-radius:9999px; transition: width .2s ease; }
 .tv-fill, .tv-tick, .tv-marker, .tv-end { display: none; }
 .tv-stats { display:flex; gap:8px; align-items:center; margin-top: 44px; position: relative; z-index: 3; }
-.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; }
+.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; cursor:pointer; transition: background-color .2s ease, color .2s ease; }
+.tv-stage-card.selected { background:#10b981; color:#ffffff; border-color:#10b981; }
+.tv-stage-card.selected .tv-stage-title, .tv-stage-card.selected .tv-stage-range, .tv-stage-card.selected .tv-stage-desc { color:#ffffff; }
 .tv-stage-card.top { bottom:40px; }
 .tv-stage-card.bottom { top:40px; }
 .tv-stage-card.top::after { content:''; position:absolute; left:50%; top:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
@@ -865,9 +1213,12 @@ async function testTimeline() {
 .timeline-section { width:100%; max-width: 1120px; z-index: 1; margin: 0 auto; }
 .timeline-section-title { font-weight:800; color:#111827; font-size:22px; margin-top: 8px; }
 .timeline-section-divider { height:1px; background:#e5e7eb; margin-top:8px; }
+.timeline-section-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.stage-controls { display:flex; align-items:center; gap:8px; }
 
 .detail-grid { display:grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; align-items: start; width: 100%; margin-left: 0; margin-right: 0; }
 .detail-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; max-width: 1120px; margin: 0 auto; }
+.detail-card-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .detail-card-title { font-weight:800; color:#065f46; margin-bottom:6px; }
 .detail-items { display:grid; gap:6px; }
 .detail-item { display:flex; gap:6px; color:#374151; }
@@ -879,6 +1230,12 @@ async function testTimeline() {
 .ins-step { font-weight:700; color:#111827; }
 .ins-desc { margin-top:2px; }
 .ins-meta { font-size:12px; color:#6b7280; }
+
+/* Green CTA-style button to match grow button */
+.btn-green { background:#10b981; color:#ffffff; border:none; border-radius:9999px; padding:8px 14px; font-weight:800; cursor:pointer; box-shadow: 0 6px 14px rgba(16,185,129,0.35); }
+.btn-green:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
+.btn-green:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
+.btn-green.disabled, .btn-green:disabled { background:#a7f3d0; cursor:not-allowed; box-shadow:none; transform:none; }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }
@@ -926,6 +1283,21 @@ async function testTimeline() {
 
 /* Modal styles reused from other views to keep consistency */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:flex-start; justify-content:center; z-index: 1000; padding: 2rem 1rem; overflow-y: auto; }
+.info-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 2000; padding: 2rem 1rem; }
+.help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 2000; padding: 1rem; }
+.help-modal { width:min(800px, 98%); }
+.chat-box { display:flex; flex-direction:column; gap:8px; }
+.chat-messages { max-height: 320px; overflow:auto; display:flex; flex-direction:column; gap:6px; padding:6px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; }
+.msg { display:flex; }
+.msg.user { justify-content:flex-end; }
+.bubble { max-width: 80%; padding:8px 10px; border-radius:12px; background:#ffffff; border:1px solid #e5e7eb; }
+.msg.user .bubble { background:#d1fae5; border-color:#10b981; }
+.bubble :deep(p) { margin: 0 0 6px 0; }
+.bubble :deep(ul), .bubble :deep(ol) { margin: 6px 0 6px 18px; }
+.bubble :deep(li) { margin: 2px 0; }
+.bubble :deep(code) { background:#f3f4f6; padding:0 4px; border-radius:4px; }
+.chat-input-row { display:flex; gap:8px; }
+.chat-input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; }
 .modal-content { background:#ffffff; border-radius:16px; width:min(720px, 96%); max-height:90vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.15); }
 .modal-content.timeline-modal { width:min(1400px, 98%); max-height:none; margin: 2rem auto; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb; }

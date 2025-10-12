@@ -394,7 +394,12 @@ const renderedDescription = computed(() => {
 })
 
 // favourites for grid cards
-const toggleFav = (p: Plant) => store.toggleFavourite(String(p.id))
+const toggleFav = async (p: Plant) => {
+  const email = localStorage.getItem('plantopia_user_email') || ''
+  if (!email) { alert('Please sign in to use favourites.'); return }
+  if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
+  await store.toggleFavourite(String(p.id))
+}
 const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
 const paginatedPlants = computed(() => filteredPlants.value)
@@ -516,7 +521,7 @@ async function startTracking(plant: Plant) {
     console.log('[UI] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI] startTracking response', resp)
-    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+    alert('Please check detail in Journal')
   } catch (e) {
     console.error('[UI] startTracking error', e)
     alert('Failed to start tracking. Please try again later.')
@@ -657,7 +662,7 @@ const capitalizeFirst = (str: string): string => {
 }
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   // if navigated with ?category=vegetables|herbs|flowers, map to internal keys
   const route = useRoute()
   const q = String(route.query.category || '').toLowerCase()
@@ -665,7 +670,10 @@ onMounted(() => {
   else if (q === 'herbs') selectedCategory.value = 'herb'
   else if (q === 'flowers') selectedCategory.value = 'flower'
 
-  loadPlants()
+  await loadPlants()
+  // First, migrate any legacy local favourites to server, then load server state
+  await store.syncLocalFavouritesToServer()
+  await store.loadFavouritesFromApi()
 })
 </script>
 
