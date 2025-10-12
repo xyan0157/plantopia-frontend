@@ -344,6 +344,14 @@ const auth = useAuthStore()
 
 const isLoggedIn = computed(() => auth.userIsLoggedIn)
 const username = computed(() => auth.userUsername)
+// Reactive display name override loaded from localStorage
+const displayNameOverride = ref<string>('')
+function loadDisplayNameOverride() {
+  try {
+    const v = localStorage.getItem('profile_display_name') || ''
+    displayNameOverride.value = v
+  } catch { displayNameOverride.value = '' }
+}
 // Avatar no longer displayed here
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
 const showGsiFallback = ref(false)
@@ -394,7 +402,9 @@ function getEmailPrefix(): string {
   } catch { return '' }
 }
 
-const displayName = computed(() => (username.value || getEmailPrefix() || 'None'))
+const displayName = computed(() => (displayNameOverride.value && displayNameOverride.value.trim())
+  ? displayNameOverride.value
+  : (username.value || getEmailPrefix() || 'None'))
 const userEmail = computed(() => {
   try { return localStorage.getItem('plantopia_user_email') || '' } catch { return '' }
 })
@@ -852,6 +862,7 @@ const ensurePlantsLoaded = async () => {
 }
 
 onMounted(async () => {
+  loadDisplayNameOverride()
   // Load journal plants for logged-in users (by email)
   if (isLoggedIn.value) {
     await loadJournalPlantsFromBackend()
@@ -929,8 +940,12 @@ watch(isLoggedIn, async (v) => {
     // Migrate local favourites to server, then load favourites
     try { await plantsStore.syncLocalFavouritesToServer() } catch {}
     try { await plantsStore.loadFavouritesFromApi() } catch {}
-    // Load guide favourites from server for current user
-    try { await guidesStore.ensureFavouritesLoaded() } catch {}
+    // Load guide favourites from server for current user with visible loading state
+    try {
+      ;(guidesStore as unknown as { favouritesLoading?: boolean; favouritesLoaded?: boolean }).favouritesLoading = true
+      ;(guidesStore as unknown as { favouritesLoaded?: boolean }).favouritesLoaded = false
+      await guidesStore.syncFavouritesFromServer()
+    } catch {}
   }
 }, { immediate: true })
 
@@ -968,7 +983,12 @@ const doLogout = () => {
 }
 
 function startEdit() {
-  editName.value = username.value || 'User'
+  try {
+    const override = localStorage.getItem('profile_display_name')
+    editName.value = (override && override.trim()) ? override : (username.value || 'User')
+  } catch {
+    editName.value = username.value || 'User'
+  }
   editPref.value = preferences.value
   editGoal.value = climateGoal.value
   editSuburb.value = suburb.value
@@ -1022,6 +1042,13 @@ function saveEdit() {
       }
     } catch {}
   })()
+  // update UI immediately (page-only refresh of name)
+  try {
+    if (editName.value && editName.value.trim()) {
+      localStorage.setItem('profile_display_name', editName.value.trim())
+      loadDisplayNameOverride()
+    }
+  } catch {}
   editing.value = false
   showEdit.value = false
 }
