@@ -10,6 +10,7 @@ interface PlantsState {
   lastKey: string | null
   firstPageShown: boolean
   favourites: Set<string>
+  favouritesLoaded: boolean
   loadedPagesMax: number
   lastFilterKey: string | null
   pageCache: Record<number, Plant[]>
@@ -25,17 +26,50 @@ export const usePlantsStore = defineStore('plants', {
     totalCount: 0,
     lastKey: null,
     firstPageShown: false,
-    favourites: new Set<string>(JSON.parse(localStorage.getItem('favourite_plants') || '[]')),
+    favourites: new Set<string>(),
+    favouritesLoaded: false,
     loadedPagesMax: 0,
     lastFilterKey: null,
     pageCache: {},
     prefetching: false,
   }),
   actions: {
-    toggleFavourite(id: string) {
-      if (this.favourites.has(id)) this.favourites.delete(id)
-      else this.favourites.add(id)
-      localStorage.setItem('favourite_plants', JSON.stringify(Array.from(this.favourites)))
+    async loadFavouritesFromApi(): Promise<void> {
+      if (this.favouritesLoaded) return
+      try {
+        const email = localStorage.getItem('plantopia_user_email') || ''
+        if (!email) { this.favouritesLoaded = true; this.favourites = new Set(); return }
+        const favs = await plantApiService.getFavoritesByEmail(email)
+        const ids = favs.map(f => String(f.plant_id))
+        this.favourites = new Set(ids)
+      } catch { this.favourites = new Set() } finally { this.favouritesLoaded = true }
+    },
+    async syncLocalFavouritesToServer(): Promise<void> {
+      try {
+        const email = localStorage.getItem('plantopia_user_email') || ''
+        if (!email) return
+        let localIds: string[] = []
+        try { localIds = JSON.parse(localStorage.getItem('favourite_plants') || '[]') } catch { localIds = [] }
+        const idsNum = (Array.isArray(localIds) ? localIds : []).map(v => parseInt(String(v), 10)).filter(n => Number.isFinite(n))
+        if (idsNum.length === 0) return
+        const merged = await plantApiService.syncFavoritesByEmail(email, idsNum)
+        const ids = merged.map(f => String(f.plant_id))
+        this.favourites = new Set(ids)
+        this.favouritesLoaded = true
+        try { localStorage.removeItem('favourite_plants') } catch {}
+      } catch {}
+    },
+    async toggleFavourite(id: string) {
+      const email = localStorage.getItem('plantopia_user_email') || ''
+      if (!email) return
+      const pid = parseInt(id, 10)
+      if (this.favourites.has(id)) {
+        await plantApiService.removeFavoriteByEmail(pid, email)
+        this.favourites.delete(id)
+      } else {
+        await plantApiService.addFavoriteByEmail(email, pid)
+        this.favourites.add(id)
+      }
     },
     isFavourite(id: string): boolean { return this.favourites.has(id) },
     async ensureLoaded(): Promise<void> {

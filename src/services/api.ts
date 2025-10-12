@@ -868,6 +868,50 @@ export class PlantRecommendationService {
     }
   }
 
+  // Favorites (email-scoped)
+  async getFavoritesByEmail(email: string): Promise<ApiFavoriteItem[]> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites?${qp.toString()}`)
+      const data = await resp.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch { return [] }
+  }
+
+  async addFavoriteByEmail(email: string, plantId: number, notes?: string): Promise<ApiFavoriteItem | null> {
+    try {
+      const body = { email, plant_id: Number(plantId), ...(notes ? { notes } : {}) }
+      const resp = await this.fetchWithFallback('/api/v1/favorites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await resp.json()
+      return (data || null) as ApiFavoriteItem | null
+    } catch { return null }
+  }
+
+  async removeFavoriteByEmail(plantId: number, email: string): Promise<{ removed: boolean }> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites/${encodeURIComponent(String(plantId))}?${qp.toString()}`, { method: 'DELETE' })
+      try { return await resp.json() } catch { return { removed: true } }
+    } catch { return { removed: false } }
+  }
+
+  async syncFavoritesByEmail(email: string, favoritePlantIds: number[]): Promise<ApiFavoriteItem[]> {
+    try {
+      const resp = await this.fetchWithFallback('/api/v1/favorites/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, favorite_plant_ids: favoritePlantIds }) })
+      const data = await resp.json()
+      return (Array.isArray(data) ? data : (data?.favorites || [])) as ApiFavoriteItem[]
+    } catch { return [] }
+  }
+
+  async checkFavoriteByEmail(plantId: number, email: string): Promise<{ is_favorite: boolean }> {
+    try {
+      const qp = new URLSearchParams({ email })
+      const resp = await this.fetchWithFallback(`/api/v1/favorites/check/${encodeURIComponent(String(plantId))}?${qp.toString()}`)
+      const data = await resp.json()
+      return { is_favorite: Boolean((data as { is_favorite?: boolean }).is_favorite) }
+    } catch { return { is_favorite: false } }
+  }
+
   // Transform All Plants API response to frontend Plant interface
   transformAllPlantsToPlants(apiResponse: ApiAllPlantsResponse): Plant[] {
     // console.debug('[TRANSFORM] All Plants -> Plants')

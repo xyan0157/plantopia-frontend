@@ -388,7 +388,11 @@ const renderedDescription = computed(() => {
 })
 
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
-function toggleFav() { if (props.plant) plantStore.toggleFavourite(String(props.plant.id)) }
+async function toggleFav() {
+  if (!props.plant) return
+  if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
+  await plantStore.toggleFavourite(String(props.plant.id))
+}
 
 // Companion planting parsing (fields provided in plant API responses as comma-separated strings)
 const parseCompanions = (s?: string): string[] => {
@@ -454,6 +458,9 @@ watch(() => props.plant, (newPlant) => {
     }, 100)
   }
 }, { immediate: true })
+
+// Ensure favourites loaded when modal opens
+watch(() => props.plant?.id, async (id) => { if (id) await plantStore.loadFavouritesFromApi() })
 
 // Handle plant selection from history
 const handleHistoryPlantSelect = (plant: Plant) => {

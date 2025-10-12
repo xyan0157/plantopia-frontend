@@ -394,7 +394,10 @@ const renderedDescription = computed(() => {
 })
 
 // favourites for grid cards
-const toggleFav = (p: Plant) => store.toggleFavourite(String(p.id))
+const toggleFav = async (p: Plant) => {
+  if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
+  await store.toggleFavourite(String(p.id))
+}
 const isFavourite = (p: Plant) => store.isFavourite(String(p.id))
 
 const paginatedPlants = computed(() => filteredPlants.value)
@@ -657,7 +660,7 @@ const capitalizeFirst = (str: string): string => {
 }
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   // if navigated with ?category=vegetables|herbs|flowers, map to internal keys
   const route = useRoute()
   const q = String(route.query.category || '').toLowerCase()
@@ -665,7 +668,10 @@ onMounted(() => {
   else if (q === 'herbs') selectedCategory.value = 'herb'
   else if (q === 'flowers') selectedCategory.value = 'flower'
 
-  loadPlants()
+  await loadPlants()
+  // First, migrate any legacy local favourites to server, then load server state
+  await store.syncLocalFavouritesToServer()
+  await store.loadFavouritesFromApi()
 })
 </script>
 

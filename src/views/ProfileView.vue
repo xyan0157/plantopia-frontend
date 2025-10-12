@@ -922,6 +922,9 @@ watch(isLoggedIn, async (v) => {
   if (v) {
     await ensurePlantsLoaded()
     await loadJournalPlantsFromBackend()
+    // Migrate local favourites to server, then load favourites
+    try { await plantsStore.syncLocalFavouritesToServer() } catch {}
+    try { await plantsStore.loadFavouritesFromApi() } catch {}
   }
 }, { immediate: true })
 
