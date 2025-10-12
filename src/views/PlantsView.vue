@@ -347,6 +347,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Sign-in Modal -->
+    <SignInModal
+      v-if="showSignIn"
+      :message="signInMessage"
+      @close="showSignIn = false"
+    />
   </div>
 </template>
 
@@ -359,6 +366,7 @@ import { useAuthStore } from '@/stores/auth'
 import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 import { renderMarkdown } from '@/services/markdownService'
 import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
+import SignInModal from '@/components/SignInModal.vue'
 
 // Reactive state
 const store = usePlantsStore()
@@ -370,6 +378,13 @@ const selectedCategory = ref<'all' | 'vegetable' | 'herb' | 'flower'>('all')
 const selectedPlant = ref<Plant | null>(null)
 const imageErrors = ref<Set<string>>(new Set())
 const firstPageLoaded = computed(() => store.firstPageShown)
+// Sign-in modal state
+const showSignIn = ref(false)
+const signInMessage = ref('')
+function promptSignIn(message: string) {
+  signInMessage.value = message
+  showSignIn.value = true
+}
 
 // Pagination state
 const currentPage = ref(1)
@@ -396,7 +411,7 @@ const renderedDescription = computed(() => {
 // favourites for grid cards
 const toggleFav = async (p: Plant) => {
   const email = localStorage.getItem('plantopia_user_email') || ''
-  if (!email) { alert('Please sign in to use favourites.'); return }
+  if (!email) { promptSignIn('Please sign in to use favourites.'); return }
   if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
   await store.toggleFavourite(String(p.id))
 }
@@ -502,7 +517,7 @@ const closeModal = () => {
 const auth = useAuthStore()
 async function startTracking(plant: Plant) {
   if (!auth.userIsLoggedIn) {
-    alert('Please sign in first to start tracking this plant.')
+    promptSignIn('Please sign in first to start tracking this plant.')
     return
   }
   try {
@@ -528,6 +543,8 @@ async function startTracking(plant: Plant) {
   }
   try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
 }
+
+// No explicit sign-in redirect per request; OK simply closes
 
 // Get image + debug step info for diagnostics
 const getPlantImage = (plant: Plant): { src: string; step: string } => {
