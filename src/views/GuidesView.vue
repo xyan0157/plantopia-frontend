@@ -118,6 +118,8 @@
       :message="signInMessage"
       @close="showSignIn = false"
     />
+    <!-- Loading Modal -->
+    <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
   </div>
 </template>
 
@@ -128,6 +130,7 @@ import { type MarkdownFileSummary, type MarkdownCategory } from '@/services/mark
 import { renderMarkdown } from '@/services/markdownService'
 import { useGuidesStore } from '@/stores/guides'
 import SignInModal from '@/components/SignInModal.vue'
+import LoadingModal from '@/components/LoadingModal.vue'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -141,6 +144,8 @@ function promptSignIn(message: string) {
   signInMessage.value = message
   showSignIn.value = true
 }
+// Loading modal state
+const loadingModal = ref<{ show: boolean; message: string }>({ show: false, message: '' })
 // No explicit sign-in redirect per request; OK simply closes
 const categories = computed<MarkdownCategory[]>(() => guides.categories)
 const selectedCategory = ref<string>('')
@@ -368,7 +373,12 @@ async function toggleFavActive() {
   if (!activeFile.value) return
   const email = localStorage.getItem('plantopia_user_email') || ''
   if (!email) { promptSignIn('Please sign in to use favourites.'); return }
-  await guides.toggleFavouriteGuide(selectedCategory.value, activeFile.value.filename)
+  try {
+    loadingModal.value = { show: true, message: 'Saving favourite...' }
+    await guides.toggleFavouriteGuide(selectedCategory.value, activeFile.value.filename)
+  } finally {
+    loadingModal.value = { show: false, message: '' }
+  }
 }
 
 async function openFile(f: MarkdownFileSummary) {

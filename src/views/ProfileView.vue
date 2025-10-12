@@ -78,10 +78,10 @@
             <h3>Journal Plants</h3>
           </div>
           <div v-if="journalLoading" class="empty-fav">Loading...</div>
-          <div v-else-if="journalPlants.length === 0 || journalError" class="empty-fav">No journal yet.</div>
+          <div v-else-if="visibleJournalPlants.length === 0 || journalError" class="empty-fav">No journal yet.</div>
           <div v-else class="journal-scroll" ref="journalScrollRef">
             <div
-              v-for="jp in journalPlants"
+              v-for="jp in visibleJournalPlants"
               :key="jp.instance_id"
               class="journal-card"
               :style="getJournalCardStyle(jp)"
@@ -115,7 +115,6 @@
           <div class="signin-title">Sign in with:</div>
           <div class="idp-list">
             <div ref="googleBtnContainer" class="google-button-host"></div>
-            <a v-if="showGsiFallback" :href="oauthLink" class="primary">Continue with Google</a>
           </div>
         </template>
 
@@ -148,6 +147,8 @@
       </div>
     </div>
   </div>
+  <!-- Loading Modal -->
+  <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
   <div v-if="infoOpen" class="info-overlay" @click="closeInfo">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
@@ -381,6 +382,7 @@ import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
 import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 import { renderMarkdown } from '@/services/markdownService'
+import LoadingModal from '@/components/LoadingModal.vue'
 
 const auth = useAuthStore()
 // const router = useRouter()
@@ -398,22 +400,7 @@ function loadDisplayNameOverride() {
 // Avatar no longer displayed here
 const googleBtnContainer = ref<HTMLDivElement | null>(null)
 const showGsiFallback = ref(false)
-const oauthLink = computed(() => {
-  const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID || ''
-  // Using OAuth 2.0 implicit-like redirect to Google Accounts consent page
-  const origin = window.location.origin
-  // Use profile page as redirect target; backend should also accept it if needed
-  const redirect = `${origin}/profile`
-  const qp = new URLSearchParams({
-    client_id: cid,
-    redirect_uri: redirect,
-    response_type: 'token',
-    scope: 'openid email profile',
-    include_granted_scopes: 'true',
-    state: 'gsi_fallback'
-  })
-  return `https://accounts.google.com/o/oauth2/v2/auth?${qp.toString()}`
-})
+// Fallback OAuth link removed to force native Google button only
 
 // Demo profile fields; later wire to real user prefs
 const preferences = ref('')
@@ -473,6 +460,10 @@ const favouritePlants = computed<Plant[]>(() => {
 const journalPlants = ref<ApiUserPlantInstanceSummary[]>([])
 const journalLoading = ref(false)
 const journalError = ref('')
+// Track deleted instances during current session to hide them from view
+const deletedInstanceIds = ref<Set<number>>(new Set<number>())
+const visibleJournalPlants = computed(() => journalPlants.value.filter(jp => !deletedInstanceIds.value.has(Number(jp.instance_id))))
+const loadingModal = ref<{ show: boolean; message: string }>({ show: false, message: '' })
 
 async function loadJournalPlantsFromBackend() {
   journalLoading.value = true
@@ -480,7 +471,7 @@ async function loadJournalPlantsFromBackend() {
   try {
     const email = userEmail.value
     if (!email) { journalPlants.value = []; return }
-    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
+    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: false, page: 1, limit: 50 })
     journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
   } catch {
     journalError.value = 'Failed to load journal'
@@ -911,7 +902,19 @@ async function confirmDelete() {
   confirmDeleteOpen.value = false
   pendingDeleteId = null
   if (!id) return
-  try { await plantApiService.deletePlantInstance(Number(id)) } catch {}
+  try {
+    loadingModal.value = { show: true, message: 'Removing...' }
+    console.log('[Journal] delete request', { instance_id: Number(id) })
+    const resp = await plantApiService.deletePlantInstance(Number(id))
+    console.log('[Journal] delete response', resp)
+  } catch (e) {
+    console.error('[Journal] delete error', e)
+  }
+  finally {
+    loadingModal.value = { show: false, message: '' }
+  }
+  // Ensure the just-deleted instance never shows up in current session even if API still returns it briefly
+  try { deletedInstanceIds.value.add(Number(id)) } catch {}
   const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(id))
   if (idx >= 0) journalPlants.value.splice(idx, 1)
   // Reload from backend to reflect server state and filters

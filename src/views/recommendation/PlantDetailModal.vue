@@ -348,6 +348,8 @@
     :message="signInMessage"
     @close="showSignIn = false"
   />
+  <!-- Loading Modal -->
+  <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
 </template>
 
 <script setup lang="ts">
@@ -364,6 +366,7 @@ import { useRecommendationsStore } from '@/stores/recommendations'
 import { usePlantsStore } from '@/stores/plants'
 import { SunIcon, MoonIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
 import SignInModal from '@/components/SignInModal.vue'
+import LoadingModal from '@/components/LoadingModal.vue'
 
 // Component props - receives plant data or null when modal is closed
 const props = defineProps<{
@@ -387,6 +390,8 @@ function promptSignIn(message: string) {
   signInMessage.value = message
   showSignIn.value = true
 }
+// Loading modal state
+const loadingModal = ref<{ show: boolean; message: string }>({ show: false, message: '' })
 
 function goToGuides() {
   router.push('/guides')
@@ -407,8 +412,13 @@ async function toggleFav() {
   if (!props.plant) return
   const email = localStorage.getItem('plantopia_user_email') || ''
   if (!email) { promptSignIn('Please sign in to use favourites.'); return }
-  if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
-  await plantStore.toggleFavourite(String(props.plant.id))
+  try {
+    loadingModal.value = { show: true, message: 'Saving favourite...' }
+    if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
+    await plantStore.toggleFavourite(String(props.plant.id))
+  } finally {
+    loadingModal.value = { show: false, message: '' }
+  }
 }
 
 // Companion planting parsing (fields provided in plant API responses as comma-separated strings)
@@ -657,6 +667,7 @@ async function startTracking() {
   }
   try {
     starting.value = true
+    loadingModal.value = { show: true, message: 'Starting tracking...' }
     const pid = Number((props.plant as unknown as { databaseId?: number })?.databaseId || props.plant.id)
     // Fill optional fields
     const nickname = String(resolvedName.value || props.plant.name || '').trim() || undefined
@@ -675,13 +686,16 @@ async function startTracking() {
     console.log('[UI][DetailModal] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI][DetailModal] startTracking response', resp)
-    alert('Please check detail in Journal')
+    const instanceId = Number((resp as unknown as { instance_id?: number })?.instance_id || 0)
+    if (Number.isFinite(instanceId) && instanceId > 0) {
+      try { await plantApiService.startGrowingInstance(instanceId) } catch (e) { console.warn('[UI][DetailModal] startGrowingInstance failed', e) }
+    }
     try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
   } catch (e) {
     console.error('[UI][DetailModal] startTracking error', e)
-    alert('Failed to start tracking. Please try again later.')
   } finally {
     starting.value = false
+    loadingModal.value = { show: false, message: '' }
   }
 }
 
