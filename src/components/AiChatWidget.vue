@@ -9,7 +9,8 @@
         <div v-for="m in chatMessages" :key="m.id" class="msg" :class="m.role">
           <div class="bubble">
             <img v-if="m.image" :src="m.image" class="msg-img" alt="attachment" />
-            <div class="text">{{ m.text }}</div>
+            <div class="text" v-if="m.role==='assistant'" v-html="renderMarkdown(m.text)"></div>
+            <div class="text" v-else>{{ m.text }}</div>
           </div>
         </div>
         <div v-if="aiLoading" class="msg assistant">
@@ -33,6 +34,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { plantApiService } from '@/services/api'
+import { renderMarkdown } from '@/services/markdownService'
 
 type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; image?: string | null }
 
@@ -106,6 +108,9 @@ async function sendMessage() {
     await nextTick(); scrollToBottom()
   }
 }
+
+// Use existing markdown renderer utility used elsewhere in app
+// It already sanitizes and applies consistent styling
 </script>
 
 <style scoped>
@@ -132,5 +137,12 @@ async function sendMessage() {
 .input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:14px; }
 .btn.primary { background:#10b981; color:#fff; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; }
 .btn.primary:disabled { background:#a7f3d0; cursor:not-allowed; }
+/* Markdown basics */
+.text h1,.text h2,.text h3{ margin:6px 0; color:#065f46; }
+.text p{ margin:6px 0; }
+.text ul{ margin:6px 0 6px 20px; }
+.text li{ margin:2px 0; }
+.text code{ background:#f3f4f6; padding:2px 4px; border-radius:4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.text pre{ background:#0b1020; color:#e5e7eb; padding:8px; border-radius:8px; overflow:auto; }
 </style>
 
