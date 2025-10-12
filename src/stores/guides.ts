@@ -10,6 +10,7 @@ interface GuidesState {
   initialized: boolean
   favourites: Set<string>
   favouritesLoaded: boolean
+  favouritesLoading: boolean
 }
 
 function makeFileKey(category: string, filename: string): string {
@@ -26,6 +27,7 @@ export const useGuidesStore = defineStore('guides', {
     initialized: false,
     favourites: new Set<string>(),
     favouritesLoaded: false,
+    favouritesLoading: false,
   }),
   getters: {
     getCategoryFiles: (state) => (category: string): MarkdownFileSummary[] => {
@@ -60,6 +62,7 @@ export const useGuidesStore = defineStore('guides', {
     },
 
     async syncFavouritesFromServer(): Promise<void> {
+      this.favouritesLoading = true
       try {
         const email = localStorage.getItem('plantopia_user_email') || ''
         if (!email) return
@@ -68,6 +71,7 @@ export const useGuidesStore = defineStore('guides', {
         this.favourites = new Set(keys)
       } catch {}
       this.favouritesLoaded = true
+      this.favouritesLoading = false
     },
 
     async toggleFavouriteGuide(categorySlug: string, filename: string) {
@@ -85,13 +89,14 @@ export const useGuidesStore = defineStore('guides', {
         await markdownApiService.addGuideFavorite(email, filename, categorySlug)
         this.favourites.add(key)
       }
+      try { localStorage.setItem('favourites_refresh_at', String(Date.now())) } catch {}
     },
 
     async ensureFavouritesLoaded(): Promise<void> {
       if (this.favouritesLoaded) return
       const email = localStorage.getItem('plantopia_user_email') || ''
       if (email) await this.syncFavouritesFromServer()
-      else this.loadFavourites()
+      else { this.loadFavourites(); this.favouritesLoading = false }
     },
 
     isFavouriteGuide(categorySlug: string, filename: string): boolean {

@@ -57,7 +57,7 @@
           <div class="section-title-row">
             <h3>My Guide List</h3>
           </div>
-          <div v-if="!guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
+          <div v-if="!guidesStore.favouritesLoaded || guidesStore.favouritesLoading" class="empty-fav">Loading...</div>
           <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
           <ul v-else class="guide-fav-ul">
             <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
@@ -739,15 +739,14 @@ const progressPercent = computed(() => {
   if (!stages.length) return 0
   const idx = stages.findIndex(s => String(s.stage_name) === String(selectedStage.value || currentStageDisplay.value))
   if (idx < 0) return 0
-  const n = stages.length
-  // progress is up to start of selected stage; if last stage selected, fill 100%
-  const selected = stages[idx]
-  const start = Number(selected?.start_day || 0)
-  const end = Number(stages[n - 1]?.end_day || start)
-  if (end <= 0) return 0
-  const pct = Math.max(0, Math.min(100, (start / end) * 100))
-  // when reaching last stage end, fill 100%
-  return idx === n - 1 && dayElapsed.value >= Number(selected?.end_day || 0) ? 100 : pct
+  // Equal-spacing: align progress to the center of the current stage card
+  const centers = equalCardPercents.value || []
+  const centerPct = Number(centers[idx] || 0)
+  const isLast = idx === stages.length - 1
+  const lastEnd = Number(stages[stages.length - 1]?.end_day || 0)
+  const currEnd = Number(stages[idx]?.end_day || lastEnd)
+  if (isLast && dayElapsed.value >= currEnd && currEnd > 0) return 100
+  return Math.max(0, Math.min(100, centerPct))
 })
 
 // Start growing: require checklist >= 80%, then call auto-update-stage
@@ -856,6 +855,9 @@ onMounted(async () => {
   // Load journal plants for logged-in users (by email)
   if (isLoggedIn.value) {
     await loadJournalPlantsFromBackend()
+    // Always refresh favourites from API when opening profile
+    try { await plantsStore.loadFavouritesFromApi() } catch {}
+    try { await guidesStore.syncFavouritesFromServer() } catch {}
     return
   }
   await ensureGoogleIdentityLoaded().catch(() => { showGsiFallback.value = true })
@@ -927,6 +929,8 @@ watch(isLoggedIn, async (v) => {
     // Migrate local favourites to server, then load favourites
     try { await plantsStore.syncLocalFavouritesToServer() } catch {}
     try { await plantsStore.loadFavouritesFromApi() } catch {}
+    // Load guide favourites from server for current user
+    try { await guidesStore.ensureFavouritesLoaded() } catch {}
   }
 }, { immediate: true })
 
@@ -934,6 +938,10 @@ watch(isLoggedIn, async (v) => {
 window.addEventListener('storage', (e: StorageEvent) => {
   if (e.key === 'journal_refresh_at') {
     loadJournalPlantsFromBackend()
+  }
+  if (e.key === 'favourites_refresh_at') {
+    try { plantsStore.loadFavouritesFromApi() } catch {}
+    try { guidesStore.syncFavouritesFromServer() } catch {}
   }
 })
 

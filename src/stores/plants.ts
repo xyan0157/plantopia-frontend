@@ -70,6 +70,7 @@ export const usePlantsStore = defineStore('plants', {
         await plantApiService.addFavoriteByEmail(email, pid)
         this.favourites.add(id)
       }
+      try { localStorage.setItem('favourites_refresh_at', String(Date.now())) } catch {}
     },
     isFavourite(id: string): boolean { return this.favourites.has(id) },
     async ensureLoaded(): Promise<void> {
