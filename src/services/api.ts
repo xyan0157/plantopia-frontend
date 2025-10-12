@@ -719,6 +719,15 @@ export class PlantRecommendationService {
     return await resp.json()
   }
 
+  // New: explicitly mark an instance as started growing
+  async startGrowingInstance(instanceId: number, startDate?: string): Promise<Record<string, unknown>> {
+    const body = startDate ? { start_date: startDate } : {}
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/start-growing`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    try { return await resp.json() } catch { return {} }
+  }
+
   async getPlantRequirements(plantId: number): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/requirements/${encodeURIComponent(String(plantId))}`)
     return await resp.json()
@@ -819,7 +828,7 @@ export class PlantRecommendationService {
     return { reply: data.ai_response || '', token_warning: Boolean(data.token_warning), total_tokens: data.total_tokens }
   }
 
-  // (temporary suburbs helper removed)
+    // (temporary suburbs helper removed)
 
   // --- Tracking: Get user's plant instances (by email as user_id) ---
   async getUserTrackingPlants(userId: string, options?: { active_only?: boolean; page?: number; limit?: number }): Promise<ApiUserPlantsResponse> {

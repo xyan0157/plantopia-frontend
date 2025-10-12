@@ -651,7 +651,7 @@ async function startTracking() {
     console.log('[UI][DetailModal] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI][DetailModal] startTracking response', resp)
-    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+    alert('Please check detail in Journal')
     try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
   } catch (e) {
     console.error('[UI][DetailModal] startTracking error', e)

@@ -516,7 +516,7 @@ async function startTracking(plant: Plant) {
     console.log('[UI] startTracking request', req)
     const resp = await plantApiService.startPlantTrackingByProfile(req)
     console.log('[UI] startTracking response', resp)
-    alert(`Tracking started. Instance ID: ${resp.instance_id}`)
+    alert('Please check detail in Journal')
   } catch (e) {
     console.error('[UI] startTracking error', e)
     alert('Failed to start tracking. Please try again later.')
