@@ -466,12 +466,17 @@ const toggleFilter = (filterName: keyof typeof expandedFilters.value) => {
   expandedFilters.value[filterName] = !expandedFilters.value[filterName]
 }
 
-// Watch for changes and emit to parent
+// Watch for changes and emit to parent (avoid mutating the watched source)
 watch(localFilters, (newFilters) => {
-  // sync from single-value proxy to array form
-  newFilters.colors = preferredColor.value ? [preferredColor.value] : []
-  emit('update-filters', { ...newFilters })
+  const payload = { ...newFilters, colors: preferredColor.value ? [preferredColor.value] : [] }
+  emit('update-filters', payload)
 }, { deep: true })
+
+// Also react when preferredColor changes (without mutating localFilters)
+watch(preferredColor, () => {
+  const payload = { ...localFilters.value, colors: preferredColor.value ? [preferredColor.value] : [] }
+  emit('update-filters', payload)
+})
 
 // keep proxy in sync if parent provides initial colors
 if (localFilters.value.colors && localFilters.value.colors.length > 0) {
