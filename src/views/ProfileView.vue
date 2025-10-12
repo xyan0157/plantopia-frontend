@@ -87,8 +87,16 @@
               <div class="journal-meta">
                 <div class="journal-name">{{ jp.plant_name }}</div>
                 <div class="journal-sub">
-                  <span class="chip">Started: {{ jp.start_date || '-' }}</span>
-                  <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
+                  <div class="journal-row" v-if="isJournalStarted(jp.instance_id)">
+                    <span class="chip">Started: {{ jp.start_date || '-' }}</span>
+                  </div>
+                  <div class="journal-row stage-row" v-if="isJournalStarted(jp.instance_id)">
+                    <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
+                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                  </div>
+                  <div class="journal-row stage-row" v-else>
+                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -106,6 +114,22 @@
 
         <div class="actions" v-else>
           <button class="danger" @click="doLogout">Sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Modal (generic) -->
+  <div v-if="infoOpen" class="info-overlay" @click="closeInfo">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">{{ infoTitle }}</h2>
+        <button class="modal-close" @click="closeInfo">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="placeholder-text">{{ infoMessage }}</div>
+        <div style="text-align:right; margin-top: 8px;">
+          <button class="btn-green" @click="closeInfo">OK</button>
         </div>
       </div>
     </div>
@@ -132,8 +156,9 @@
               v-for="(s, i) in timelineStages"
               :key="'card-'+i"
               class="tv-stage-card"
-              :class="{ top: i % 2 === 0, bottom: i % 2 === 1 }"
+              :class="{ top: i % 2 === 0, bottom: i % 2 === 1, selected: isStageSelected(s.stage_name) }"
               :style="{ left: equalCardPercents[i] + '%' }"
+              @click="onSelectStage(s.stage_name)"
             >
               <div class="tv-stage-title">{{ s.stage_name }}</div>
               <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
@@ -145,20 +170,47 @@
 
           <!-- Section header under the timeline -->
           <div class="timeline-section">
-            <div class="timeline-section-title">Detail & Tip</div>
+            <div class="timeline-section-title-row">
+              <div class="timeline-section-title">Detail & Tip</div>
+              <div class="stage-controls">
+                <span v-if="growing" class="chip">Day: {{ dayElapsed }}</span>
+                <span v-if="growing && currentStageDisplay" class="chip">Stage: {{ currentStageDisplay }}</span>
+                <button class="btn-green" @click="startGrowing">Start Growing</button>
+              </div>
+            </div>
             <div class="timeline-section-divider"></div>
             <div class="detail-grid">
               <!-- Instance overview removed as requested -->
               <div class="detail-col">
                 <div class="detail-card">
-                  <div class="detail-card-title">Requirements</div>
+                  <div class="detail-card-title-row">
+                    <div class="detail-card-title">Requirements</div>
+                    <button class="btn-green" @click="toggleChecklist">{{ showChecklist ? 'Hide Checklist' : 'Checklist' }}</button>
+                  </div>
                   <div v-if="reqLoading">Loading...</div>
                   <div v-else-if="reqError" class="empty-fav">{{ reqError }}</div>
-                  <div v-else-if="requirements" class="detail-items">
+                  <div v-else-if="requirements && !showChecklist" class="detail-items">
                     <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
                       <div class="req-title">{{ cat.category }}</div>
                       <ul class="req-list">
                         <li v-for="(it, j) in (cat.items || [])" :key="'req-it-'+j">{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <!-- Checklist view -->
+                  <div v-else-if="requirements && showChecklist" class="checklist">
+                    <div class="checklist-summary">Completed {{ checklistCompleted }} / {{ checklistTotal }} ({{ checklistPercent }}%)</div>
+                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'ck-'+idx" class="ck-cat">
+                      <div class="ck-title">{{ cat.category }}</div>
+                      <ul class="ck-list">
+                        <li v-for="(it, j) in (cat.items || [])" :key="'ck-it-'+j">
+                          <label class="ck-item">
+                            <input type="checkbox"
+                              :checked="isChecklistChecked(keyFor(cat.category, it.item))"
+                              @change="onChecklistChange(keyFor(cat.category, it.item), ($event.target as HTMLInputElement).checked)"/>
+                            <span>{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></span>
+                          </label>
+                        </li>
                       </ul>
                     </div>
                   </div>
@@ -460,6 +512,18 @@ const insError = ref('')
 type InstructionsResponse = { instructions?: Array<{ step?: number; title?: string; description?: string; duration?: string; tips?: string[] }> }
 const instructions = ref<InstructionsResponse | null>(null)
 
+// UI flags for started growing and display chips
+const growing = ref(false)
+const dayElapsed = ref<number>(0)
+const currentStageDisplay = ref<string>('')
+
+// Generic info modal (replaces all toasts/alerts)
+const infoTitle = ref('')
+const infoMessage = ref('')
+const infoOpen = ref(false)
+function showInfo(title: string, message: string) { infoTitle.value = title; infoMessage.value = message; infoOpen.value = true }
+function closeInfo() { infoOpen.value = false }
+
 async function loadDetailAndTips(plantId: number) {
   // Ensure we have instance id; try local list, then backend
   let instanceId = currentInstanceId.value
@@ -518,6 +582,99 @@ async function loadDetailAndTips(plantId: number) {
   }
 }
 
+// Checklist state and helpers
+const showChecklist = ref(false)
+function toggleChecklist() { showChecklist.value = !showChecklist.value }
+function slugify(s: string): string { return String(s || '').toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-') }
+function keyFor(category?: string, item?: string): string { return `${slugify(category || '')}::${slugify(item || '')}` }
+
+const checklistCompletedSet = ref<Set<string>>(new Set<string>())
+// Read local checklist on demand (currently not auto-used; kept for future)
+// function loadChecklistLocal(instanceId: number) {
+//   try {
+//     const raw = localStorage.getItem(`checklist:completed:${instanceId}`)
+//     const arr = raw ? (JSON.parse(raw) as string[]) : []
+//     checklistCompletedSet.value = new Set(arr)
+//   } catch { checklistCompletedSet.value = new Set() }
+// }
+function saveChecklistLocal(instanceId: number) {
+  try { localStorage.setItem(`checklist:completed:${instanceId}`, JSON.stringify(Array.from(checklistCompletedSet.value))) } catch {}
+}
+
+function isChecklistChecked(key: string): boolean { return checklistCompletedSet.value.has(key) }
+
+const checklistTotal = computed(() => {
+  const groups = requirements.value?.requirements || []
+  return groups.reduce((sum, g) => sum + (Array.isArray(g.items) ? g.items.length : 0), 0)
+})
+const checklistCompleted = computed(() => checklistCompletedSet.value.size)
+const checklistPercent = computed(() => (checklistTotal.value > 0 ? Math.round((checklistCompleted.value / checklistTotal.value) * 100) : 0))
+
+async function onChecklistChange(key: string, checked: boolean) {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) return
+  // optimistic update
+  if (checked) checklistCompletedSet.value.add(key); else checklistCompletedSet.value.delete(key)
+  saveChecklistLocal(instanceId)
+  try {
+    const payload: { instance_id: number; checklist_item_key: string; is_completed: boolean } = { instance_id: instanceId, checklist_item_key: key, is_completed: checked }
+    const res: Record<string, unknown> = await plantApiService.completeChecklistItem(payload)
+    const ps = (res as { progress_summary?: { completed_items?: number; total_items?: number } }).progress_summary
+    if (ps && typeof ps.completed_items === 'number' && typeof ps.total_items === 'number') {
+      // keep local count close to backend result if needed (no hard sync of keys due to missing API)
+    }
+  } catch {
+    // rollback
+    if (checked) checklistCompletedSet.value.delete(key); else checklistCompletedSet.value.add(key)
+    saveChecklistLocal(instanceId)
+    showInfo('Failed', 'Failed to update checklist. Please try again later.')
+  }
+}
+
+const selectedStage = ref<string>('')
+function isStageSelected(name?: string): boolean {
+  if (!growing.value) return false
+  return String(selectedStage.value || '') === String(name || '')
+}
+async function onSelectStage(name?: string) {
+  const stage = String(name || '').trim()
+  if (!stage) return
+  if (!growing.value) { showInfo('Action required', 'Please click Start Growing first.'); return }
+  selectedStage.value = stage
+  const instanceId = currentInstanceId.value
+  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  try {
+    await plantApiService.updatePlantInstanceProgress(instanceId, { current_stage: stage })
+    showInfo('Updated', 'Stage updated to ' + stage)
+    await refreshInstanceAfterProgress()
+  } catch {
+    showInfo('Failed', 'Failed to update stage.')
+  }
+}
+
+// Start growing: require checklist >= 80%, then call auto-update-stage
+async function startGrowing() {
+  const percent = checklistPercent.value
+  if (percent < 80) {
+    showInfo('Checklist required', 'Please complete at least 80% of the checklist before starting.')
+    return
+  }
+  const instanceId = currentInstanceId.value
+  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  try {
+    await plantApiService.autoUpdateInstanceStage(instanceId)
+    showInfo('Started', 'Growth started and stage updated.')
+    try { localStorage.setItem(`auto_update_last:${instanceId}`, String(Date.now())) } catch {}
+    await refreshInstanceAfterProgress()
+    growing.value = true
+    try { localStorage.setItem(`journal_started:${instanceId}`, '1') } catch {}
+    currentStageDisplay.value = String(selectedStage.value || instanceData.value?.tracking_info?.current_stage || '')
+    dayElapsed.value = Number(instanceData.value?.tracking_info?.days_elapsed || 0)
+  } catch {
+    showInfo('Failed', 'Failed to start growing. Please try again later.')
+  }
+}
+
 // daysFromStart removed (not used)
 
 async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
@@ -531,11 +688,56 @@ async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: strin
     timelineData.value = data as unknown as TimelineResponse
     // Load detail/tip content after timeline data
     loadDetailAndTips(Number(jp.plant_id))
+    // Optional: auto-update stage at most once per 24h after opening
+    try {
+      const instanceId = currentInstanceId.value
+      const key = instanceId ? `auto_update_last:${instanceId}` : ''
+      if (instanceId && key) {
+        const last = Number(localStorage.getItem(key) || '0')
+        const now = Date.now()
+        if (!Number.isFinite(last) || now - last > 24 * 60 * 60 * 1000) {
+          await plantApiService.autoUpdateInstanceStage(instanceId)
+          localStorage.setItem(key, String(now))
+          await refreshInstanceAfterProgress()
+        }
+      }
+    } catch {}
   } catch {
     timelineError.value = 'Failed to load timeline'
   } finally {
     timelineLoading.value = false
   }
+}
+
+// After progress update, refresh instance details and sync journal row
+async function refreshInstanceAfterProgress() {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) return
+  try {
+    const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
+    instanceData.value = detail
+    // Sync journal list stage label
+    const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(instanceId))
+    if (idx >= 0) {
+      const st = String(detail?.tracking_info?.current_stage || '')
+      if (st) journalPlants.value[idx].current_stage = st
+    }
+  } catch {}
+}
+
+function isJournalStarted(instanceId: number): boolean {
+  try { return localStorage.getItem(`journal_started:${instanceId}`) === '1' } catch { return false }
+}
+
+// Delete/deactivate a plant instance from journal
+async function deleteInstance(instanceId: number) {
+  if (!confirm('Remove this plant from your journal?')) return
+  try {
+    await plantApiService.deletePlantInstance(Number(instanceId))
+  } catch {}
+  // Remove locally
+  const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(instanceId))
+  if (idx >= 0) journalPlants.value.splice(idx, 1)
 }
 
 const ensurePlantsLoaded = async () => {
@@ -835,8 +1037,12 @@ async function testTimeline() {
 .journal-thumb img { width:100%; height:100%; object-fit:cover; }
 .journal-meta { position:static; background: transparent; border:none; border-radius:0; padding:10px; display:flex; flex-direction:column; gap:6px; }
 .journal-name { font-weight:700; color:#065f46; }
-.journal-sub { display:flex; flex-wrap:wrap; gap:6px; }
+.journal-sub { display:flex; flex-direction:column; gap:6px; }
+.journal-row { display:flex; align-items:center; gap:6px; }
+.journal-row.stage-row { justify-content:space-between; }
 .chip { background:#ffffff; border:1px solid #e5e7eb; border-radius:9999px; padding:2px 8px; font-size:12px; color:#374151; }
+.btn-danger.small { background:#ef4444; color:#fff; border:none; border-radius:9999px; padding:6px 10px; font-weight:700; cursor:pointer; }
+.btn-danger.small:hover { background:#dc2626; }
 
 /* Timeline visual */
 .timeline-visual { display:flex; flex-direction: column; align-items:center; justify-content:flex-start; gap:12px; max-width: 1120px; margin: 0 auto; padding: 0 10px; min-height: 620px; }
@@ -846,7 +1052,9 @@ async function testTimeline() {
 .tv-track { position:relative; height:10px; background:#eef2f7; border-radius:9999px; overflow:visible; border:1px solid #e5e7eb; margin:260px auto 260px; width: calc(100% - 160px); max-width: 980px; }
 .tv-fill, .tv-tick, .tv-marker, .tv-end { display: none; }
 .tv-stats { display:flex; gap:8px; align-items:center; margin-top: 44px; position: relative; z-index: 3; }
-.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; }
+.tv-stage-card { position:absolute; transform: translateX(-50%); width:240px; max-width: 24vw; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); padding:12px 14px; z-index:1; min-height: 180px; display:flex; flex-direction:column; gap:6px; cursor:pointer; transition: background-color .2s ease, color .2s ease; }
+.tv-stage-card.selected { background:#10b981; color:#ffffff; border-color:#10b981; }
+.tv-stage-card.selected .tv-stage-title, .tv-stage-card.selected .tv-stage-range, .tv-stage-card.selected .tv-stage-desc { color:#ffffff; }
 .tv-stage-card.top { bottom:40px; }
 .tv-stage-card.bottom { top:40px; }
 .tv-stage-card.top::after { content:''; position:absolute; left:50%; top:100%; width:2px; height:36px; background:#cbd5e1; transform: translateX(-50%); }
@@ -865,9 +1073,12 @@ async function testTimeline() {
 .timeline-section { width:100%; max-width: 1120px; z-index: 1; margin: 0 auto; }
 .timeline-section-title { font-weight:800; color:#111827; font-size:22px; margin-top: 8px; }
 .timeline-section-divider { height:1px; background:#e5e7eb; margin-top:8px; }
+.timeline-section-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.stage-controls { display:flex; align-items:center; gap:8px; }
 
 .detail-grid { display:grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; align-items: start; width: 100%; margin-left: 0; margin-right: 0; }
 .detail-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; max-width: 1120px; margin: 0 auto; }
+.detail-card-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .detail-card-title { font-weight:800; color:#065f46; margin-bottom:6px; }
 .detail-items { display:grid; gap:6px; }
 .detail-item { display:flex; gap:6px; color:#374151; }
@@ -879,6 +1090,11 @@ async function testTimeline() {
 .ins-step { font-weight:700; color:#111827; }
 .ins-desc { margin-top:2px; }
 .ins-meta { font-size:12px; color:#6b7280; }
+
+/* Green CTA-style button to match grow button */
+.btn-green { background:#10b981; color:#ffffff; border:none; border-radius:9999px; padding:8px 14px; font-weight:800; cursor:pointer; box-shadow: 0 6px 14px rgba(16,185,129,0.35); }
+.btn-green:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(16,185,129,0.45); }
+.btn-green:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(16,185,129,0.35); }
 .timeline-list { margin:0; padding-left:18px; color:#374151; }
 .timeline h3, .plant-list h3, .profile-info h3, .guide-list h3 { margin:0 0 8px 0; color:#065f46; font-size:16px; }
 .journey { display:grid; gap:12px; }
@@ -926,6 +1142,7 @@ async function testTimeline() {
 
 /* Modal styles reused from other views to keep consistency */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:flex-start; justify-content:center; z-index: 1000; padding: 2rem 1rem; overflow-y: auto; }
+.info-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:flex; align-items:center; justify-content:center; z-index: 2000; padding: 2rem 1rem; }
 .modal-content { background:#ffffff; border-radius:16px; width:min(720px, 96%); max-height:90vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.15); }
 .modal-content.timeline-modal { width:min(1400px, 98%); max-height:none; margin: 2rem auto; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb; }

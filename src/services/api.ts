@@ -729,6 +729,13 @@ export class PlantRecommendationService {
     return await resp.json()
   }
 
+  // --- Tracking: Delete/Deactivate a plant instance (remove from journal) ---
+  async deletePlantInstance(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}`, { method: 'DELETE' })
+    // Backend may return empty body; try json, else return {}
+    try { return await resp.json() } catch { return {} }
+  }
+
   async startPlantTrackingByProfile(params: { plant_id: number; plant_nickname?: string; location_details?: string }): Promise<{ instance_id: number }> {
     const user_data = this.buildTrackingUserDataFromProfile()
     // Match backend schema exactly; include optional fields as empty strings when absent
