@@ -390,6 +390,8 @@ const renderedDescription = computed(() => {
 const isFav = computed(() => props.plant ? plantStore.isFavourite(String(props.plant.id)) : false)
 async function toggleFav() {
   if (!props.plant) return
+  const email = localStorage.getItem('plantopia_user_email') || ''
+  if (!email) { alert('Please sign in to use favourites.'); return }
   if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
   await plantStore.toggleFavourite(String(props.plant.id))
 }

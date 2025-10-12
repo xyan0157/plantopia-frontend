@@ -395,6 +395,8 @@ const renderedDescription = computed(() => {
 
 // favourites for grid cards
 const toggleFav = async (p: Plant) => {
+  const email = localStorage.getItem('plantopia_user_email') || ''
+  if (!email) { alert('Please sign in to use favourites.'); return }
   if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
   await store.toggleFavourite(String(p.id))
 }

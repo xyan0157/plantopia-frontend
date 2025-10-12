@@ -29,7 +29,8 @@
             <div class="section-title-row">
               <h3>Favourite Plants</h3>
             </div>
-            <div v-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
+            <div v-if="!plantsStore.favouritesLoaded" class="empty-fav">Loading...</div>
+            <div v-else-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
             <div v-else>
               <div
                 class="plant-scroll"
@@ -56,7 +57,8 @@
           <div class="section-title-row">
             <h3>My Guide List</h3>
           </div>
-          <div v-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
+          <div v-if="!guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
+          <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
           <ul v-else class="guide-fav-ul">
             <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
               {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
@@ -151,7 +153,7 @@
             </div>
           </div>
           <div class="chat-input-row">
-            <input class="chat-input" v-model="chatInput" @keydown.enter.prevent="sendChatHandler" placeholder="Type your question..." />
+            <input class="chat-input" v-model="chatInput" @keydown.enter.prevent="" placeholder="Type your question..." />
             <button class="btn-green" :disabled="chatInput.trim().length===0" @click="sendChatHandler">Send</button>
           </div>
         </div>

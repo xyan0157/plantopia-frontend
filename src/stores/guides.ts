@@ -9,6 +9,7 @@ interface GuidesState {
   error: string | null
   initialized: boolean
   favourites: Set<string>
+  favouritesLoaded: boolean
 }
 
 function makeFileKey(category: string, filename: string): string {
@@ -24,6 +25,7 @@ export const useGuidesStore = defineStore('guides', {
     error: null,
     initialized: false,
     favourites: new Set<string>(),
+    favouritesLoaded: false,
   }),
   getters: {
     getCategoryFiles: (state) => (category: string): MarkdownFileSummary[] => {
@@ -45,6 +47,7 @@ export const useGuidesStore = defineStore('guides', {
         // eslint-disable-next-line no-console
         console.warn('Failed to load guide favourites', e)
       }
+      this.favouritesLoaded = true
     },
 
     saveFavourites() {
@@ -56,11 +59,39 @@ export const useGuidesStore = defineStore('guides', {
       }
     },
 
-    toggleFavouriteGuide(categorySlug: string, filename: string) {
+    async syncFavouritesFromServer(): Promise<void> {
+      try {
+        const email = localStorage.getItem('plantopia_user_email') || ''
+        if (!email) return
+        const favs = await markdownApiService.getGuideFavoritesByEmail(email)
+        const keys = favs.map(f => makeFileKey(String(f.category || ''), String(f.guide_name || '')))
+        this.favourites = new Set(keys)
+      } catch {}
+      this.favouritesLoaded = true
+    },
+
+    async toggleFavouriteGuide(categorySlug: string, filename: string) {
       const key = makeFileKey(categorySlug, filename)
-      if (this.favourites.has(key)) this.favourites.delete(key)
-      else this.favourites.add(key)
-      this.saveFavourites()
+      const email = localStorage.getItem('plantopia_user_email') || ''
+      if (!email) { // fallback to local only when no email
+        if (this.favourites.has(key)) this.favourites.delete(key); else this.favourites.add(key)
+        this.saveFavourites()
+        return
+      }
+      if (this.favourites.has(key)) {
+        await markdownApiService.removeGuideFavorite(filename, email)
+        this.favourites.delete(key)
+      } else {
+        await markdownApiService.addGuideFavorite(email, filename, categorySlug)
+        this.favourites.add(key)
+      }
+    },
+
+    async ensureFavouritesLoaded(): Promise<void> {
+      if (this.favouritesLoaded) return
+      const email = localStorage.getItem('plantopia_user_email') || ''
+      if (email) await this.syncFavouritesFromServer()
+      else this.loadFavourites()
     },
 
     isFavouriteGuide(categorySlug: string, filename: string): boolean {

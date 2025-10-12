@@ -881,8 +881,10 @@ export class PlantRecommendationService {
   async addFavoriteByEmail(email: string, plantId: number, notes?: string): Promise<ApiFavoriteItem | null> {
     try {
       const body = { email, plant_id: Number(plantId), ...(notes ? { notes } : {}) }
+      try { console.log('[Favorites][Plant] POST /api/v1/favorites request', body) } catch {}
       const resp = await this.fetchWithFallback('/api/v1/favorites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await resp.json()
+      try { console.log('[Favorites][Plant] response', data) } catch {}
       return (data || null) as ApiFavoriteItem | null
     } catch { return null }
   }
