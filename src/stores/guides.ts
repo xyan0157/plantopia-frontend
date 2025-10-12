@@ -39,27 +39,12 @@ export const useGuidesStore = defineStore('guides', {
   },
   actions: {
     loadFavourites() {
-      try {
-        const raw = localStorage.getItem('plantopia_guide_favourites')
-        if (raw) {
-          const list = JSON.parse(raw)
-          if (Array.isArray(list)) this.favourites = new Set(list.map(String))
-        }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to load guide favourites', e)
-      }
+      // Local favourites are no longer used; ensure empty state when not logged in
+      this.favourites = new Set<string>()
       this.favouritesLoaded = true
     },
 
-    saveFavourites() {
-      try {
-        localStorage.setItem('plantopia_guide_favourites', JSON.stringify(Array.from(this.favourites)))
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to save guide favourites', e)
-      }
-    },
+    saveFavourites() { /* no-op: server as source of truth */ },
 
     async syncFavouritesFromServer(): Promise<void> {
       this.favouritesLoading = true
@@ -78,17 +63,15 @@ export const useGuidesStore = defineStore('guides', {
     async toggleFavouriteGuide(categorySlug: string, filename: string) {
       const key = makeFileKey(categorySlug, filename)
       const email = localStorage.getItem('plantopia_user_email') || ''
-      if (!email) { // fallback to local only when no email
-        if (this.favourites.has(key)) this.favourites.delete(key); else this.favourites.add(key)
-        this.saveFavourites()
-        return
-      }
+      if (!email) { return }
       if (this.favourites.has(key)) {
         await markdownApiService.removeGuideFavorite(filename, email)
         this.favourites.delete(key)
+        this.favourites = new Set(this.favourites)
       } else {
         await markdownApiService.addGuideFavorite(email, filename, categorySlug)
         this.favourites.add(key)
+        this.favourites = new Set(this.favourites)
       }
       try { localStorage.setItem('favourites_refresh_at', String(Date.now())) } catch {}
     },

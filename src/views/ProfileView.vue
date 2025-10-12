@@ -60,7 +60,13 @@
           <div v-if="guidesStore.favouritesLoading || !guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
           <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
           <ul v-else class="guide-fav-ul">
-            <li v-for="key in guideFavs" :key="key" class="guide-fav-item">
+            <li
+              v-for="key in guideFavs"
+              :key="key"
+              class="guide-fav-item clickable"
+              @click="openFavouriteGuide(key)"
+              title="View guide"
+            >
               {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
             </li>
           </ul>
@@ -72,8 +78,7 @@
             <h3>Journal Plants</h3>
           </div>
           <div v-if="journalLoading" class="empty-fav">Loading...</div>
-          <div v-else-if="journalError" class="empty-fav">{{ journalError }}</div>
-          <div v-else-if="journalPlants.length === 0" class="empty-fav">No journal yet.</div>
+          <div v-else-if="journalPlants.length === 0 || journalError" class="empty-fav">No journal yet.</div>
           <div v-else class="journal-scroll" ref="journalScrollRef">
             <div
               v-for="jp in journalPlants"
@@ -94,10 +99,10 @@
                   </div>
                   <div class="journal-row stage-row" v-if="isJournalStarted(jp.instance_id)">
                   <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
-                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                    <button class="btn-danger small" @click.stop="requestDeleteInstance(jp.instance_id)">Delete</button>
                   </div>
                   <div class="journal-row stage-row" v-else>
-                    <button class="btn-danger small" @click.stop="deleteInstance(jp.instance_id)">Delete</button>
+                    <button class="btn-danger small" @click.stop="requestDeleteInstance(jp.instance_id)">Delete</button>
                   </div>
                 </div>
               </div>
@@ -122,6 +127,27 @@
   </div>
 
   <!-- Info Modal (generic) -->
+  <!-- Guide Detail Modal (match Guides page layout) -->
+  <div v-if="guideModalOpen" class="guide-modal" @click.self="closeGuideModal">
+    <div class="guide-modal-dialog" role="dialog" aria-modal="true">
+      <div class="guide-modal-header">
+        <div class="guide-modal-title">{{ guideModalTitle }}</div>
+        <div class="guide-fav-actions">
+          <button class="fav-btn" :class="{ active: isFavGuideModal }" @click="toggleFavForModal" aria-label="favourite">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"
+                :fill="isFavGuideModal ? 'currentColor' : 'none'"
+                :stroke="isFavGuideModal ? 'none' : 'currentColor'" stroke-width="2"/>
+            </svg>
+          </button>
+          <button class="guide-modal-close" @click="closeGuideModal" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="guide-modal-body">
+        <div class="markdown-content article" v-html="guideModalContent"></div>
+      </div>
+    </div>
+  </div>
   <div v-if="infoOpen" class="info-overlay" @click="closeInfo">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
@@ -132,6 +158,23 @@
         <div class="placeholder-text">{{ infoMessage }}</div>
         <div style="text-align:right; margin-top: 8px;">
           <button class="btn-green" @click="closeInfo">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Modal for Journal -->
+  <div v-if="confirmDeleteOpen" class="info-overlay" @click="confirmDeleteOpen = false">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm</h2>
+        <button class="modal-close" @click="confirmDeleteOpen = false">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="placeholder-text">Remove this plant from your journal?</div>
+        <div style="text-align:right; margin-top: 8px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn" @click="confirmDeleteOpen = false">Cancel</button>
+          <button class="btn-danger small" @click="confirmDelete()">Delete</button>
         </div>
       </div>
     </div>
@@ -329,15 +372,15 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 // import { useRouter } from 'vue-router'
 import { ensureGoogleIdentityLoaded, parseJwtCredential } from '@/services/googleIdentity'
 import { usePlantsStore } from '@/stores/plants'
 import { plantApiService } from '@/services/api'
 import PlantDetailModal from '@/views/recommendation/PlantDetailModal.vue'
-import { renderMarkdown } from '@/services/markdownService'
 import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
+import { renderMarkdown } from '@/services/markdownService'
 
 const auth = useAuthStore()
 // const router = useRouter()
@@ -437,7 +480,7 @@ async function loadJournalPlantsFromBackend() {
   try {
     const email = userEmail.value
     if (!email) { journalPlants.value = []; return }
-    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: false, page: 1, limit: 50 })
+    const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
     journalPlants.value = Array.isArray(res?.plants) ? res.plants : []
   } catch {
     journalError.value = 'Failed to load journal'
@@ -612,7 +655,7 @@ async function loadDetailAndTips(plantId: number) {
     try {
       const email = userEmail.value
       if (email) {
-        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: false, page: 1, limit: 50 })
+        const res = await plantApiService.getUserTrackingPlantsByEmail(email, { active_only: true, page: 1, limit: 50 })
         const found2 = (res?.plants || []).find((p) => Number(p.plant_id) === Number(plantId))
         if (found2?.instance_id) instanceId = Number(found2.instance_id)
       }
@@ -630,6 +673,16 @@ async function loadDetailAndTips(plantId: number) {
     const detail = await plantApiService.getPlantInstanceDetails(instanceId) as InstanceDetails
     // tips endpoint temporarily removed; rely on detail.current_tips if provided
     instanceData.value = detail
+    // Sync UI from backend so stage/day persist across reopen
+    try {
+      const ti = detail?.tracking_info
+      if (ti) {
+        currentStageDisplay.value = String(ti.current_stage || '')
+        selectedStage.value = String(ti.current_stage || '')
+        dayElapsed.value = Number(ti.days_elapsed || 0)
+        growing.value = Boolean(ti.is_active)
+      }
+    } catch {}
     // Call start-growing with empty body to fetch latest is_active without changing anything
     try {
       const res = await plantApiService.startGrowingInstance(instanceId)
@@ -847,14 +900,22 @@ function isJournalStarted(instanceId: number): boolean {
 }
 
 // Delete/deactivate a plant instance from journal
-async function deleteInstance(instanceId: number) {
-  if (!confirm('Remove this plant from your journal?')) return
-  try {
-    await plantApiService.deletePlantInstance(Number(instanceId))
-  } catch {}
-  // Remove locally
-  const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(instanceId))
+const confirmDeleteOpen = ref(false)
+let pendingDeleteId: number | null = null
+function requestDeleteInstance(instanceId: number) {
+  pendingDeleteId = Number(instanceId)
+  confirmDeleteOpen.value = true
+}
+async function confirmDelete() {
+  const id = pendingDeleteId
+  confirmDeleteOpen.value = false
+  pendingDeleteId = null
+  if (!id) return
+  try { await plantApiService.deletePlantInstance(Number(id)) } catch {}
+  const idx = journalPlants.value.findIndex(x => Number(x.instance_id) === Number(id))
   if (idx >= 0) journalPlants.value.splice(idx, 1)
+  // Reload from backend to reflect server state and filters
+  await loadJournalPlantsFromBackend()
 }
 
 const ensurePlantsLoaded = async () => {
@@ -948,6 +1009,33 @@ watch(isLoggedIn, async (v) => {
     } catch {}
   }
 }, { immediate: true })
+// Open favourite guide in a simple modal using markdown renderer
+const guideModalOpen = ref(false)
+const guideModalTitle = ref('')
+const guideModalContent = ref('')
+const guideModalKey = ref('')
+const isFavGuideModal = computed(() => Boolean(guideModalKey.value) && guidesStore.isFavouriteGuide(guideModalKey.value.split('///')[0], guideModalKey.value.split('///')[1]))
+async function openFavouriteGuide(key: string) {
+  try {
+    const [category, filename] = key.split('///')
+    guideModalKey.value = key
+    guideModalTitle.value = filename || ''
+    // Ensure we have content; use store helper which hits API if needed
+    const content = await guidesStore.getFileContent(category, filename)
+    guideModalContent.value = renderMarkdown(content)
+    guideModalOpen.value = true
+  } catch {
+    guideModalTitle.value = 'Guide'
+    guideModalContent.value = 'Failed to load guide.'
+    guideModalOpen.value = true
+  }
+}
+function closeGuideModal() { guideModalOpen.value = false }
+async function toggleFavForModal() {
+  if (!guideModalKey.value) return
+  const [category, filename] = guideModalKey.value.split('///')
+  await guidesStore.toggleFavouriteGuide(category, filename)
+}
 
 // Also refresh journal when other pages signal a change
 window.addEventListener('storage', (e: StorageEvent) => {
@@ -979,7 +1067,51 @@ try {
 // No fallback prompt button; we only use the official button above
 
 const doLogout = () => {
+  // Clear auth state
   auth.userLogout()
+  // Clear local persisted identity/profile so other views detect logged-out state
+  try {
+    localStorage.removeItem('plantopia_user_email')
+    localStorage.removeItem('plantopia_user_name')
+    localStorage.removeItem('profile_display_name')
+    localStorage.removeItem('profile_suburb_id')
+    localStorage.removeItem('profile_suburb')
+    localStorage.removeItem('profile_experience')
+    localStorage.removeItem('profile_garden_type')
+    localStorage.removeItem('profile_available_space')
+    localStorage.removeItem('profile_climate_goal')
+  } catch {}
+  // Reset favourites in stores so stars become inactive immediately
+  try {
+    // plants
+    ;(plantsStore as unknown as { favourites: Set<string>; favouritesLoaded?: boolean }).favourites = new Set<string>()
+    ;(plantsStore as unknown as { favouritesLoaded?: boolean }).favouritesLoaded = false
+    // guides
+    ;(guidesStore as unknown as { favourites: Set<string>; favouritesLoaded?: boolean }).favourites = new Set<string>()
+    ;(guidesStore as unknown as { favouritesLoaded?: boolean }).favouritesLoaded = false
+  } catch {}
+  // Broadcast to other tabs/pages to reload favourites and journal state
+  try { localStorage.setItem('favourites_refresh_at', String(Date.now())) } catch {}
+  try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
+  // Re-render Google button after DOM updates
+  showGsiFallback.value = false
+  nextTick(() => {
+    try {
+      const cid = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_CLIENT_ID
+      type GInit = (opts: { client_id: string; callback: (resp: unknown) => void; auto_select: boolean; ux_mode: string }) => void
+      type GRender = (el: HTMLElement, opts: { type: string; theme: string; size: string; text: string; shape: string; width: number; logo_alignment: string }) => void
+      const google = (window as unknown as { google?: { accounts?: { id?: { initialize?: GInit; renderButton?: GRender } } } }).google
+      const idApi = google?.accounts?.id
+      if (idApi && idApi.initialize && idApi.renderButton && cid && googleBtnContainer.value) {
+        idApi.initialize({ client_id: cid, callback: () => {} , auto_select: false, ux_mode: 'popup' })
+        idApi.renderButton(googleBtnContainer.value, {
+          type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: 280, logo_alignment: 'left'
+        })
+      } else {
+        showGsiFallback.value = true
+      }
+    } catch { showGsiFallback.value = true }
+  })
 }
 
 function startEdit() {
@@ -1165,6 +1297,28 @@ const openHelpChat = () => {
 .plant-search-input:focus { outline:none; border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,0.15); }
 .guide-fav-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
 .guide-fav-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; color:#111827; font-weight:700; font-size:16px; }
+.guide-fav-item.clickable { cursor:pointer; }
+.guide-fav-item.clickable:hover { background:#eef2f7; }
+
+/* Guide modal styles aligned with GuidesView */
+.guide-modal { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; padding: 1rem; }
+.guide-modal-dialog { width: min(960px, 100%); max-height: 85vh; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35); display: flex; flex-direction: column; }
+.guide-modal-header { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border-bottom:1px solid #e5e7eb; background:#f9fafb; }
+.guide-modal-title { font-weight:700; color:#065f46; }
+.guide-fav-actions { display:flex; align-items:center; gap:8px; }
+.fav-btn { border:none; background:transparent; line-height:1; cursor:pointer; color:#9ca3af; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+.fav-btn svg { width:18px; height:18px; }
+.fav-btn.active { color:#10b981; }
+.guide-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
+.guide-modal-body { padding: 1rem 1.25rem; overflow:auto; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
+.markdown-content pre { background: #0b1020; color: #e5e7eb; padding: .75rem; border-radius: 8px; overflow: auto; }
+.markdown-content code { background: #f3f4f6; padding: .15rem .35rem; border-radius: 4px; }
+.article :where(h1,h2,h3){ border-left:4px solid #10b981; padding-left:.5rem; margin-top:1.25rem; }
+.article p { line-height:1.8; color:#1f2937; }
+.article ul { margin: .5rem 0 .75rem 1.25rem; }
+.article li::marker{ color:#10b981; }
+.article blockquote { border-left:4px solid #e5e7eb; padding:.25rem .75rem; color:#374151; background:#f9fafb; border-radius:6px; }
 .empty-fav { color:#6b7280; font-style:italic; padding:8px 0; }
 .journal-scroll { display:grid; grid-auto-flow: column; grid-auto-columns: 260px; gap: 12px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
 .journal-card { position:relative; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display:flex; flex-direction:column; transition: transform .2s ease, box-shadow .2s ease; }
