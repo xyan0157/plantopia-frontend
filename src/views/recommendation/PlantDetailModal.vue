@@ -95,25 +95,37 @@
             <div class="info-card">
               <h3 class="card-title">Growing Requirements:</h3>
               <div class="card-content">
-                <div class="info-item">
-                  <span class="info-icon">Sun:</span>
-                  <div class="requirement-icons" :title="resolvedSunlightLabel">
-                    <SunIcon v-if="sunType === 'full'" class="icon sun" />
-                    <div v-else-if="sunType === 'partial'" class="icon sun-partial"><SunIcon class="icon sun" /></div>
-                    <MoonIcon v-else class="icon shade" />
+                <!-- Sunlight Requirement -->
+                <div class="requirement-detail">
+                  <div class="requirement-header">
+                    <span class="requirement-label-detail">SUNLIGHT:</span>
+                    <div class="requirement-icons-detail">
+                      <SunIcon v-for="i in 3" :key="`sun-${i}`" class="icon-detail sun" :class="{ inactive: i > sunLevelComputed }" />
+                    </div>
                   </div>
+                  <div class="requirement-description">{{ getSunlightDescription() }}</div>
                 </div>
-                <div class="info-item">
-                  <span class="info-icon">Water:</span>
-                  <div class="requirement-icons" :title="resolvedWaterLabel">
-                    <BeakerIcon v-for="i in 3" :key="'w-'+i" class="icon water" :class="{ inactive: i > waterLevel }" />
+
+                <!-- Water Requirement -->
+                <div class="requirement-detail">
+                  <div class="requirement-header">
+                    <span class="requirement-label-detail">WATER:</span>
+                    <div class="requirement-icons-detail">
+                      <BeakerIcon v-for="i in 3" :key="`water-${i}`" class="icon-detail water" :class="{ inactive: i > waterLevel }" />
+                    </div>
                   </div>
+                  <div class="requirement-description">{{ getWaterDescription() }}</div>
                 </div>
-                <div class="info-item">
-                  <span class="info-icon">Effort:</span>
-                  <div class="requirement-icons" :title="resolvedEffortLabel">
-                    <WrenchScrewdriverIcon v-for="i in 3" :key="'c-'+i" class="icon care" :class="{ inactive: i > effortLevel }" />
+
+                <!-- Care/Effort Requirement -->
+                <div class="requirement-detail">
+                  <div class="requirement-header">
+                    <span class="requirement-label-detail">CARE:</span>
+                    <div class="requirement-icons-detail">
+                      <WrenchScrewdriverIcon v-for="i in 3" :key="`care-${i}`" class="icon-detail care" :class="{ inactive: i > effortLevel }" />
+                    </div>
                   </div>
+                  <div class="requirement-description">{{ getCareDescription() }}</div>
                 </div>
               </div>
             </div>
@@ -441,11 +453,21 @@ const matchedFromAll = computed<PlantWithCompanions | null>(() => {
   // Match by name first; fallback to scientific name
   const n = String(props.plant.name || '').toLowerCase()
   const s = String((props.plant as PlantWithCompanions).scientific_name || '').toLowerCase()
+  console.log('[CompanionPlanting] Attempting to match plant:', { searchName: n, searchScientific: s, totalPlantsInStore: plantStore.plants.length })
   const found = plantStore.plants.find(p => {
     const pn = String(p.name || '').toLowerCase()
     const ps = String((p as PlantWithCompanions).scientific_name || '').toLowerCase()
     return (n && pn === n) || (s && ps === s)
   }) as PlantWithCompanions | undefined
+  if (found) {
+    console.log('[CompanionPlanting] Successfully matched plant:', found.name, 'with companions:', {
+      beneficial: found.beneficial_companions,
+      harmful: found.harmful_companions,
+      neutral: found.neutral_companions
+    })
+  } else {
+    console.log('[CompanionPlanting] No matching plant found in store')
+  }
   return found || null
 })
 
@@ -458,18 +480,33 @@ const effortResolved = computed(() => (props.plant?.effort as string) || (matche
 
 const beneficialCompanions = computed<string[]>(() => {
   const own = parseCompanions(plantWithCompanions.value?.beneficial_companions)
-  if (own.length) return own
-  return parseCompanions(matchedFromAll.value?.beneficial_companions)
+  if (own.length) {
+    console.log('[CompanionPlanting] Found beneficial from plant itself:', own)
+    return own
+  }
+  const fallback = parseCompanions(matchedFromAll.value?.beneficial_companions)
+  console.log('[CompanionPlanting] Beneficial fallback from matched plant:', fallback, 'matched plant:', matchedFromAll.value?.name)
+  return fallback
 })
 const harmfulCompanions = computed<string[]>(() => {
   const own = parseCompanions(plantWithCompanions.value?.harmful_companions)
-  if (own.length) return own
-  return parseCompanions(matchedFromAll.value?.harmful_companions)
+  if (own.length) {
+    console.log('[CompanionPlanting] Found harmful from plant itself:', own)
+    return own
+  }
+  const fallback = parseCompanions(matchedFromAll.value?.harmful_companions)
+  console.log('[CompanionPlanting] Harmful fallback from matched plant:', fallback)
+  return fallback
 })
 const neutralCompanions = computed<string[]>(() => {
   const own = parseCompanions(plantWithCompanions.value?.neutral_companions)
-  if (own.length) return own
-  return parseCompanions(matchedFromAll.value?.neutral_companions)
+  if (own.length) {
+    console.log('[CompanionPlanting] Found neutral from plant itself:', own)
+    return own
+  }
+  const fallback = parseCompanions(matchedFromAll.value?.neutral_companions)
+  console.log('[CompanionPlanting] Neutral fallback from matched plant:', fallback)
+  return fallback
 })
 
 // Reference to ViewHistory component
@@ -816,6 +853,36 @@ const resolvedEffortLabel = computed(() => {
   if (e.includes('med')) return 'Medium'
   return 'Low'
 })
+
+// Sunlight level for enhanced display
+const sunLevelComputed = computed<number>(() => {
+  const s = String(sunlightResolved.value || '').toLowerCase()
+  if (s.includes('full')) return 3
+  if (s.includes('partial') || s.includes('part')) return 2
+  return 1
+})
+
+// Description functions for enhanced display
+function getSunlightDescription(): string {
+  const level = sunLevelComputed.value
+  if (level === 3) return 'Full Sun: 6+ hours of direct sunlight daily. Best for sun-loving plants.'
+  if (level === 2) return 'Partial Sun: 3-6 hours of sunlight. Ideal for moderately light-tolerant plants.'
+  return 'Low Sun/Shade: Less than 3 hours of direct sun. Perfect for shade-tolerant plants.'
+}
+
+function getWaterDescription(): string {
+  const level = waterLevel.value
+  if (level === 3) return 'High Water: Frequent watering needed. Keep soil consistently moist.'
+  if (level === 2) return 'Medium Water: Moderate watering. Water when top soil feels dry.'
+  return 'Low Water: Minimal watering. Allow soil to dry between waterings.'
+}
+
+function getCareDescription(): string {
+  const level = effortLevel.value
+  if (level === 3) return 'High Care: Requires regular attention, pruning, and specific conditions.'
+  if (level === 2) return 'Medium Care: Some maintenance needed. Occasional pruning and monitoring.'
+  return 'Low Care: Easy to maintain. Minimal intervention required.'
+}
 </script>
 
 <style scoped>
@@ -998,6 +1065,9 @@ const resolvedEffortLabel = computed(() => {
   font-weight: 600;
   color: #047857;
   margin: 0;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .card-title-row { display:flex; align-items:baseline; gap:8px; justify-content:space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; margin-bottom: 1rem; }
@@ -1048,8 +1118,74 @@ const resolvedEffortLabel = computed(() => {
 .shade { color: #6b7280; }
 .sun-partial { width: 18px; height: 18px; clip-path: inset(0 50% 0 0); }
 .water { color: #0ea5e9; }
-.care { color: #f59e0b; }
+.care { color: #6b7280; }
 .inactive { opacity: 0.25; }
+
+/* Enhanced Requirements Display for Modal */
+.requirement-detail {
+  padding: 1rem;
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.requirement-detail:hover {
+  border-color: #a7f3d0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.requirement-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.requirement-label-detail {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #047857;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.requirement-icons-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-detail {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s;
+}
+
+.icon-detail.sun {
+  color: #f59e0b;
+}
+
+.icon-detail.water {
+  color: #0ea5e9;
+}
+
+.icon-detail.care {
+  color: #6b7280;
+}
+
+.icon-detail.inactive {
+  opacity: 0.25;
+}
+
+.requirement-description {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #374151;
+  font-weight: 500;
+}
 
 .benefits-grid {
   display: grid;

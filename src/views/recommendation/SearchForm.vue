@@ -8,7 +8,7 @@
       <div class="card-body">
         <form @submit.prevent="handleFindPlants">
         <!-- Page Title -->
-        <h1 class="h3 mb-4 text-center fw-bold" style="color: white; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);">Plant Recommendations</h1>
+        <h1 class="mb-4 text-center fw-bold" style="font-size: 3rem; color: white; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);">Plant Recommendations</h1>
 
         <!-- Location Input -->
         <div class="mb-3">
@@ -121,10 +121,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ArrowRightIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import LocationInput from './LocationInput.vue'
 import DropdownSelect from './DropdownSelect.vue'
+import { plantApiService } from '@/services/api'
 
 // Extended search parameters interface to match API requirements
 interface SearchParams {
@@ -223,8 +224,11 @@ const ornamentalTypes = ['Flowers', 'Foliage', 'Climbers', 'Groundcovers']
 // Color options - optional aesthetics
 const colorOptions = ['White', 'Yellow', 'Orange', 'Pink', 'Red', 'Purple', 'Blue']
 
-// Predefined location suggestions for user convenience - Melbourne suburbs (names only)
-const locationSuggestions = [
+// Valid suburbs from API (loaded on mount)
+const validSuburbs = ref<string[]>([])
+
+// Fallback suburbs list in case API fails
+const fallbackSuburbs = [
   'Melbourne',
   'Richmond',
   'Fitzroy',
@@ -249,7 +253,8 @@ const locationSuggestions = [
   'Yarraville',
   'Williamstown',
   'Brighton',
-  'Caulfield'
+  'Caulfield',
+  'Clayton'
 ]
 
 // Computed properties for conditional display
@@ -314,17 +319,15 @@ const updateFilters = (filters: typeof filterData.value) => {
   Object.assign(formData.value, filters)
 }
 
-// Validates user location input - accepts suburb names only
+// Validates user location input - only accepts valid Melbourne suburbs
 const validateLocation = (loc: string): boolean => {
-  // Check if location matches any predefined suggestions
-  const matchesSuggestion = locationSuggestions.some((suggestion) =>
-    suggestion.toLowerCase().includes(loc.toLowerCase())
+  const normalizedLoc = loc.trim().toLowerCase()
+  const suburbList = validSuburbs.value.length > 0 ? validSuburbs.value : fallbackSuburbs
+
+  // Check if location exactly matches a valid suburb (case insensitive)
+  return suburbList.some((suburb) =>
+    suburb.toLowerCase() === normalizedLoc
   )
-
-  // Allow if matches suggestions OR is a valid suburb name (letters and spaces only)
-  const isValidSuburbName = /^[a-zA-Z\s]+$/.test(loc.trim()) && loc.trim().length >= 2
-
-  return matchesSuggestion || isValidSuburbName
 }
 
 // Handles form submission - validates data and emits to parent component
@@ -339,7 +342,7 @@ const handleFindPlants = () => {
   }
 
   if (!validateLocation(formData.value.location)) {
-    error.value = 'Please enter a valid Melbourne suburb'
+    error.value = 'Please enter a valid Melbourne suburb. Type a suburb name like "Clayton" or "Melbourne" and select from the dropdown.'
     return
   }
 
@@ -368,6 +371,23 @@ const handleFindPlants = () => {
   // Emit validated form data to parent component
   emit('find-plants', formData.value)
 }
+
+// Load suburbs from API on component mount
+onMounted(async () => {
+  try {
+    const suburbs = await plantApiService.fetchAllSuburbs()
+    if (suburbs && suburbs.length > 0) {
+      validSuburbs.value = suburbs.map(s => s.name).sort()
+      console.log('[SearchForm] Loaded suburbs from API:', suburbs.length)
+    } else {
+      console.warn('[SearchForm] API returned empty suburbs, using fallback')
+      validSuburbs.value = fallbackSuburbs
+    }
+  } catch (error) {
+    console.error('[SearchForm] Failed to fetch suburbs, using fallback:', error)
+    validSuburbs.value = fallbackSuburbs
+  }
+})
 </script>
 
 <style scoped>
@@ -429,8 +449,8 @@ const handleFindPlants = () => {
 }
 
 @media (max-width: 767.98px) {
-  .h3 {
-    font-size: 1.25rem !important;
+  h1 {
+    font-size: 2rem !important;
   }
 }
 

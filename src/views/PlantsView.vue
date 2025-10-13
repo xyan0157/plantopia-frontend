@@ -79,6 +79,26 @@
 
             <!-- Plants Grid (render even when loading is true) -->
             <div v-if="filteredPlants.length > 0" class="plants-results">
+              <!-- Plants Count and Page Size Selector -->
+              <div class="results-controls">
+                <div class="plants-count-display">
+                  Showing {{ plantsDisplayRange.start }}-{{ plantsDisplayRange.end }} of {{ totalPlants }} plants
+                </div>
+                <div class="page-size-selector">
+                  <label for="page-size">Plants per page:</label>
+                  <select
+                    id="page-size"
+                    v-model="plantsPerPage"
+                    @change="handlePageSizeChange"
+                    class="page-size-select"
+                  >
+                    <option v-for="size in pageSizeOptions" :key="size" :value="size">
+                      {{ size }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
               <div class="plants-grid">
                 <div
                   v-for="plant in paginatedPlants"
@@ -360,7 +380,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { type Plant, plantApiService } from '@/services/api'
 import { usePlantsStore } from '@/stores/plants'
@@ -393,7 +413,8 @@ const loadingModal = ref<{ show: boolean; message: string }>({ show: false, mess
 
 // Pagination state
 const currentPage = ref(1)
-const plantsPerPage = 12
+const plantsPerPage = ref(12)
+const pageSizeOptions = [12, 24, 48, 96]
 const totalFromServer = ref(0)
 
 // Server-side pagination is used; the store already returns the current page
@@ -401,7 +422,14 @@ const filteredPlants = computed(() => plants.value)
 
 // Pagination computed properties
 const totalPlants = computed(() => store.totalCount)
-const totalPages = computed(() => Math.max(1, Math.ceil(Math.max(0, totalPlants.value) / plantsPerPage)))
+const totalPages = computed(() => Math.max(1, Math.ceil(Math.max(0, totalPlants.value) / plantsPerPage.value)))
+
+// Plants display range computed property
+const plantsDisplayRange = computed(() => {
+  const start = (currentPage.value - 1) * plantsPerPage.value + 1
+  const end = Math.min(currentPage.value * plantsPerPage.value, totalPlants.value)
+  return { start, end }
+})
 // Show only pages that the frontend has already loaded (progressive reveal)
 const displayTotalPages = computed(() => Math.max(1, Math.min(totalPages.value, store.loadedPagesMax || 1)))
 
@@ -458,10 +486,17 @@ const pageNumbers = computed(() => {
 
 // Methods
 const loadPlants = async () => {
-  const { total } = await store.loadPage(currentPage.value, plantsPerPage, selectedCategory.value, searchQuery.value.trim())
+  const { total } = await store.loadPage(currentPage.value, plantsPerPage.value, selectedCategory.value, searchQuery.value.trim())
   // Kick off background prefetch of subsequent pages
-  store.startPrefetch(plantsPerPage, selectedCategory.value, searchQuery.value.trim())
+  store.startPrefetch(plantsPerPage.value, selectedCategory.value, searchQuery.value.trim())
   totalFromServer.value = total
+}
+
+// Handle page size change
+const handlePageSizeChange = () => {
+  console.log('[PlantsView] Page size changed to:', plantsPerPage.value)
+  currentPage.value = 1 // Reset to first page when changing page size
+  loadPlants()
 }
 
 const handleSearch = () => {
@@ -683,7 +718,7 @@ const getCardStyle = (p: Plant) => {
   const pal = paletteFor(pickColor(p))
   // Sky-like vertical gradient: vivid at top -> soft -> near-white bottom
   return {
-    background: `linear-gradient(180deg, ${pal.bgStart}33 0%, ${pal.bgEnd}4D 55%, rgba(255,255,255,0.96) 100%)`,
+    background: `linear-gradient(180deg, ${pal.bgStart} 0%, ${pal.bgEnd} 55%, #ffffff 100%)`,
     animation: 'cardPulse 6s ease-in-out infinite'
   }
 }
@@ -692,6 +727,18 @@ const getCardStyle = (p: Plant) => {
 const capitalizeFirst = (str: string): string => {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
+
+// Watch for page size changes
+watch(plantsPerPage, (newSize, oldSize) => {
+  if (oldSize && newSize !== oldSize) {
+    console.log('[PlantsView] plantsPerPage watcher triggered:', oldSize, '->', newSize)
+    // Clear the page cache when page size changes to force fresh data fetch
+    store.pageCache = {}
+    store.loadedPagesMax = 0
+    currentPage.value = 1
+    loadPlants()
+  }
+})
 
 // Lifecycle
 onMounted(async () => {
@@ -873,6 +920,59 @@ onMounted(async () => {
 /* Plants Results */
 .plants-results {
   padding: 1rem 0;
+}
+
+/* Results Controls */
+.results-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.plants-count-display {
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-size-selector label {
+  color: #374151;
+  font-weight: 500;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.page-size-select {
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  color: #374151;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.page-size-select:hover {
+  border-color: #10b981;
+}
+
+.page-size-select:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .plants-count {
@@ -1318,10 +1418,12 @@ onMounted(async () => {
 .plant-features h4,
 .climate-sowing h4,
 .plant-tags-detail h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
   color: #1f2937;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0.5rem;
 }
 
 .care-grid {
@@ -1395,6 +1497,18 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .page-title {
     font-size: 2rem;
+  }
+
+  .results-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .plants-count-display,
+  .page-size-selector {
+    text-align: center;
+    justify-content: center;
   }
 
   .search-filter-bar {

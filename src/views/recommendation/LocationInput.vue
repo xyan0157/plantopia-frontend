@@ -45,6 +45,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { plantApiService } from '@/services/api'
 
 // Component events - emits location changes to parent component
 const emit = defineEmits(['update:location'])
@@ -53,8 +54,11 @@ const emit = defineEmits(['update:location'])
 const location = ref('')
 const showDropdown = ref(false)
 
-// Predefined location suggestions for Melbourne area - suburb names only
-const locationSuggestions = [
+// Suburbs from API
+const locationSuggestions = ref<string[]>([])
+
+// Fallback suburbs if API fails
+const fallbackSuggestions = [
   'Melbourne',
   'Richmond',
   'Fitzroy',
@@ -79,7 +83,8 @@ const locationSuggestions = [
   'Yarraville',
   'Williamstown',
   'Brighton',
-  'Caulfield'
+  'Caulfield',
+  'Clayton'
 ]
 
 // Computed property that filters suggestions based on user input
@@ -87,10 +92,21 @@ const filteredSuggestions = computed(() => {
   // Return empty array if no input
   if (!location.value) return []
 
-  // Filter suggestions that contain the user's input (case insensitive)
-  return locationSuggestions.filter((suggestion) =>
-    suggestion.toLowerCase().includes(location.value.toLowerCase()),
+  const suggestions = locationSuggestions.value.length > 0 ? locationSuggestions.value : fallbackSuggestions
+
+  // Filter suggestions that start with the user's input (prioritize starts-with)
+  const startsWith = suggestions.filter((suggestion) =>
+    suggestion.toLowerCase().startsWith(location.value.toLowerCase())
   )
+
+  // Then add suggestions that contain the input but don't start with it
+  const contains = suggestions.filter((suggestion) =>
+    suggestion.toLowerCase().includes(location.value.toLowerCase()) &&
+    !suggestion.toLowerCase().startsWith(location.value.toLowerCase())
+  )
+
+  // Combine and limit to 10 suggestions
+  return [...startsWith, ...contains].slice(0, 10)
 })
 
 // Handle input changes - show dropdown and emit location to parent
@@ -120,9 +136,24 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
-// Add click outside listener when component mounts
-onMounted(() => {
+// Fetch suburbs from API on mount
+onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
+
+  // Fetch suburbs from backend API
+  try {
+    const suburbs = await plantApiService.fetchAllSuburbs()
+    if (suburbs && suburbs.length > 0) {
+      locationSuggestions.value = suburbs.map(s => s.name).sort()
+      console.log('[LocationInput] Loaded suburbs from API:', suburbs.length)
+    } else {
+      console.warn('[LocationInput] API returned empty suburbs, using fallback')
+      locationSuggestions.value = fallbackSuggestions
+    }
+  } catch (error) {
+    console.error('[LocationInput] Failed to fetch suburbs, using fallback:', error)
+    locationSuggestions.value = fallbackSuggestions
+  }
 })
 
 // Remove click outside listener when component unmounts
@@ -186,7 +217,7 @@ onUnmounted(() => {
   border: 2px solid #a7f3d0;
   border-radius: 1rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  z-index: 50;
+  z-index: 1000;
   margin-top: 0.25rem;
   max-height: 200px;
   overflow-y: auto;
