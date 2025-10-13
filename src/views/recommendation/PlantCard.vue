@@ -154,7 +154,7 @@ const toPalette = (c: string): Palette => {
 }
 const palette = computed<Palette>(() => toPalette(pickDominantColor()))
 const cardStyle = computed(() => ({
-  background: `linear-gradient(180deg, ${palette.value.bgStart}55 0%, ${palette.value.bgEnd}77 55%, rgba(255,255,255,0.98) 100%)`,
+  background: `linear-gradient(180deg, ${palette.value.bgStart} 0%, ${palette.value.bgEnd} 55%, #ffffff 100%)`,
   animation: 'cardPulse 6s ease-in-out infinite',
   borderColor: palette.value.border
 }))
@@ -434,15 +434,6 @@ const handleImageError = (event: Event) => {
   -webkit-line-clamp: 6; /* approx half */
   -webkit-box-orient: vertical;
   overflow: hidden;
-  position: relative;
-}
-
-.plant-card-description.clamped::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 2.25rem;
-  background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff);
 }
 
 .show-more-btn {
