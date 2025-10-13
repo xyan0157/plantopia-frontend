@@ -72,15 +72,103 @@
                 </div>
               </div>
 
+              <!-- Results Controls - Separate Section -->
+              <div v-if="!loading && !error" class="results-controls-section">
+                <div class="results-controls">
+                  <div class="guides-count-display">
+                    <span class="count-icon">📚</span>
+                    <span>Showing <strong>{{ guidesDisplayRange.start }}-{{ guidesDisplayRange.end }}</strong> of <strong>{{ totalGuides }}</strong> guides</span>
+                  </div>
+                  <div class="page-size-selector">
+                    <label for="page-size">Guides per page:</label>
+                    <select
+                      id="page-size"
+                      v-model="guidesPerPage"
+                      @change="handlePageSizeChange"
+                      class="page-size-select"
+                    >
+                      <option v-for="size in pageSizeOptions" :key="size" :value="size">
+                        {{ size }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div class="content-card">
               <div v-if="loading" class="placeholder-text">Loading guides...</div>
               <div v-else-if="error" class="placeholder-text">{{ error }}</div>
-              <ul v-else class="guide-list">
-                <li v-for="f in filteredFiles" :key="f.filename" class="guide-item" @click="openFile(f)">
-                  <div class="guide-title">{{ f.title || f.filename }}</div>
-                  <div class="guide-meta">{{ f.file_path }}</div>
-                </li>
-              </ul>
+              <div v-else>
+                <ul class="guide-list">
+                  <li v-for="f in paginatedGuides" :key="f.filename" class="guide-item" @click="openFile(f)">
+                    <div class="guide-title">{{ formatGuideTitle(f.title || f.filename) }}</div>
+                  </li>
+                </ul>
+
+                <!-- Pagination Controls -->
+                <div v-if="totalPages > 1" class="pagination-controls">
+                  <nav aria-label="Guides pagination">
+                    <ul class="pagination">
+                      <!-- Previous button -->
+                      <li class="page-item" :class="{ disabled: !canGoPrevious }">
+                        <button
+                          class="page-link"
+                          @click="goToPreviousPage"
+                          :disabled="!canGoPrevious"
+                          aria-label="Previous page"
+                        >
+                          &lsaquo; Previous
+                        </button>
+                      </li>
+
+                      <!-- Page numbers -->
+                      <li
+                        v-for="pageNumber in pageNumbers"
+                        :key="pageNumber"
+                        class="page-item"
+                        :class="{ active: pageNumber === currentPage }"
+                      >
+                        <button
+                          class="page-link"
+                          @click="goToPage(pageNumber)"
+                          :aria-label="`Go to page ${pageNumber}`"
+                          :aria-current="pageNumber === currentPage ? 'page' : undefined"
+                        >
+                          {{ pageNumber }}
+                        </button>
+                      </li>
+
+                      <!-- Next button -->
+                      <li class="page-item" :class="{ disabled: !canGoNext }">
+                        <button
+                          class="page-link"
+                          @click="goToNextPage"
+                          :disabled="!canGoNext"
+                          aria-label="Next page"
+                        >
+                          Next &rsaquo;
+                        </button>
+                      </li>
+
+                      <!-- Page jump -->
+                      <li class="page-jump-item" role="group" aria-label="Jump to page">
+                        <span class="jump-label">Go to</span>
+                        <input
+                          class="jump-input"
+                          type="number"
+                          min="1"
+                          :max="totalPages"
+                          v-model="pageJump"
+                          @keydown.enter.prevent="jumpToPage()"
+                          aria-label="Page number"
+                        />
+                        <span class="jump-total">/ {{ totalPages }}</span>
+                        <button class="jump-btn" @click="jumpToPage" :disabled="!canJump">Go</button>
+                      </li>
+                    </ul>
+                  </nav>
+                </div>
+              </div>
               </div>
             </div>
 
@@ -88,7 +176,7 @@
             <div v-if="showModal" class="guide-modal" @click.self="closeModal">
               <div class="guide-modal-dialog" role="dialog" aria-modal="true">
               <div class="guide-modal-header">
-                <div class="guide-modal-title">{{ (activeFile && (activeFile.title || activeFile.filename)) || '' }}</div>
+                <div class="guide-modal-title">{{ activeFile ? formatGuideTitle(activeFile.title || activeFile.filename) : '' }}</div>
                 <div class="guide-fav-actions">
                   <button class="fav-btn" :class="{ active: isFavActive }" @click.stop="toggleFavActive" aria-label="favourite">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -152,7 +240,15 @@ const selectedCategory = ref<string>('')
 const mode = ref<'categories' | 'category'>('categories')
 const activeIndex = ref(0)
 
-const handleSearch = () => {}
+// Pagination state
+const currentPage = ref(1)
+const guidesPerPage = ref(24)
+const pageSizeOptions = [12, 24, 48, 96]
+const pageJump = ref<number | null>(null)
+
+const handleSearch = () => {
+  currentPage.value = 1
+}
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -162,6 +258,107 @@ const filteredFiles = computed(() => {
     (f.title || '').toLowerCase().includes(q)
   )
 })
+
+// Pagination computed properties
+const totalGuides = computed(() => filteredFiles.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalGuides.value / guidesPerPage.value)))
+
+const paginatedGuides = computed(() => {
+  const start = (currentPage.value - 1) * guidesPerPage.value
+  const end = start + guidesPerPage.value
+  return filteredFiles.value.slice(start, end)
+})
+
+const guidesDisplayRange = computed(() => {
+  const start = (currentPage.value - 1) * guidesPerPage.value + 1
+  const end = Math.min(currentPage.value * guidesPerPage.value, totalGuides.value)
+  return { start, end }
+})
+
+const canGoPrevious = computed(() => currentPage.value > 1)
+const canGoNext = computed(() => currentPage.value < totalPages.value)
+const canJump = computed(() => {
+  const v = Number(pageJump.value)
+  return Number.isFinite(v) && v >= 1 && v <= totalPages.value && v !== currentPage.value
+})
+
+const pageNumbers = computed(() => {
+  const pages = []
+  const maxVisiblePages = 5
+  let startPage = Math.max(1, currentPage.value - Math.floor(maxVisiblePages / 2))
+  const endPage = Math.min(totalPages.value, startPage + maxVisiblePages - 1)
+
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1)
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i)
+  }
+
+  return pages
+})
+
+// Pagination methods
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    scrollToResults()
+  }
+}
+
+function jumpToPage() {
+  const v = Number(pageJump.value)
+  if (!Number.isFinite(v)) return
+  const page = Math.min(Math.max(1, Math.trunc(v)), totalPages.value)
+  pageJump.value = page
+  goToPage(page)
+}
+
+const goToPreviousPage = () => {
+  if (canGoPrevious.value) {
+    goToPage(currentPage.value - 1)
+  }
+}
+
+const goToNextPage = () => {
+  if (canGoNext.value) {
+    goToPage(currentPage.value + 1)
+  }
+}
+
+const scrollToResults = () => {
+  const resultsElement = document.querySelector('.content-card')
+  if (resultsElement) {
+    resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+const handlePageSizeChange = () => {
+  currentPage.value = 1
+}
+
+// Format guide title - remove file paths and convert to title case
+function formatGuideTitle(title: string): string {
+  // Remove file extensions
+  let cleaned = title.replace(/\.(md|txt|pdf)$/i, '')
+
+  // Remove directory paths (everything before last slash)
+  const lastSlash = cleaned.lastIndexOf('/')
+  if (lastSlash !== -1) {
+    cleaned = cleaned.substring(lastSlash + 1)
+  }
+
+  // Replace underscores and hyphens with spaces
+  cleaned = cleaned.replace(/[_-]/g, ' ')
+
+  // Convert to title case
+  return cleaned
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+    .trim()
+}
 
 onMounted(async () => {
   loading.value = true
@@ -498,24 +695,25 @@ function onKeydown(e: KeyboardEvent) {
   align-items: center;
   margin-bottom: 2rem;
   gap: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
-  padding: 1rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
-.search-input-group { flex: 1; max-width: 600px; }
+.search-input-group { flex: 1; max-width: 700px; }
 .search-input {
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
+  border: 2px solid #d1fae5;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  font-size: 1.1rem;
   transition: all 0.2s ease;
+  width: 100%;
 }
 .search-input:focus {
   border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
   outline: none;
 }
 
@@ -530,16 +728,35 @@ function onKeydown(e: KeyboardEvent) {
 .cat-title { position: absolute; top: 20px; left: 20px; color: white; font-size: 1.75rem; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .cat-cta { position: absolute; bottom: 20px; left: 20px; color: white; border: 2px solid rgba(255,255,255,0.8); padding: 0.5rem 1rem; border-radius: 12px; font-weight: 700; backdrop-filter: blur(2px); }
 
-.back-btn { margin-bottom: 1rem; background: transparent; border: 2px solid rgba(255,255,255,0.9); border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; color: #ffffff; }
-.back-btn:hover { background: rgba(255,255,255,0.1); }
+.back-btn {
+  margin-bottom: 1.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  color: #047857;
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.back-btn:hover {
+  background: #10b981;
+  color: white;
+  transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
 .category-title { display:none; }
 
 .content-card {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 .placeholder-text {
@@ -547,10 +764,113 @@ function onKeydown(e: KeyboardEvent) {
   font-size: 1rem;
 }
 
-.guide-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
-.guide-item { padding: 0.75rem 1rem; border: 1px solid #e5e7eb; border-radius: 8px; background: #ffffff; }
-.guide-title { font-weight: 600; color: #047857; margin-bottom: 0.25rem; }
-.guide-meta { color: #6b7280; font-size: 0.875rem; }
+/* Results Controls Section - Separate from content card */
+.results-controls-section {
+  margin-bottom: 1.5rem;
+}
+
+.results-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 2px solid #d1fae5;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  transition: all 0.3s ease;
+}
+
+.results-controls:hover {
+  border-color: #10b981;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.18);
+}
+
+.guides-count-display {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #047857;
+  font-size: 1.05rem;
+}
+
+.count-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.guides-count-display strong {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: rgba(240, 253, 244, 0.6);
+  border-radius: 10px;
+  border: 1px solid #d1fae5;
+}
+
+.page-size-selector label {
+  color: #047857;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.page-size-select {
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #d1fae5;
+  border-radius: 8px;
+  background: white;
+  color: #047857;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 70px;
+}
+
+.page-size-select:hover {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.page-size-select:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.guide-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.guide-item {
+  padding: 1.5rem 1.75rem;
+  border: 2px solid #d1fae5;
+  border-radius: 12px;
+  background: #ffffff;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.guide-item:hover {
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  transform: translateY(-2px);
+}
+.guide-title {
+  font-weight: 700;
+  color: #047857;
+  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.guide-meta {
+  color: #6b7280;
+  font-size: 1rem;
+  font-weight: 500;
+}
 
 /* Horizontal slider large card */
 .slider-card { background: transparent; border-radius: 1rem; padding: 1rem; box-shadow: none; }
@@ -601,22 +921,313 @@ function onKeydown(e: KeyboardEvent) {
 .guide-item:hover { background: #f9fafb; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 
 /* Modal styles */
-.guide-modal { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 1rem; }
-.guide-modal-dialog { width: min(960px, 100%); max-height: 85vh; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.35); display: flex; flex-direction: column; }
-.guide-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
-.guide-modal-title { font-weight: 700; color: #065f46; }
-.guide-fav-actions { display:flex; align-items:center; gap:8px; }
-.fav-btn { border:none; background:transparent; line-height:1; cursor:pointer; color:#9ca3af; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
-.fav-btn svg { width:18px; height:18px; }
-.fav-btn.active { color:#10b981; }
+.guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  backdrop-filter: blur(4px);
+}
+.guide-modal-dialog {
+  width: min(1400px, 95vw);
+  max-height: 92vh;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+}
+.guide-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2rem;
+  border-bottom: 2px solid #e5e7eb;
+  background: linear-gradient(to bottom, #ffffff, #f9fafb);
+}
+.guide-modal-title {
+  font-weight: 700;
+  color: #065f46;
+  font-size: 1.5rem;
+}
+.guide-fav-actions { display:flex; align-items:center; gap:12px; }
+.fav-btn {
+  border: none;
+  background: transparent;
+  line-height: 1;
+  cursor: pointer;
+  color: #9ca3af;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.fav-btn:hover { color: #10b981; transform: scale(1.1); }
+.fav-btn svg { width: 22px; height: 22px; }
+.fav-btn.active { color: #10b981; }
 .guide-meta { color:#6b7280; font-size:12px; margin-top:2px; display:flex; align-items:center; gap:6px; }
 .guide-chip { background:#e8f6ee; color:#065f46; border:1px solid #a7f3d0; padding:2px 8px; border-radius:9999px; font-weight:700; }
 .dot { opacity:.6; }
-.guide-modal-close { background: transparent; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #374151; }
-.guide-modal-body { padding: 1rem 1.25rem; overflow: auto; }
+.guide-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.guide-modal-close:hover {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 8px;
+}
+.guide-modal-body {
+  padding: 2.5rem 5rem;
+  overflow: auto;
+  background: #ffffff;
+}
 
 /* Narrow container for category detail */
-.narrow { max-width: 980px; margin: 0 auto; padding: 0 1rem; }
+.narrow { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .guide-modal {
+    padding: 0.5rem;
+  }
+
+  .guide-modal-dialog {
+    width: 100%;
+    max-height: 95vh;
+    border-radius: 12px;
+  }
+
+  .guide-modal-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .guide-modal-title {
+    font-size: 1.1rem;
+  }
+
+  .guide-modal-body {
+    padding: 1.5rem 2rem;
+  }
+
+  .guide-title {
+    font-size: 1.1rem;
+  }
+
+  .guide-item {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .search-bar {
+    padding: 1rem;
+  }
+
+  .search-input {
+    font-size: 1rem;
+    padding: 0.875rem 1rem;
+  }
+
+  .back-btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .content-card {
+    padding: 1.5rem;
+  }
+}
+
+/* Pagination Controls */
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+  padding: 1rem 0;
+}
+
+.pagination {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 0.75rem;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  border: 1px solid #d1fae5;
+}
+
+.page-item {
+  margin: 0;
+}
+
+.page-link {
+  display: block;
+  padding: 0.625rem 0.875rem;
+  margin: 0;
+  color: #047857;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  min-width: 44px;
+  text-align: center;
+}
+
+.page-link:hover:not(:disabled) {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+}
+
+.page-link:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.page-item.active .page-link {
+  color: white;
+  background: #10b981;
+  border-color: #10b981;
+  font-weight: 700;
+}
+
+.page-item.disabled .page-link {
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.page-item.disabled .page-link:hover {
+  color: #9ca3af;
+  background: transparent;
+  border-color: transparent;
+}
+
+.page-jump-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.75rem;
+}
+
+.jump-label {
+  color: #047857;
+  font-weight: 600;
+}
+
+.jump-input {
+  width: 64px;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #d1fae5;
+  border-radius: 8px;
+  text-align: center;
+  background: #ffffff;
+  color: #047857;
+  font-weight: 600;
+}
+
+.jump-input:focus {
+  border-color: #10b981;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.jump-total {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.jump-btn {
+  padding: 0.5rem 0.875rem;
+  border: 2px solid #10b981;
+  background: #10b981;
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.jump-btn:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.jump-btn:disabled {
+  background: #a7f3d0;
+  border-color: #a7f3d0;
+  cursor: not-allowed;
+}
+
+/* Responsive Pagination */
+@media (max-width: 768px) {
+  .results-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+
+  .guides-count-display {
+    text-align: center;
+    justify-content: center;
+    font-size: 0.95rem;
+  }
+
+  .count-icon {
+    font-size: 1.25rem;
+  }
+
+  .page-size-selector {
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .pagination {
+    gap: 0.125rem;
+    padding: 0.5rem;
+  }
+
+  .page-link {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.875rem;
+    min-width: 36px;
+  }
+
+  .page-jump-item {
+    margin-left: 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .jump-input {
+    width: 50px;
+  }
+}
 
 /* Basic markdown formatting inside modal */
 .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
