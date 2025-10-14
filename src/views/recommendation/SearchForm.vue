@@ -12,7 +12,7 @@
 
         <!-- Location Input -->
         <div class="mb-3">
-          <LocationInput @update:location="updateLocation" />
+          <LocationInput :modelValue="formData.location" @update:location="updateLocation" />
         </div>
 
         <!-- Required Fields Row with Search Button -->
@@ -122,10 +122,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ArrowRightIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import LocationInput from './LocationInput.vue'
 import DropdownSelect from './DropdownSelect.vue'
 import { plantApiService } from '@/services/api'
+
+const route = useRoute()
 
 // Extended search parameters interface to match API requirements
 interface SearchParams {
@@ -386,6 +389,13 @@ onMounted(async () => {
   } catch (error) {
     console.error('[SearchForm] Failed to fetch suburbs, using fallback:', error)
     validSuburbs.value = fallbackSuburbs
+  }
+
+  // Check if suburb was passed via query parameter (from Dashboard)
+  const suburbParam = route.query.suburb as string | undefined
+  if (suburbParam) {
+    formData.value.location = suburbParam
+    console.log('[SearchForm] Pre-filled location from query:', suburbParam)
   }
 })
 </script>

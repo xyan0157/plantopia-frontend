@@ -43,16 +43,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 import { plantApiService } from '@/services/api'
+
+// Props - accept initial location value from parent
+interface Props {
+  modelValue?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  modelValue: ''
+})
 
 // Component events - emits location changes to parent component
 const emit = defineEmits(['update:location'])
 
 // Reactive state for location input and dropdown visibility
-const location = ref('')
+const location = ref(props.modelValue || '')
 const showDropdown = ref(false)
+
+// Watch for changes to modelValue prop and update local location
+watch(() => props.modelValue, (newValue) => {
+  if (newValue && newValue !== location.value) {
+    location.value = newValue
+  }
+})
 
 // Suburbs from API
 const locationSuggestions = ref<string[]>([])

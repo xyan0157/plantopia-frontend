@@ -1229,13 +1229,856 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-/* Basic markdown formatting inside modal */
-.markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #065f46; }
-.markdown-content pre { background: #0b1020; color: #e5e7eb; padding: .75rem; border-radius: 8px; overflow: auto; }
-.markdown-content code { background: #f3f4f6; padding: .15rem .35rem; border-radius: 4px; }
-.article :where(h1,h2,h3){ border-left:4px solid #10b981; padding-left:.5rem; margin-top:1.25rem; }
-.article p { line-height:1.8; color:#1f2937; }
-.article ul { margin: .5rem 0 .75rem 1.25rem; }
-.article li::marker{ color:#10b981; }
-.article blockquote { border-left:4px solid #e5e7eb; padding:.25rem .75rem; color:#374151; background:#f9fafb; border-radius:6px; }
+/* Enhanced Markdown Content Styling */
+.markdown-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: #1f2937;
+  max-width: 100%;
+}
+
+/* Headings with gradient backgrounds and icons */
+.markdown-content h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #065f46;
+  margin: 2.5rem 0 1.5rem 0;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 6px solid #10b981;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  position: relative;
+}
+
+.markdown-content h1::before {
+  content: '📖';
+  margin-right: 0.75rem;
+  font-size: 2rem;
+}
+
+.markdown-content h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #047857;
+  margin: 2rem 0 1rem 0;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(to right, #f0fdf4 0%, transparent 100%);
+  border-left: 5px solid #10b981;
+  border-radius: 8px;
+  position: relative;
+}
+
+.markdown-content h2::before {
+  content: '🌱';
+  margin-right: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.markdown-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #065f46;
+  margin: 1.5rem 0 0.75rem 0;
+  padding: 0.75rem 1rem;
+  background: rgba(209, 250, 229, 0.3);
+  border-left: 4px solid #34d399;
+  border-radius: 6px;
+}
+
+.markdown-content h3::before {
+  content: '▸ ';
+  color: #10b981;
+  font-weight: 700;
+}
+
+.markdown-content h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #047857;
+  margin: 1.25rem 0 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #6ee7b7;
+}
+
+/* Paragraphs with better spacing */
+.markdown-content p {
+  margin: 1.25rem 0;
+  line-height: 1.85;
+  color: #374151;
+  text-align: justify;
+}
+
+.markdown-content p:first-of-type {
+  font-size: 1.1rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+/* Lists with custom styling */
+.markdown-content ul,
+.markdown-content ol {
+  margin: 1.25rem 0;
+  padding-left: 2rem;
+  color: #374151;
+}
+
+.markdown-content ul {
+  list-style: none;
+}
+
+.markdown-content ul li {
+  position: relative;
+  margin: 0.75rem 0;
+  padding-left: 1.75rem;
+  line-height: 1.75;
+}
+
+.markdown-content ul li::before {
+  content: '🌿';
+  position: absolute;
+  left: 0;
+  font-size: 1rem;
+}
+
+.markdown-content ol {
+  counter-reset: item;
+}
+
+.markdown-content ol li {
+  margin: 0.75rem 0;
+  padding-left: 0.5rem;
+  counter-increment: item;
+  line-height: 1.75;
+}
+
+.markdown-content ol li::marker {
+  content: counter(item) ". ";
+  color: #10b981;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* Nested lists */
+.markdown-content ul ul li::before {
+  content: '•';
+  color: #10b981;
+  font-size: 1.2rem;
+}
+
+/* Links with hover effects */
+.markdown-content a {
+  color: #059669;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.markdown-content a:hover {
+  color: #047857;
+  border-bottom-color: #10b981;
+}
+
+.markdown-content a::after {
+  content: '↗';
+  margin-left: 0.25rem;
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* Code blocks with syntax highlighting styles */
+.markdown-content pre {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  padding: 1.5rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid #334155;
+  position: relative;
+}
+
+.markdown-content pre::before {
+  content: '< code >';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: 'Courier New', monospace;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Inline code */
+.markdown-content code {
+  background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);
+  color: #065f46;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  border: 1px solid #a7f3d0;
+}
+
+/* Blockquotes with gradient and icon */
+.markdown-content blockquote {
+  margin: 1.5rem 0;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  color: #78350f;
+  font-style: italic;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.markdown-content blockquote::before {
+  content: '💡';
+  position: absolute;
+  left: 1.25rem;
+  top: 1.25rem;
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.markdown-content blockquote p {
+  margin: 0.5rem 0;
+  color: #78350f;
+  font-weight: 500;
+}
+
+/* Tables with modern styling */
+.markdown-content table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content thead {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.markdown-content th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.markdown-content td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.markdown-content tbody tr {
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.markdown-content tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.markdown-content tbody tr:hover {
+  background: #f0fdf4;
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+/* Horizontal rules with gradient */
+.markdown-content hr {
+  border: none;
+  height: 3px;
+  background: linear-gradient(to right, transparent, #10b981, transparent);
+  margin: 2.5rem 0;
+  border-radius: 2px;
+}
+
+/* Images with captions and hover effects */
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  margin: 1.5rem auto;
+  display: block;
+  transition: all 0.3s ease;
+}
+
+.markdown-content img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+/* Strong/Bold text */
+.markdown-content strong {
+  color: #065f46;
+  font-weight: 700;
+  background: linear-gradient(to right, #d1fae5 0%, transparent 100%);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Emphasis/Italic */
+.markdown-content em {
+  color: #047857;
+  font-style: italic;
+}
+
+/* Definition lists */
+.markdown-content dl {
+  margin: 1.5rem 0;
+}
+
+.markdown-content dt {
+  font-weight: 700;
+  color: #065f46;
+  margin-top: 1rem;
+  font-size: 1.1rem;
+}
+
+.markdown-content dd {
+  margin-left: 2rem;
+  margin-top: 0.5rem;
+  color: #374151;
+  padding-left: 1rem;
+  border-left: 3px solid #d1fae5;
+}
+
+/* Task lists with checkboxes */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: #10b981;
+}
+
+/* Footnotes */
+.markdown-content sup {
+  color: #10b981;
+  font-weight: 700;
+}
+
+/* Info boxes (using specific classes if needed) */
+.markdown-content .info-box {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left: 5px solid #3b82f6;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.markdown-content .info-box::before {
+  content: 'ℹ️';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Warning boxes */
+.markdown-content .warning-box {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left: 5px solid #f59e0b;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.markdown-content .warning-box::before {
+  content: '⚠️';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Success boxes */
+.markdown-content .success-box {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 5px solid #10b981;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.markdown-content .success-box::before {
+  content: '✅';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Smooth scrolling for anchor links */
+.markdown-content {
+  scroll-behavior: smooth;
+}
+
+/* Print styles */
+@media print {
+  .markdown-content {
+    color: #000;
+  }
+
+  .markdown-content pre {
+    background: #f5f5f5;
+    color: #000;
+    border: 1px solid #ddd;
+  }
+}
+</style>
+
+<!-- Non-scoped styles for markdown content rendered via v-html -->
+<style>
+/* Enhanced Markdown Content Styling */
+.markdown-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: #1f2937;
+  max-width: 100%;
+}
+
+/* Headings with gradient backgrounds and icons */
+.markdown-content h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #065f46;
+  margin: 2.5rem 0 1.5rem 0;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 6px solid #10b981;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  position: relative;
+}
+
+.markdown-content h1::before {
+  content: '📖';
+  margin-right: 0.75rem;
+  font-size: 2rem;
+}
+
+.markdown-content h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #047857;
+  margin: 2rem 0 1rem 0;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(to right, #f0fdf4 0%, transparent 100%);
+  border-left: 5px solid #10b981;
+  border-radius: 8px;
+  position: relative;
+}
+
+.markdown-content h2::before {
+  content: '🌱';
+  margin-right: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.markdown-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #065f46;
+  margin: 1.5rem 0 0.75rem 0;
+  padding: 0.75rem 1rem;
+  background: rgba(209, 250, 229, 0.3);
+  border-left: 4px solid #34d399;
+  border-radius: 6px;
+}
+
+.markdown-content h3::before {
+  content: '▸ ';
+  color: #10b981;
+  font-weight: 700;
+}
+
+.markdown-content h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #047857;
+  margin: 1.25rem 0 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #6ee7b7;
+}
+
+/* Paragraphs with better spacing */
+.markdown-content p {
+  margin: 1.25rem 0;
+  line-height: 1.85;
+  color: #374151;
+  text-align: justify;
+}
+
+.markdown-content p:first-of-type {
+  font-size: 1.1rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+/* Lists with custom styling */
+.markdown-content ul,
+.markdown-content ol {
+  margin: 1.25rem 0;
+  padding-left: 2rem;
+  color: #374151;
+}
+
+.markdown-content ul {
+  list-style: none;
+}
+
+.markdown-content ul li {
+  position: relative;
+  margin: 0.75rem 0;
+  padding-left: 1.75rem;
+  line-height: 1.75;
+}
+
+.markdown-content ul li::before {
+  content: '🌿';
+  position: absolute;
+  left: 0;
+  font-size: 1rem;
+}
+
+.markdown-content ol {
+  counter-reset: item;
+}
+
+.markdown-content ol li {
+  margin: 0.75rem 0;
+  padding-left: 0.5rem;
+  counter-increment: item;
+  line-height: 1.75;
+}
+
+.markdown-content ol li::marker {
+  content: counter(item) ". ";
+  color: #10b981;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* Nested lists */
+.markdown-content ul ul li::before {
+  content: '•';
+  color: #10b981;
+  font-size: 1.2rem;
+}
+
+/* Links with hover effects */
+.markdown-content a {
+  color: #059669;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.markdown-content a:hover {
+  color: #047857;
+  border-bottom-color: #10b981;
+}
+
+.markdown-content a::after {
+  content: '↗';
+  margin-left: 0.25rem;
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* Code blocks with syntax highlighting styles */
+.markdown-content pre {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  padding: 1.5rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid #334155;
+  position: relative;
+}
+
+.markdown-content pre::before {
+  content: '< code >';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: 'Courier New', monospace;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Inline code */
+.markdown-content code {
+  background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);
+  color: #065f46;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  border: 1px solid #a7f3d0;
+}
+
+/* Blockquotes with gradient and icon */
+.markdown-content blockquote {
+  margin: 1.5rem 0;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  color: #78350f;
+  font-style: italic;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.markdown-content blockquote::before {
+  content: '💡';
+  position: absolute;
+  left: 1.25rem;
+  top: 1.25rem;
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.markdown-content blockquote p {
+  margin: 0.5rem 0;
+  color: #78350f;
+  font-weight: 500;
+}
+
+/* Tables with modern styling */
+.markdown-content table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-content thead {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.markdown-content th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.markdown-content td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.markdown-content tbody tr {
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.markdown-content tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.markdown-content tbody tr:hover {
+  background: #f0fdf4;
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+/* Horizontal rules with gradient */
+.markdown-content hr {
+  border: none;
+  height: 3px;
+  background: linear-gradient(to right, transparent, #10b981, transparent);
+  margin: 2.5rem 0;
+  border-radius: 2px;
+}
+
+/* Images with captions and hover effects */
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  margin: 1.5rem auto;
+  display: block;
+  transition: all 0.3s ease;
+}
+
+.markdown-content img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+/* Strong/Bold text */
+.markdown-content strong {
+  color: #065f46;
+  font-weight: 700;
+  background: linear-gradient(to right, #d1fae5 0%, transparent 100%);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Emphasis/Italic */
+.markdown-content em {
+  color: #047857;
+  font-style: italic;
+}
+
+/* Definition lists */
+.markdown-content dl {
+  margin: 1.5rem 0;
+}
+
+.markdown-content dt {
+  font-weight: 700;
+  color: #065f46;
+  margin-top: 1rem;
+  font-size: 1.1rem;
+}
+
+.markdown-content dd {
+  margin-left: 2rem;
+  margin-top: 0.5rem;
+  color: #374151;
+  padding-left: 1rem;
+  border-left: 3px solid #d1fae5;
+}
+
+/* Task lists with checkboxes */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: #10b981;
+}
+
+/* Footnotes */
+.markdown-content sup {
+  color: #10b981;
+  font-weight: 700;
+}
+
+/* Info boxes (using specific classes if needed) */
+.markdown-content .info-box {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left: 5px solid #3b82f6;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.markdown-content .info-box::before {
+  content: 'ℹ️';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Warning boxes */
+.markdown-content .warning-box {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left: 5px solid #f59e0b;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.markdown-content .warning-box::before {
+  content: '⚠️';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Success boxes */
+.markdown-content .success-box {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 5px solid #10b981;
+  padding: 1.25rem 1.5rem 1.25rem 4rem;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.markdown-content .success-box::before {
+  content: '✅';
+  position: absolute;
+  left: 1.25rem;
+  font-size: 1.75rem;
+}
+
+/* Smooth scrolling for anchor links */
+.markdown-content {
+  scroll-behavior: smooth;
+}
+
+/* Print styles */
+@media print {
+  .markdown-content {
+    color: #000;
+  }
+
+  .markdown-content pre {
+    background: #f5f5f5;
+    color: #000;
+    border: 1px solid #ddd;
+  }
+}
 </style>

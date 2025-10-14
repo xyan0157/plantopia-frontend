@@ -1,401 +1,679 @@
 <template>
   <div class="dashboard">
-    <video class="page-bg" src="/Guide%20background.mp4" autoplay muted playsinline></video>
-    <div class="page-container">
-      <div class="hero-header">
-        <h1 class="hero-title">Urban Heat Island Dashboard</h1>
-        <p class="hero-subtitle">Explore Melbourne's heat intensity and vegetation coverage</p>
-      </div>
-      <div class="content-card">
-        <div class="map-toolbar">
-          <input
-            ref="searchInputRef"
-            type="text"
-            class="map-search-input"
-            placeholder="Search address or place to center map..."
-            aria-label="Search location"
-          />
-          <div v-if="errorMsg" class="inline-error">{{ errorMsg }}</div>
+    <!-- Background Video -->
+    <video class="page-bg" src="/Guide%20background.mp4" autoplay muted loop playsinline></video>
+
+    <!-- Hero Section -->
+    <section class="hero-section" ref="heroSection">
+      <div class="hero-content">
+        <h1 class="hero-title">Melbourne's Hidden Heat Crisis</h1>
+        <p class="hero-subtitle">
+          Across Melbourne's suburbs, temperatures vary by up to 12°C.<br>
+          <strong>{{ veryHotCount }} suburbs</strong> experience High heat conditions.<br>
+          But nature has a solution.
+        </p>
+        <div class="scroll-indicator">
+          <span>Discover Your Suburb's Heat Profile</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" transform="rotate(90 12 12)"/>
+          </svg>
         </div>
-        <div class="layout-grid">
-          <div class="layout-left">
-            <div class="map-panel">
-              <div class="map-card-header">{{ activeLayer === 'heat' ? 'Heat Intensity' : 'Vegetation Coverage' }}</div>
+      </div>
+    </section>
+
+    <!-- Data Snapshot Section -->
+    <section class="data-snapshot" ref="snapshotSection">
+      <div class="snapshot-container">
+        <div class="stat-card" v-for="(stat, index) in keyStats" :key="index">
+          <div class="stat-icon" v-html="stat.icon"></div>
+          <div class="stat-number">{{ stat.number }}</div>
+          <div class="stat-label">
+            {{ stat.label }}
+            <InfoTooltip
+              v-if="stat.tooltip"
+              :text="stat.tooltip.text"
+              :title="stat.tooltip.title"
+              position="bottom"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Map Section -->
+    <section class="map-section" ref="mapSection">
+      <div class="section-container">
+        <div class="section-header">
+          <h2 class="section-title">Explore Your Suburb</h2>
+          <p class="section-subtitle">Search for your suburb to see its heat profile and compare it with Melbourne's average</p>
+        </div>
+
+        <div class="map-layout">
+          <!-- Map Area -->
+          <div class="map-area">
+            <div class="map-toolbar">
+              <div class="search-container">
+                <input
+                  ref="searchInputRef"
+                  v-model="searchQuery"
+                  @input="onSearchInput"
+                  @focus="showDropdown = true"
+                  @blur="onSearchBlur"
+                  type="text"
+                  class="map-search-input"
+                  placeholder="Search your suburb (e.g., Carlton, Richmond)..."
+                  aria-label="Search location"
+                  autocomplete="off"
+                />
+                <div v-if="showDropdown && filteredSuburbs.length > 0" class="autocomplete-dropdown">
+                  <div
+                    v-for="suburb in filteredSuburbs"
+                    :key="suburb.id"
+                    @mousedown.prevent="selectSuburb(suburb)"
+                    class="autocomplete-item"
+                  >
+                    <span class="suburb-name">{{ suburb.name }}</span>
+                    <span class="suburb-postcode">{{ suburb.postcode }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="errorMsg" class="inline-error">{{ errorMsg }}</div>
+            </div>
+
+            <div class="map-controls">
+              <label class="layer-toggle">
+                <input type="radio" value="heat" v-model="activeLayer" name="layer" />
+                <span>Heat Intensity</span>
+              </label>
+              <label class="layer-toggle">
+                <input type="radio" value="veg" v-model="activeLayer" name="layer" />
+                <span>Vegetation Coverage</span>
+              </label>
+            </div>
+
+            <div class="map-wrapper">
               <div id="gmap" class="map" v-show="activeLayer === 'heat'"></div>
               <div id="vegmap" class="map" v-show="activeLayer === 'veg'"></div>
               <div id="uhi-legend" class="uhi-legend" v-show="activeLayer === 'heat' && legendHtml" v-html="legendHtml"></div>
               <div id="veg-legend" class="uhi-legend" v-show="activeLayer === 'veg' && vegLegendHtml" v-html="vegLegendHtml"></div>
             </div>
           </div>
-          <aside class="layout-right">
-            <div class="filter-card">
-              <div class="filter-title">Layer</div>
-              <select class="select-input" v-model="activeLayer" aria-label="Select layer">
-                <option value="heat">Heat</option>
-                <option value="veg">Vegetation</option>
-              </select>
-              <div class="hint-text">Pick a layer to view on the map.</div>
-            </div>
-            <div class="history-section">
-              <div class="filter-title">Recent Searches</div>
-              <div v-if="!searchHistory.length" class="hint-text">No recent searches.</div>
-              <div v-else class="history-cards">
-                <div
-                  v-for="item in searchHistory"
-                  :key="item.id"
-                  class="filter-card history-card"
-                >
-                  <div class="history-card-header">
-                    <div class="history-card-title">{{ item.label }}</div>
-                    <button class="history-remove" @click="removeHistory(item)" aria-label="remove">&times;</button>
-                  </div>
-                  <div class="history-card-actions">
-                    <span class="layer-badge" :class="item.layer">{{ item.layer === 'heat' ? (item.heatCategory || 'Heat') : 'Vegetation' }}</span>
-                    <template v-if="item.layer==='heat'">
-                      <div class="value-group">
-                        <span class="value-badge heat">{{ item.heat != null ? formatHeat(item.heat) : 'N/A' }}</span>
-                        <span v-if="item.rank != null" class="rank-badge heat">rank: {{ item.rank }}</span>
-                      </div>
-                    </template>
-                    <template v-else>
-                      <div class="value-group">
-                        <span class="value-badge veg">{{ item.veg != null ? formatVeg(item.veg) : 'N/A' }}</span>
-                        <span v-if="item.rank != null" class="rank-badge veg">rank: {{ item.rank }}</span>
-                      </div>
-                    </template>
-                    <button class="history-go" @click="centerTo(item)" aria-label="Center on map">
-                      <MapPinIcon />
-                    </button>
-                  </div>
-                <!-- Removed one-line summary between tags and image per request; trend helper kept for later use -->
-                <div class="history-report" v-if="getDetailForItem(item)">
-                  <div class="report-content" style="grid-column: 1 / -1;">
-                    <div class="report-title">Local summary</div>
-                    <ul class="kpi-list">
-                      <li class="kpi" v-if="getDetailForItem(item)?.heatAvg != null">
-                        <span class="kpi-label">Heat</span>
-                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.heatAvg).toFixed(1) }}°C ({{ getDetailForItem(item)?.heatCategory || 'N/A' }})</span>
-                      </li>
-                      <li class="kpi" v-if="getDetailForItem(item)?.vegTotal != null">
-                        <span class="kpi-label">Vegetation</span>
-                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.vegTotal).toFixed(1) }}%</span>
-                      </li>
-                      <li class="kpi" v-if="getDetailForItem(item)?.trees != null">
-                        <span class="kpi-label">Trees</span>
-                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.trees).toFixed(1) }}%</span>
-                      </li>
-                      <li class="kpi" v-if="getDetailForItem(item)?.shrubs != null">
-                        <span class="kpi-label">Shrubs</span>
-                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.shrubs).toFixed(1) }}%</span>
-                      </li>
-                      <li class="kpi" v-if="getDetailForItem(item)?.grass != null">
-                        <span class="kpi-label">Grass</span>
-                        <span class="kpi-value">{{ Number(getDetailForItem(item)?.grass).toFixed(1) }}%</span>
-                      </li>
-                      <template v-if="getDetailForItem(item)?.heights">
-                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.large_15m_plus != null">
-                          <span class="kpi-label">Large trees >=15m</span>
-                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.large_15m_plus).toFixed(1) }}%</span>
-                        </li>
-                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.medium_10_15m != null">
-                          <span class="kpi-label">Medium 10-15m</span>
-                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.medium_10_15m).toFixed(1) }}%</span>
-                        </li>
-                        <li class="kpi" v-if="getDetailForItem(item)?.heights?.small_3_10m != null">
-                          <span class="kpi-label">Small 3-10m</span>
-                          <span class="kpi-value">{{ Number(getDetailForItem(item)?.heights?.small_3_10m).toFixed(1) }}%</span>
-                        </li>
-                      </template>
-                    </ul>
-                  </div>
+
+          <!-- Sidebar Info Panel -->
+          <aside class="info-panel">
+            <div class="panel-content" v-if="selectedSuburb">
+              <div class="suburb-header">
+                <h3 class="suburb-name">{{ selectedSuburb.label }}</h3>
+                <span class="heat-badge" :class="getHeatClass(selectedSuburb.heatCategory)">
+                  {{ selectedSuburb.heatCategory || 'Unknown' }}
+                </span>
+              </div>
+
+              <div class="suburb-stats">
+                <div class="stat-row" v-if="selectedSuburb.heat != null">
+                  <span class="stat-label">Temperature</span>
+                  <span class="stat-value heat">{{ selectedSuburb.heat.toFixed(1) }}°C</span>
                 </div>
+                <div class="stat-row" v-if="selectedSuburb.rank != null">
+                  <span class="stat-label">Heat Rank</span>
+                  <span class="stat-value">#{{ selectedSuburb.rank }} of {{ totalSuburbs }}</span>
+                </div>
+                <div class="stat-row" v-if="selectedSuburb.veg != null">
+                  <span class="stat-label">Vegetation Coverage</span>
+                  <span class="stat-value veg">{{ selectedSuburb.veg.toFixed(1) }}%</span>
+                </div>
+                <div class="stat-row comparison" v-if="selectedSuburb.heat != null && melbourneAvgHeat">
+                  <span class="stat-label">vs Melbourne Average</span>
+                  <span class="stat-value" :class="{ 'heat': selectedSuburb.heat > melbourneAvgHeat, 'cool': selectedSuburb.heat < melbourneAvgHeat }">
+                    {{ selectedSuburb.heat > melbourneAvgHeat ? '+' : '' }}{{ (selectedSuburb.heat - melbourneAvgHeat).toFixed(1) }}°C
+                  </span>
+                </div>
+              </div>
+
+              <button class="action-btn primary" @click="goToRecommendations(selectedSuburb.label)">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+                </svg>
+                See Cooling Plants
+              </button>
+            </div>
+
+            <div class="panel-placeholder" v-else>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <p>Search for a suburb to see detailed heat information</p>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="quick-stats">
+              <div class="quick-stat-item hot">
+                <span class="label">Hottest</span>
+                <div class="value-group">
+                  <span class="value">{{ hottestSuburb }}</span>
+                  <span class="metric">{{ hottestTemp }}</span>
+                </div>
+              </div>
+              <div class="quick-stat-item cool">
+                <span class="label">Coolest</span>
+                <div class="value-group">
+                  <span class="value">{{ coolestSuburb }}</span>
+                  <span class="metric">{{ coolestTemp }}</span>
+                </div>
+              </div>
+              <div class="quick-stat-item green">
+                <span class="label">Most Vegetated</span>
+                <div class="value-group">
+                  <span class="value">{{ greenestSuburb }}</span>
+                  <span class="metric">{{ greenestVeg }}</span>
                 </div>
               </div>
             </div>
           </aside>
         </div>
       </div>
-      <!-- Charts Card (same width as map content card) -->
-      <div class="content-card charts-card">
-        <div class="charts-section">
-          <!-- Doughnut: heat categories -->
-          <div class="charts-row-2">
-            <div class="chart-card">
-              <div class="chart-title">Heat categories (doughnut)</div>
-              <div class="chart-split">
-                <div class="chart-pane">
-                  <canvas id="heat-donut" class="chart-canvas"></canvas>
-                </div>
-                <div class="chart-desc">
-                  <div class="desc-title">Summary</div>
-                  <p class="desc-text">{{ heatDonutText }}</p>
-                  <ul class="desc-list">
-                    <li v-for="it in heatDonutTopList" :key="it.label">{{ it.label }}: {{ it.percent }}%</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-            <div class="chart-card">
-              <div class="chart-title">Vegetation (%) (doughnut)</div>
-              <div class="chart-split">
-                <div class="chart-pane">
-                  <canvas id="veg-donut" class="chart-canvas"></canvas>
-                </div>
-                <div class="chart-desc">
-                  <div class="desc-title">Summary</div>
-                  <p class="desc-text">{{ vegDonutText }}</p>
-                  <ul class="desc-list">
-                    <li v-for="it in vegDonutTopList" :key="it.bucket">{{ it.bucket }}: {{ it.percent }}%</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+    </section>
+
+    <!-- Scatter Plot Narrative Section -->
+    <section class="pattern-section" ref="patternSection">
+      <div class="section-container">
+        <div class="section-header centered">
+          <h2 class="section-title">The Pattern is Clear</h2>
+          <p class="section-subtitle">
+            Data from across Melbourne reveals a strong relationship between vegetation and temperature
+          </p>
+        </div>
+
+        <div class="pattern-content">
+          <div class="chart-area">
+            <canvas id="heat-veg-scatter" class="scatter-chart"></canvas>
           </div>
-
-          
-
-          <!-- Scatter: heat vs vegetation -->
-          <div class="chart-card">
-            <div class="chart-title">Heat vs Vegetation (scatter)</div>
-            <div class="chart-split">
-              <div class="chart-pane">
-                <canvas id="heat-veg-scatter" class="chart-canvas"></canvas>
-              </div>
-              <div class="chart-desc">
-                <div class="desc-title">Summary</div>
-                <p class="desc-text">{{ scatterText }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Additional charts -->
-          <div class="chart-card">
-            <div class="chart-title">Heat bins (°C)</div>
-            <div class="chart-split">
-              <div class="chart-pane">
-                <div class="chart-rows">
-                  <div class="chart-row" v-for="row in heatBinRows" :key="row.bucket">
-                    <div class="chart-label">{{ row.bucket }}</div>
-                    <div class="chart-bar">
-                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: row.color }"></div>
-                    </div>
-                    <div class="chart-value">{{ row.count }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="chart-desc">
-                <div class="desc-title">Summary</div>
-                <p class="desc-text">{{ heatBinsText }}</p>
+          <div class="pattern-insights">
+            <div class="insight-card">
+              <div class="insight-icon">📊</div>
+              <div class="insight-text">
+                <strong>Strong Negative Correlation</strong>
+                <p>Pearson r = {{ correlationR.toFixed(2) }}
+                  <InfoTooltip
+                    title="Correlation Coefficient"
+                    text="A value of -1 indicates perfect negative correlation. Our data shows that as vegetation increases, temperature consistently decreases across Melbourne's suburbs."
+                    position="right"
+                  />
+                </p>
               </div>
             </div>
-          </div>
-
-          <div class="chart-card">
-            <div class="chart-title">Top 5 hottest suburbs</div>
-            <div class="chart-split">
-              <div class="chart-pane">
-                <div class="chart-rows">
-                  <div class="chart-row" v-for="row in topHotRows" :key="row.name">
-                    <div class="chart-label">{{ row.name }}</div>
-                    <div class="chart-bar">
-                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: '#ef4444' }"></div>
-                    </div>
-                    <div class="chart-value">{{ row.heat.toFixed(1) }}°C</div>
-                  </div>
-                </div>
-              </div>
-              <div class="chart-desc">
-                <div class="desc-title">Summary</div>
-                <p class="desc-text">{{ topHotText }}</p>
+            <div class="insight-card highlight">
+              <div class="insight-icon">🌡️</div>
+              <div class="insight-text">
+                <strong>Every 10% More Vegetation</strong>
+                <p>Results in approximately <strong>1.2°C cooler</strong> temperatures on average<sup class="footnote-ref">1</sup></p>
               </div>
             </div>
-          </div>
-
-          <div class="chart-card">
-            <div class="chart-title">Top 5 greenest suburbs</div>
-            <div class="chart-split">
-              <div class="chart-pane">
-                <div class="chart-rows">
-                  <div class="chart-row" v-for="row in topGreenRows" :key="row.name">
-                    <div class="chart-label">{{ row.name }}</div>
-                    <div class="chart-bar">
-                      <div class="chart-bar-fill" :style="{ width: row.percent + '%', background: '#10b981' }"></div>
-                    </div>
-                    <div class="chart-value">{{ row.veg.toFixed(1) }}%</div>
-                  </div>
-                </div>
-              </div>
-              <div class="chart-desc">
-                <div class="desc-title">Summary</div>
-                <p class="desc-text">{{ topGreenText }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="chart-card">
-            <div class="chart-title">Heat vs Vegetation correlation</div>
-            <div class="chart-split">
-              <div class="chart-pane">
-                <div style="display:flex; align-items:center; gap:12px;">
-                  <div class="chart-bar" style="flex:1; height: 8px;">
-                    <div class="chart-bar-fill" :style="{ width: Math.round((correlationR + 1) * 50) + '%', background: correlationR > 0 ? '#ef4444' : '#10b981' }"></div>
-                  </div>
-                  <div class="chart-value" :title="'Pearson r'">r={{ correlationR.toFixed(2) }}</div>
-                </div>
-              </div>
-              <div class="chart-desc">
-                <div class="desc-title">Summary</div>
-                <p class="desc-text">{{ corrText }}</p>
+            <div class="insight-card">
+              <div class="insight-icon">🌳</div>
+              <div class="insight-text">
+                <strong>Nature's Air Conditioning</strong>
+                <p>Green suburbs stay cool, concrete suburbs heat up. The science is clear.</p>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- Impact Section -->
+    <section class="impact-section" ref="impactSection">
+      <div class="section-container">
+        <div class="section-header centered">
+          <h2 class="section-title">Why This Matters</h2>
+          <p class="section-subtitle">Urban heat islands don't just affect comfort—they impact lives, wallets, and our planet</p>
+        </div>
+
+        <div class="impact-grid">
+          <div class="impact-card health">
+            <div class="impact-icon">🏥</div>
+            <h3 class="impact-title">Health Impact</h3>
+            <p class="impact-stat">500+ heat-related<br>hospital visits annually<sup class="footnote-ref">2</sup></p>
+            <p class="impact-description">in Melbourne's hottest suburbs during summer months</p>
+            <InfoTooltip
+              title="Heat-Related Health Issues"
+              text="Extreme heat can cause heat exhaustion, heat stroke, dehydration, and exacerbate existing cardiovascular and respiratory conditions, particularly affecting elderly and vulnerable populations."
+              position="top"
+            />
+          </div>
+
+          <div class="impact-card economy">
+            <div class="impact-icon">💰</div>
+            <h3 class="impact-title">Economic Cost</h3>
+            <p class="impact-stat">15-25% higher<br>energy costs<sup class="footnote-ref">3</sup></p>
+            <p class="impact-description">in high-heat areas during peak summer</p>
+            <InfoTooltip
+              title="Energy Burden"
+              text="Residents in hotter suburbs spend significantly more on cooling their homes, with some households facing energy poverty due to extreme heat conditions."
+              position="top"
+            />
+          </div>
+
+          <div class="impact-card environment">
+            <div class="impact-icon">🌍</div>
+            <h3 class="impact-title">Environmental Cost</h3>
+            <p class="impact-stat">30% more emissions<sup class="footnote-ref">4</sup></p>
+            <p class="impact-description">from cooling systems in urban heat island areas</p>
+            <InfoTooltip
+              title="Climate Feedback Loop"
+              text="Increased cooling demands lead to higher emissions, which contribute to climate change, creating a dangerous feedback loop that intensifies urban heat islands."
+              position="top"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts Section -->
+    <section class="charts-section" ref="chartsSection">
+      <div class="section-container">
+        <div class="section-header centered">
+          <h2 class="section-title">Melbourne's Heat Landscape</h2>
+          <p class="section-subtitle">Understanding the distribution of heat and vegetation across our suburbs</p>
+        </div>
+
+        <div class="charts-grid">
+          <!-- Left Column -->
+          <div class="chart-column">
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Heat Distribution Across Melbourne</h3>
+                <p class="chart-narrative">{{ heatDistributionNarrative }}</p>
+              </div>
+              <div class="chart-body">
+                <canvas id="heat-donut" class="chart-canvas"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Top 5 Hottest Suburbs</h3>
+                <p class="chart-narrative">{{ topHotNarrative }}</p>
+              </div>
+              <div class="chart-body">
+                <div class="bar-chart-rows">
+                  <div class="bar-row" v-for="(row, index) in topHotRows" :key="row.name">
+                    <div class="bar-rank">{{ index + 1 }}</div>
+                    <div class="bar-label">{{ row.name }}</div>
+                    <div class="bar-container">
+                      <div class="bar-fill heat" :style="{ width: row.percent + '%' }"></div>
+                    </div>
+                    <div class="bar-value">{{ row.heat.toFixed(1) }}°C</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div class="chart-column">
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Vegetation Coverage Distribution</h3>
+                <p class="chart-narrative">{{ vegDistributionNarrative }}</p>
+              </div>
+              <div class="chart-body">
+                <canvas id="veg-donut" class="chart-canvas"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <h3 class="chart-title">Top 5 Greenest Suburbs</h3>
+                <p class="chart-narrative">{{ topGreenNarrative }}</p>
+              </div>
+              <div class="chart-body">
+                <div class="bar-chart-rows">
+                  <div class="bar-row" v-for="(row, index) in topGreenRows" :key="row.name">
+                    <div class="bar-rank">{{ index + 1 }}</div>
+                    <div class="bar-label">{{ row.name }}</div>
+                    <div class="bar-container">
+                      <div class="bar-fill veg" :style="{ width: row.percent + '%' }"></div>
+                    </div>
+                    <div class="bar-value">{{ row.veg.toFixed(1) }}%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section class="solution-section" ref="solutionSection">
+      <div class="section-container">
+        <div class="solution-content">
+          <div class="solution-text">
+            <h2 class="section-title">The Solution is Growing</h2>
+            <p class="solution-description">
+              Climate-sensitive plants aren't just beautiful—they're Melbourne's natural cooling system.
+            </p>
+            <div class="solution-points">
+              <div class="solution-point">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <span><strong>Trees provide shade</strong>, reducing ground temperature by up to 5°C<sup class="footnote-ref">5</sup></span>
+              </div>
+              <div class="solution-point">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <span><strong>Shrubs and groundcover</strong> release moisture, cooling the surrounding air<sup class="footnote-ref">6</sup></span>
+              </div>
+              <div class="solution-point">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <span><strong>Strategic planting</strong> can reduce your suburb's heat by 2-3°C<sup class="footnote-ref">7</sup></span>
+              </div>
+            </div>
+          </div>
+          <div class="solution-visual">
+            <div class="thermometer-card">
+              <div class="thermometer-content">
+                <div class="temp-visual">
+                  <div class="temp-before">
+                    <div class="temp-icon hot">🌡️</div>
+                    <div class="temp-value">35°C</div>
+                    <div class="temp-label">Without vegetation</div>
+                  </div>
+                  <div class="temp-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M13.75 3v10.19l3.72-3.72 1.06 1.06-5.53 5.53-5.53-5.53 1.06-1.06 3.72 3.72V3h1.5z"/>
+                    </svg>
+                    <span>7°C drop</span>
+                  </div>
+                  <div class="temp-after">
+                    <div class="temp-icon cool">🌳</div>
+                    <div class="temp-value">28°C</div>
+                    <div class="temp-label">With urban greening</div>
+                  </div>
+                </div>
+                <p class="thermometer-caption">Strategic planting reduces ambient temperature significantly</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section" ref="ctaSection">
+      <div class="section-container">
+        <div class="cta-content">
+          <h2 class="cta-title">Your Impact Starts Here</h2>
+          <p class="cta-subtitle">
+            Get personalized plant recommendations for your suburb's heat profile.<br>
+            Every plant makes a difference.
+          </p>
+          <div class="cta-buttons">
+            <button class="cta-btn primary" @click="goToRecommendations()">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z"/>
+              </svg>
+              Get Plant Recommendations
+            </button>
+            <button class="cta-btn secondary" @click="goToPlants()">
+              Browse All Climate Plants
+            </button>
+            <button class="cta-btn tertiary" @click="goToGuides()">
+              Learn Growing Techniques
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- References Section -->
+    <section class="references-section">
+      <div class="section-container">
+        <h3 class="references-title">References</h3>
+        <div class="references-list">
+          <div class="reference-item">
+            <span class="reference-number">1.</span>
+            <span class="reference-text">
+              Bowler, D.E., et al. (2010). Urban greening to cool towns and cities: A systematic review of the empirical evidence.
+              <a href="https://doi.org/10.1016/j.landurbplan.2010.05.006" target="_blank" rel="noopener">Landscape and Urban Planning, 97(3), 147-155</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">2.</span>
+            <span class="reference-text">
+              Victorian Department of Health (2023). Heat Health Impacts in Victoria.
+              <a href="https://www.health.vic.gov.au/environmental-health/heat-health-impacts" target="_blank" rel="noopener">Victorian Government Health Information</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">3.</span>
+            <span class="reference-text">
+              Australian Energy Regulator (2024). Energy costs and urban heat islands.
+              <a href="https://www.aer.gov.au/industry/registers/resources/publications" target="_blank" rel="noopener">AER Publications</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">4.</span>
+            <span class="reference-text">
+              Climate Council of Australia (2023). Urban Heat Island Effect and Emissions.
+              <a href="https://www.climatecouncil.org.au/resources/" target="_blank" rel="noopener">Climate Council Resources</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">5.</span>
+            <span class="reference-text">
+              Akbari, H., et al. (2016). Local climate change and urban heat island mitigation techniques.
+              <a href="https://doi.org/10.1016/j.uclim.2015.11.001" target="_blank" rel="noopener">Urban Climate, 14, 286-302</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">6.</span>
+            <span class="reference-text">
+              Rahman, M.A., et al. (2020). Traits of trees for cooling urban heat islands: A meta-analysis.
+              <a href="https://doi.org/10.1016/j.buildenv.2019.106606" target="_blank" rel="noopener">Building and Environment, 170, 106606</a>
+            </span>
+          </div>
+          <div class="reference-item">
+            <span class="reference-number">7.</span>
+            <span class="reference-text">
+              Norton, B.A., et al. (2015). Planning for cooler cities: A framework to prioritise green infrastructure.
+              <a href="https://doi.org/10.1016/j.landurbplan.2015.04.018" target="_blank" rel="noopener">Landscape and Urban Planning, 134, 127-138</a>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { onMounted, ref, watch, nextTick, computed } from 'vue'
+import { onMounted, ref, computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import Chart from 'chart.js/auto'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
 import { getUhiMetadata, getUhiData, getBoundaryGeo } from '@/services/uhiPreload'
-import { MapPinIcon } from '@heroicons/vue/24/solid'
+import InfoTooltip from '@/components/InfoTooltip.vue'
 
+const router = useRouter()
 const loadGoogleMaps = ensureGoogleMapsLoaded
 
+// Refs
 const gmapRef = ref<any>(null)
 const vegMapRef = ref<any>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const legendHtml = ref('')
 const vegLegendHtml = ref('')
 const errorMsg = ref('')
-let lastSimplified = true
-let categoriesMap: Record<string, { color: string; label: string }> = {}
 const activeLayer = ref<'heat' | 'veg'>('heat')
-// Reusable marker to indicate the precise centered location
-const centerMarkerRef = ref<any>(null)
-const searchHistory = ref<Array<{ id: string; label: string; center: { lat: number; lng: number }; layer: 'heat' | 'veg'; key?: string; heat?: number; veg?: number; heatCategory?: string; rank?: number }>>([])
-const HISTORY_STORAGE_KEY = 'uhi_recent_searches_v1'
-// Standardized out-of-coverage message in English only
-const OUT_OF_COVERAGE_MSG = 'Please enter a suburb within the Melbourne region.'
-// Map suburb identifiers to vegetation total (%) sourced from /data endpoint
+const selectedSuburb = ref<any>(null)
+const searchMarker = ref<any>(null)
+
+// Custom autocomplete for suburbs
+const suburbsList = ref<Array<{ id: number; name: string; postcode: string; latitude: number; longitude: number; state: string }>>([])
+const searchQuery = ref('')
+const showDropdown = ref(false)
+
+// Loading state
+const isLoading = ref(true)
+
+// Section refs for animations
+const heroSection = ref<HTMLElement | null>(null)
+const snapshotSection = ref<HTMLElement | null>(null)
+const mapSection = ref<HTMLElement | null>(null)
+const patternSection = ref<HTMLElement | null>(null)
+const impactSection = ref<HTMLElement | null>(null)
+const chartsSection = ref<HTMLElement | null>(null)
+const solutionSection = ref<HTMLElement | null>(null)
+const ctaSection = ref<HTMLElement | null>(null)
+
+// Data
+let categoriesMap: Record<string, { color: string; label: string }> = {}
 let vegTotalsMap: Record<string, number> = {}
 let heatAvgMap: Record<string, number> = {}
 let heatCategoryMap: Record<string, string> = {}
 const heatRankMap: Record<string, number> = {}
 const vegRankMap: Record<string, number> = {}
-// Built from the currently loaded heat boundaries on the map
 let heatAvgByName: Record<string, number> = {}
 let heatCatByName: Record<string, string> = {}
 let heatAvgByNameNorm: Record<string, number> = {}
 let heatCatByNameNorm: Record<string, string> = {}
 let uhiByName: Record<string, any> = {}
-// Chart state
+let lastSimplified = true
+
+// Chart data
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
 const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
-// Extra charts
-const heatBinRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
 const topHotRows = ref<Array<{ name: string; heat: number; percent: number }>>([])
 const topGreenRows = ref<Array<{ name: string; veg: number; percent: number }>>([])
 const correlationR = ref<number>(0)
 const scatterPairs = ref<Array<{ x: number; y: number; color: string }>>([])
+const totalSuburbs = ref<number>(0)
+const veryHotCount = ref<number>(0)
+const melbourneAvgHeat = ref<number>(0)
 
-// Descriptive texts for charts (computed)
-const heatDonutText = computed(() => {
-  if (!heatChartRows.value.length) return 'No data available.'
-  const top = [...heatChartRows.value].sort((a, b) => b.percent - a.percent)[0]
-  return top ? `Most suburbs fall into ${top.label} category.` : 'No data available.'
-})
-const heatDonutTopList = computed(() => {
-  const top3 = [...heatChartRows.value].sort((a, b) => b.percent - a.percent).slice(0, 3)
-  return top3.map(r => ({ label: r.label, percent: r.percent }))
-})
-
-const vegDonutText = computed(() => {
-  if (!vegChartRows.value.length) return 'No data available.'
-  const top = [...vegChartRows.value].sort((a, b) => b.percent - a.percent)[0]
-  return top ? `Vegetation coverage most commonly lies in ${top.bucket}.` : 'No data available.'
-})
-const vegDonutTopList = computed(() => {
-  const top3 = [...vegChartRows.value].sort((a, b) => b.percent - a.percent).slice(0, 3)
-  return top3.map(r => ({ bucket: r.bucket, percent: r.percent }))
+// Computed narratives
+const heatDistributionNarrative = computed(() => {
+  if (!heatChartRows.value.length) return 'Loading data...'
+  const veryHot = heatChartRows.value.find(r => r.label.toLowerCase().includes('very hot'))
+  if (veryHot) {
+    return `${veryHot.count} suburbs (${veryHot.percent}%) experience very hot conditions, putting residents at higher health risk.`
+  }
+  return 'Heat data shows significant variation across Melbourne suburbs.'
 })
 
-const scatterText = computed(() => {
-  const n = scatterPairs.value.length
-  if (!n) return 'No data available.'
-  return `Scatter shows ${n} suburbs. Trend aligns with correlation value below.`
+const vegDistributionNarrative = computed(() => {
+  if (!vegChartRows.value.length) return 'Loading data...'
+  const high = vegChartRows.value.filter(r => r.bucket.includes('40+') || r.bucket.includes('30-40'))
+  const total = high.reduce((sum, r) => sum + r.count, 0)
+  return `Only ${total} suburbs have 30%+ vegetation coverage, highlighting the urgent need for urban greening.`
 })
 
-const heatBinsText = computed(() => {
-  if (!heatBinRows.value.length) return 'No data available.'
-  const top = [...heatBinRows.value].sort((a, b) => b.percent - a.percent)[0]
-  return top ? `Most suburbs are in ${top.bucket} bin by count.` : 'No data available.'
+const topHotNarrative = computed(() => {
+  if (!topHotRows.value.length) return 'Loading data...'
+  const hottest = topHotRows.value[0]
+  return `${hottest.name} experiences the highest average temperatures at ${hottest.heat.toFixed(1)}°C.`
 })
 
-const topHotText = computed(() => {
-  if (!topHotRows.value.length) return 'No data available.'
-  const first = topHotRows.value[0]
-  return `Hottest suburb: ${first.name} (${first.heat.toFixed(1)}°C).`
+const topGreenNarrative = computed(() => {
+  if (!topGreenRows.value.length) return 'Loading data...'
+  const greenest = topGreenRows.value[0]
+  return `${greenest.name} leads with ${greenest.veg.toFixed(1)}% vegetation coverage, demonstrating the cooling potential.`
 })
 
-const topGreenText = computed(() => {
-  if (!topGreenRows.value.length) return 'No data available.'
-  const first = topGreenRows.value[0]
-  return `Greenest suburb: ${first.name} (${first.veg.toFixed(1)}%).`
+const hottestSuburb = computed(() => {
+  return topHotRows.value.length > 0 ? topHotRows.value[0].name : 'Loading...'
 })
 
-const corrText = computed(() => {
-  const r = Number(correlationR.value)
-  if (!Number.isFinite(r)) return 'No data available.'
-  const dir = r > 0 ? 'positive' : r < 0 ? 'negative' : 'no'
-  return `Pearson r indicates ${dir} correlation (${r.toFixed(2)}).`
+const coolestSuburb = computed(() => {
+  const sorted = [...topHotRows.value].sort((a, b) => a.heat - b.heat)
+  return sorted.length > 0 ? sorted[0].name : 'Loading...'
 })
 
-// Persist/restore history so it survives page reloads
-function loadHistoryFromStorage() {
-  try {
-    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return
-    // Basic schema validation and clamp size
-    const cleaned = parsed
-      .filter((it: any) => it && typeof it.label === 'string' && it.center && typeof it.center.lat === 'number' && typeof it.center.lng === 'number')
-      .map((it: any) => ({
-        id: String(it.id || cryptoRandom()),
-        label: String(it.label),
-        center: { lat: Number(it.center.lat), lng: Number(it.center.lng) },
-        layer: (it.layer === 'veg' ? 'veg' : 'heat') as 'heat' | 'veg',
-        key: String(it.key || (String(it.label).toLowerCase().replace(/\s+/g, '_'))),
-        heat: typeof it.heat === 'number' ? (it.heat as number) : undefined,
-        veg: typeof it.veg === 'number' ? (it.veg as number) : undefined,
-        heatCategory: typeof it.heatCategory === 'string' ? (it.heatCategory as string) : undefined,
-        rank: typeof it.rank === 'number' ? (it.rank as number) : undefined,
-      }))
-      .slice(0, 8)
-    searchHistory.value = cleaned
-  } catch {}
-}
+const greenestSuburb = computed(() => {
+  return topGreenRows.value.length > 0 ? topGreenRows.value[0].name : 'Loading...'
+})
 
-function saveHistoryToStorage() {
-  try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(searchHistory.value))
-  } catch {}
-}
+const hottestTemp = computed(() => {
+  return topHotRows.value.length > 0 ? `${topHotRows.value[0].heat.toFixed(1)}°C` : '...'
+})
 
-function cryptoRandom(): string {
-  try {
-    const arr = new Uint32Array(4)
-    crypto.getRandomValues(arr)
-    return Array.from(arr).map(n => n.toString(16)).join('')
-  } catch {
-    return String(Date.now() + Math.random())
+const coolestTemp = computed(() => {
+  const sorted = [...topHotRows.value].sort((a, b) => a.heat - b.heat)
+  return sorted.length > 0 ? `${sorted[0].heat.toFixed(1)}°C` : '...'
+})
+
+const greenestVeg = computed(() => {
+  return topGreenRows.value.length > 0 ? `${topGreenRows.value[0].veg.toFixed(1)}%` : '...'
+})
+
+// Key stats for snapshot
+const keyStats = computed(() => [
+  {
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/></svg>',
+    number: veryHotCount.value.toString(),
+    label: 'suburbs experience High heat',
+    tooltip: {
+      title: 'Heat Categories',
+      text: 'Suburbs are classified as Very Hot, Hot, Moderate, or Cool based on average surface temperature measurements. Very Hot suburbs consistently exceed safe temperature thresholds.'
+    }
+  },
+  {
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clip-rule="evenodd"/></svg>',
+    number: '12°C',
+    label: 'temperature difference across suburbs',
+    tooltip: {
+      title: 'Urban Heat Island Effect',
+      text: 'The Urban Heat Island Effect occurs when cities replace natural land with heat-absorbing surfaces. This creates temperature differences of up to 12°C between suburbs with different levels of urbanization and vegetation.'
+    }
+  },
+  {
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12.378 1.602a.75.75 0 00-.756 0L3 6.632l9 5.25 9-5.25-8.622-5.03zM21.75 7.93l-9 5.25v9l8.628-5.032a.75.75 0 00.372-.648V7.93zM11.25 22.18v-9l-9-5.25v8.57a.75.75 0 00.372.648l8.628 5.033z"/></svg>',
+    number: topGreenRows.value.length > 0 ? `${topGreenRows.value[0].veg.toFixed(0)}%` : '...',
+    label: 'vegetation in coolest suburbs',
+    tooltip: {
+      title: 'Vegetation Coverage',
+      text: 'Vegetation coverage is the percentage of land area covered by trees, shrubs, and other plants. Higher vegetation coverage directly correlates with lower temperatures through shade and evapotranspiration.'
+    }
+  }
+])
+
+// Navigation
+const goToRecommendations = (suburb?: string) => {
+  if (suburb) {
+    router.push({ path: '/recommendations', query: { suburb } })
+  } else {
+    router.push('/recommendations')
   }
 }
 
+// Filtered suburbs for autocomplete
+const filteredSuburbs = computed(() => {
+  if (!searchQuery.value || searchQuery.value.trim() === '') return []
+
+  const query = searchQuery.value.toLowerCase().trim()
+  return suburbsList.value
+    .filter(suburb =>
+      suburb.name.toLowerCase().includes(query) ||
+      suburb.postcode.includes(query)
+    )
+    .slice(0, 10) // Limit to 10 results
+})
+
+const goToPlants = () => {
+  router.push('/plants')
+}
+
+const goToGuides = () => {
+  router.push('/guides')
+}
+
+// Utility functions
 function normKey(v: unknown): string {
   return String(v ?? '').toLowerCase().trim().replace(/\s+/g, '_')
 }
@@ -405,14 +683,102 @@ function uhiUrl(path: string) {
   return `${base}${path}`
 }
 
+function getHeatClass(category: string | undefined): string {
+  if (!category) return 'unknown'
+  const cat = category.toLowerCase()
+  if (cat.includes('very hot')) return 'very-hot'
+  if (cat.includes('hot')) return 'hot'
+  if (cat.includes('moderate')) return 'moderate'
+  return 'cool'
+}
 
-// Prefer geocoding results that are in Victoria (VIC)
+// Custom autocomplete functions
+async function loadSuburbs() {
+  try {
+    const resp = await fetch(uhiUrl('/api/v1/suburbs'))
+    if (!resp.ok) {
+      console.error('Failed to load suburbs')
+      return
+    }
+    const data = await resp.json()
+    suburbsList.value = data.suburbs || []
+  } catch (e) {
+    console.error('Error loading suburbs:', e)
+  }
+}
+
+function onSearchInput() {
+  showDropdown.value = true
+}
+
+function onSearchBlur() {
+  // Delay hiding to allow click on dropdown items
+  setTimeout(() => {
+    showDropdown.value = false
+  }, 200)
+}
+
+function selectSuburb(suburb: any) {
+  searchQuery.value = suburb.name
+  showDropdown.value = false
+  errorMsg.value = ''
+
+  const center = { lat: suburb.latitude, lng: suburb.longitude }
+  const label = suburb.name
+
+  const liveHeat = getHeatAtLatLng(center.lat, center.lng)
+  if (liveHeat.avg == null) {
+    errorMsg.value = 'Please enter a suburb within the Melbourne region.'
+    selectedSuburb.value = null
+    return
+  }
+
+  if (gmapRef.value) {
+    gmapRef.value.setCenter(center)
+    gmapRef.value.setZoom(13)
+
+    // Remove existing marker if any
+    if (searchMarker.value) {
+      searchMarker.value.setMap(null)
+    }
+
+    // Create new marker at search location with white pin
+    searchMarker.value = new (window as any).google.maps.Marker({
+      position: center,
+      map: gmapRef.value,
+      title: label,
+      animation: (window as any).google.maps.Animation.DROP,
+      icon: {
+        path: (window as any).google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#FFFFFF',
+        fillOpacity: 1,
+        strokeColor: '#065F46',
+        strokeWeight: 3
+      }
+    })
+  }
+
+  const heatRank = findMapValue(label, heatRankMap) as number | undefined
+  const vegVal = findMapValue(label, vegTotalsMap) as number | undefined
+
+  selectedSuburb.value = {
+    label,
+    center,
+    layer: activeLayer.value,
+    heat: liveHeat.avg,
+    veg: vegVal,
+    heatCategory: liveHeat.category,
+    rank: heatRank
+  }
+}
+
+// Map functions
 function isVicGeocodeResult(r: any): boolean {
   try {
     const comps = r?.address_components || []
     return comps.some((c: any) => {
       const types: string[] = c?.types || []
-      if (!Array.isArray(types)) return false
       const isLvl1 = types.includes('administrative_area_level_1')
       const shortName = String(c?.short_name || '').toUpperCase()
       const longName = String(c?.long_name || '').toLowerCase()
@@ -423,31 +789,10 @@ function isVicGeocodeResult(r: any): boolean {
   }
 }
 
-function formatVeg(n: unknown): string {
-  const v = Number(n)
-  if (!Number.isFinite(v)) return 'N/A'
-  return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`
-}
-
-function formatHeat(n: unknown): string {
-  const v = Number(n)
-  if (!Number.isFinite(v)) return 'N/A'
-  return `${v.toFixed(1)} C`
-}
-
-// Create or update the centered marker on the currently visible map
 function getCenterMarkerIcon(google: any) {
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44" viewBox="0 0 30 44">
   <defs>
-    <linearGradient id="pinWhite" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#e5e7eb"/>
-    </linearGradient>
-    <radialGradient id="gloss" cx="30%" cy="28%" r="60%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.65"/>
-      <stop offset="80%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
     <filter id="ds" x="-50%" y="-50%" width="200%" height="200%">
       <feOffset in="SourceAlpha" dy="1" result="o"/>
       <feGaussianBlur in="o" stdDeviation="1.2" result="b"/>
@@ -458,15 +803,10 @@ function getCenterMarkerIcon(google: any) {
       </feMerge>
     </filter>
   </defs>
-  <!-- ground shadow -->
   <ellipse cx="15" cy="42" rx="7" ry="2.2" fill="#000000" opacity="0.22"/>
   <g filter="url(#ds)">
-    <!-- pin body -->
-    <path d="M15 2c-7.18 0-13 5.82-13 13 0 10.5 13 27 13 27s13-16.5 13-27c0-7.18-5.82-13-13-13z" fill="url(#pinWhite)" stroke="#065f46" stroke-width="1.5"/>
-    <!-- glossy highlight -->
-    <ellipse cx="11" cy="10" rx="7.5" ry="5" fill="url(#gloss)"/>
-    <!-- inner hole -->
-    <circle cx="15" cy="15" r="4" fill="#065f46"/>
+    <path d="M15 2c-7.18 0-13 5.82-13 13 0 10.5 13 27 13 27s13-16.5 13-27c0-7.18-5.82-13-13-13z" fill="#065f46" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="15" cy="15" r="4" fill="#ffffff"/>
   </g>
 </svg>`
   return {
@@ -476,30 +816,7 @@ function getCenterMarkerIcon(google: any) {
   }
 }
 
-function placeCenterMarker(center: { lat: number; lng: number }, layer?: 'heat' | 'veg') {
-  const g = (window as any).google
-  if (!g?.maps) return
-  const map = (layer || activeLayer.value) === 'veg' ? vegMapRef.value : gmapRef.value
-  if (!map) return
-  if (!centerMarkerRef.value) {
-    centerMarkerRef.value = new g.maps.Marker({
-      position: center,
-      map,
-      clickable: false,
-      zIndex: 9999,
-      icon: getCenterMarkerIcon(g),
-    })
-  } else {
-    centerMarkerRef.value.setIcon(getCenterMarkerIcon(g))
-    centerMarkerRef.value.setMap(map)
-    centerMarkerRef.value.setPosition(center)
-  }
-}
-
-// Load UHI data (/data) once for both heat and vegetation stats
-let uhiDataLoaded = false
 async function loadUhiDataOnce() {
-  if (uhiDataLoaded) return
   try {
     const resp = await fetch(uhiUrl('/api/v1/uhi/data'))
     if (!resp.ok) return
@@ -510,154 +827,69 @@ async function loadUhiDataOnce() {
     heatAvgMap = {}
     heatCategoryMap = {}
     uhiByName = {}
+
+    let totalHeat = 0
+    let heatCount = 0
+    let veryHotCounter = 0
+
     suburbs.forEach((s) => {
       if (s?.name) uhiByName[String(s.name)] = s
+
       const total = Number(s?.vegetation?.total)
       if (Number.isFinite(total)) {
         if (s?.id) vegTotalsMap[normKey(s.id)] = total
         if (s?.name) vegTotalsMap[normKey(s.name)] = total
       }
+
       const avgHeat = Number(s?.heat?.avg)
       if (Number.isFinite(avgHeat)) {
+        totalHeat += avgHeat
+        heatCount++
         if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
         if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
       }
+
       const heatRank = Number(s?.heat?.rank)
       if (Number.isFinite(heatRank)) {
         if (s?.id) heatRankMap[normKey(s.id)] = heatRank
         if (s?.name) heatRankMap[normKey(s.name)] = heatRank
       }
+
       const vegRank = Number(s?.vegetation?.rank)
       if (Number.isFinite(vegRank)) {
         if (s?.id) vegRankMap[normKey(s.id)] = vegRank
         if (s?.name) vegRankMap[normKey(s.name)] = vegRank
       }
+
       const catKey = String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')
       const label = metaCats?.[catKey]?.label || (catKey ? catKey : '')
       if (s?.id) heatCategoryMap[normKey(s.id)] = label
       if (s?.name) heatCategoryMap[normKey(s.name)] = label
+
+      // Count suburbs with "High Heat" category
+      if (catKey.includes('high_heat')) veryHotCounter++
     })
-    uhiDataLoaded = true
-  } catch {}
-}
 
-function refreshHistoryStats() {
-  searchHistory.value = searchHistory.value.map((it) => {
-    const r = uhiByName[it.label]
-    const live = getHeatFromMapByLabel(it.label)
-    // Prefer the already stored precise value if present; otherwise recompute.
-    const computedHeat = live.avg ?? r?.heat?.avg ?? findMapValue(it.label, heatAvgMap)
-    const heatVal = Number.isFinite(Number(it.heat)) ? Number(it.heat) : (Number.isFinite(Number(computedHeat)) ? Number(computedHeat) : undefined)
-    const computedVeg = r?.vegetation?.total ?? findMapValue(it.label, vegTotalsMap)
-    const vegVal = Number.isFinite(Number(it.veg)) ? Number(it.veg) : (Number.isFinite(Number(computedVeg)) ? Number(computedVeg) : undefined)
-    const heatCatRaw = live.category || r?.heat?.category
-    const heatCat = heatCatRaw ? (heatCategoryMap[normKey(heatCatRaw)] || heatCatRaw) : (findMapValue(it.label, heatCategoryMap) as string | undefined)
-    const rankHeat = findMapValue(it.label, heatRankMap) as number | undefined
-    const rankVeg = findMapValue(it.label, vegRankMap) as number | undefined
-    const rank = it.layer === 'heat' ? (Number(rankHeat)) : (Number(rankVeg))
-    return { ...it, heat: heatVal, veg: vegVal, heatCategory: heatCat, rank: Number.isFinite(rank) ? rank : it.rank }
-  })
-}
-
-// Build a short, human-readable trend sentence for a suburb
-// getTrendText removed; replaced with static snapshot thumbnail in history cards
-
-// Helper to retrieve full metrics for a suburb card
-function getDetailForItem(item: { label: string }): { heatAvg?: number; heatCategory?: string; vegTotal?: number; trees?: number; shrubs?: number; grass?: number; heights?: Record<string, number> } | null {
-  const r = uhiByName[item.label]
-  if (!r) return null
-  const out: any = {}
-  const heatAvg = Number(r?.heat?.avg ?? r?.heat?.intensity)
-  if (Number.isFinite(heatAvg)) out.heatAvg = heatAvg
-  if (r?.heat?.category) out.heatCategory = r.heat.category
-  const vegTotal = Number(r?.vegetation?.total)
-  if (Number.isFinite(vegTotal)) out.vegTotal = vegTotal
-  const trees = Number(r?.vegetation?.trees)
-  if (Number.isFinite(trees)) out.trees = trees
-  const shrubs = Number(r?.vegetation?.shrubs)
-  if (Number.isFinite(shrubs)) out.shrubs = shrubs
-  const grass = Number(r?.vegetation?.grass)
-  if (Number.isFinite(grass)) out.grass = grass
-  if (r?.trees_by_height) out.heights = r.trees_by_height
-  return out
-}
-
-// Try to resolve a suburb label to our stats maps using multiple variants
-function findMapValue<T = number | string>(label: string, map: Record<string, T>): T | undefined {
-  const raw = String(label || '')
-  const candidates: string[] = []
-  const lower = raw.toLowerCase().trim()
-  const cleaned = lower
-    .replace(/,.*$/, '')               // drop after first comma
-    .replace(/\b(\d{3,4})\b/g, '')   // drop postcode numbers
-    .replace(/\b(australia|victoria|vic|state of victoria)\b/g, '')
-    .replace(/\(|\)/g, '')
-    .replace(/\s+/g, ' ')             // collapse spaces
-    .trim()
-  const firstWord = cleaned.split(' ')[0] || cleaned
-  const lastWord = cleaned.split(' ').slice(-1)[0] || cleaned
-
-  const push = (s?: string) => { if (s) candidates.push(normKey(s)) }
-  push(raw)
-  push(cleaned)
-  push(firstWord)
-  push(lastWord)
-
-  // 1) exact key match
-  for (const k of candidates) {
-    if (map[k] != null) return map[k]
-  }
-  // 2) include/startsWith match over existing keys
-  const keys = Object.keys(map)
-  for (const cand of candidates) {
-    const exact = keys.find(k => k === cand)
-    if (exact) return map[exact]
-    const starts = keys.find(k => k.startsWith(cand))
-    if (starts) return map[starts]
-    const contains = keys.find(k => k.includes(cand))
-    if (contains) return map[contains]
-  }
-  return undefined
-}
-
-// Prefer reading heat directly from the current map data layer
-function getHeatFromMapByLabel(label: string): { avg?: number; category?: string } {
-  try {
-    const base = String(label || '')
-      .toLowerCase()
-      .replace(/,.*$/, '')
-      .replace(/\b(\d{3,4})\b/g, '')
-      .replace(/\b(australia|victoria|vic|state of victoria)\b/g, '')
-      .replace(/\(|\)/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    const target = normKey(base)
-    // Fast lookup using normalized keys built during boundaries load
-    for (const [nk, val] of Object.entries(heatAvgByNameNorm)) {
-      if (nk === target || nk.startsWith(target) || target.startsWith(nk) || nk.includes(target)) {
-        const originalName = Object.keys(heatAvgByName).find(k => normKey(k) === nk) || ''
-        return { avg: val, category: heatCatByNameNorm[nk] || heatCatByName[originalName] }
-      }
-    }
-    return {}
-  } catch {
-    return {}
+    totalSuburbs.value = suburbs.length
+    veryHotCount.value = veryHotCounter
+    melbourneAvgHeat.value = heatCount > 0 ? totalHeat / heatCount : 0
+  } catch (e) {
+    console.error('Failed to load UHI data', e)
   }
 }
 
-// Read heat directly from the polygon that contains the given point
 function getHeatAtLatLng(lat: number, lng: number): { avg?: number; category?: string; name?: string } {
   try {
     if (!gmapRef.value || !(window as any).google?.maps?.geometry?.poly) return {}
     const google = (window as any).google
     const point = new google.maps.LatLng(lat, lng)
     let found: { avg?: number; category?: string; name?: string } | undefined
+
     gmapRef.value.data.forEach((f: any) => {
       if (found) return
       const geom = f.getGeometry && f.getGeometry()
       if (!geom) return
 
-      // Recursively test MultiPolygon/Polygon
       const contains = (g: any): boolean => {
         const t = g.getType && g.getType()
         if (t === 'Polygon') {
@@ -688,9 +920,44 @@ function getHeatAtLatLng(lat: number, lng: number): { avg?: number; category?: s
   }
 }
 
+function findMapValue<T = number | string>(label: string, map: Record<string, T>): T | undefined {
+  const raw = String(label || '')
+  const candidates: string[] = []
+  const lower = raw.toLowerCase().trim()
+  const cleaned = lower
+    .replace(/,.*$/, '')
+    .replace(/\b(\d{3,4})\b/g, '')
+    .replace(/\b(australia|victoria|vic|state of victoria)\b/g, '')
+    .replace(/\(|\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const firstWord = cleaned.split(' ')[0] || cleaned
+  const lastWord = cleaned.split(' ').slice(-1)[0] || cleaned
+
+  const push = (s?: string) => { if (s) candidates.push(normKey(s)) }
+  push(raw)
+  push(cleaned)
+  push(firstWord)
+  push(lastWord)
+
+  for (const k of candidates) {
+    if (map[k] != null) return map[k]
+  }
+
+  const keys = Object.keys(map)
+  for (const cand of candidates) {
+    const exact = keys.find(k => k === cand)
+    if (exact) return map[exact]
+    const starts = keys.find(k => k.startsWith(cand))
+    if (starts) return map[starts]
+    const contains = keys.find(k => k.includes(cand))
+    if (contains) return map[contains]
+  }
+  return undefined
+}
+
 async function initUhiOnMap() {
   try {
-    // Prefer preloaded metadata
     const cachedMeta = getUhiMetadata()
     if (cachedMeta && (cachedMeta as any).heat_categories) {
       categoriesMap = (cachedMeta as any).heat_categories || {}
@@ -718,72 +985,39 @@ async function initUhiOnMap() {
 }
 
 async function initVegetationMap() {
-  if (!vegMapRef.value) {
-    console.error('Vegetation map not initialized')
-    return
-  }
+  if (!vegMapRef.value) return
 
   try {
-    // Build legend once
-    vegLegendHtml.value = '<div class="legend-title">Vegetation (%)</div>' +
-      ['0-10','10-20','20-30','30-40','40+'].map((b, i) => `
-        <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
+    vegLegendHtml.value = '<div class="legend-title">Vegetation Coverage</div>' +
+      ['0-10%','10-20%','20-30%','30-40%','40%+'].map((b, i) => `
+        <div class="legend-row">
           <span class="legend-label">${b}</span>
-          <span style="background:${['#fef3c7','#fde68a','#86efac','#34d399','#059669'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
+          <span class="legend-swatch" style="background:${['#FFB84D','#FFE066','#90EE90','#4CBB17','#228B22'][i]}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); margin-left:auto;"></span>
         </div>
       `).join('')
 
-    // Load vegetation totals (prefer preloaded)
-    if (!Object.keys(vegTotalsMap).length || !Object.keys(heatAvgMap).length) {
+    if (!Object.keys(vegTotalsMap).length) {
       const pre = getUhiData()
       if (pre && Array.isArray((pre as any).suburbs)) {
         const suburbs: Array<any> = (pre as any).suburbs
-        vegTotalsMap = {}
-        heatAvgMap = {}
         suburbs.forEach((s) => {
           const total = Number(s?.vegetation?.total)
           if (Number.isFinite(total)) {
             if (s?.id) vegTotalsMap[normKey(s.id)] = total
             if (s?.name) vegTotalsMap[normKey(s.name)] = total
           }
-          const avgHeat = Number(s?.heat?.avg)
-          if (Number.isFinite(avgHeat)) {
-            if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
-            if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
-          }
         })
-      } else {
-        const dataResp = await fetch(uhiUrl('/api/v1/uhi/data'))
-        if (dataResp.ok) {
-          const data = await dataResp.json()
-          const suburbs: Array<any> = Array.isArray(data?.suburbs) ? data.suburbs : []
-          vegTotalsMap = {}
-          heatAvgMap = {}
-          suburbs.forEach((s) => {
-            const total = Number(s?.vegetation?.total)
-            if (Number.isFinite(total)) {
-              if (s?.id) vegTotalsMap[normKey(s.id)] = total
-              if (s?.name) vegTotalsMap[normKey(s.name)] = total
-            }
-            const avgHeat = Number(s?.heat?.avg)
-            if (Number.isFinite(avgHeat)) {
-              if (s?.id) heatAvgMap[normKey(s.id)] = avgHeat
-              if (s?.name) heatAvgMap[normKey(s.name)] = avgHeat
-            }
-          })
-        }
       }
+    }
 
-      // Load the vegetation layer and attach zoom listener
-      await loadVegetationLayer(true)
-      if (!vegMapRef.value._zoomListenerAdded) {
-        vegMapRef.value.addListener('zoom_changed', async () => {
-          const z = vegMapRef.value!.getZoom()
-          const wantSimplified = !(z >= 12)
-          await loadVegetationLayer(wantSimplified)
-        })
-        vegMapRef.value._zoomListenerAdded = true
-      }
+    await loadVegetationLayer(true)
+    if (!vegMapRef.value._zoomListenerAdded) {
+      vegMapRef.value.addListener('zoom_changed', async () => {
+        const z = vegMapRef.value!.getZoom()
+        const wantSimplified = !(z >= 12)
+        await loadVegetationLayer(wantSimplified)
+      })
+      vegMapRef.value._zoomListenerAdded = true
     }
   } catch (err) {
     console.error('Vegetation init failed', err)
@@ -791,51 +1025,42 @@ async function initVegetationMap() {
 }
 
 function vegStyleFeature(feature: any) {
-  // Prefer mapped totals from /data; match by id or name
   const sid = feature.getProperty('SUBURB_ID') || feature.getProperty('id')
   const sname = feature.getProperty('SUBURB_NAME') || feature.getProperty('name')
   const keyId = normKey(sid)
   const keyName = normKey(sname)
   const pct = (vegTotalsMap[keyId] ?? vegTotalsMap[keyName] ?? 0) as number
-  const color = pct >= 40 ? '#059669' : pct >= 30 ? '#34d399' : pct >= 20 ? '#86efac' : pct >= 10 ? '#fde68a' : '#fef3c7'
+  // Better color differentiation: Orange -> Yellow -> Light Green -> Medium Green -> Dark Green
+  const color = pct >= 40 ? '#228B22' : pct >= 30 ? '#4CBB17' : pct >= 20 ? '#90EE90' : pct >= 10 ? '#FFE066' : '#FFB84D'
   return {
     fillColor: color,
-    fillOpacity: 0.35,
+    fillOpacity: 0.5,
     strokeWeight: 0.8,
-    strokeOpacity: 0.7,
+    strokeOpacity: 0.8,
     strokeColor: '#ffffff',
   }
 }
 
 async function loadVegetationLayer(simplified: boolean) {
   if (!vegMapRef.value) return
-  
-  // Clear existing data (no duplicates)
+
   if (vegMapRef.value.data) {
     const toRemove: any[] = []
     vegMapRef.value.data.forEach((f: any) => toRemove.push(f))
     toRemove.forEach((f: any) => vegMapRef.value.data.remove(f))
   }
-  
+
   try {
     const pre = getBoundaryGeo(simplified)
     const geo = pre || (await (async () => {
       const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
-      if (!resp.ok) {
-        console.error('Failed to fetch boundaries:', resp.status)
-        return {} as any
-      }
+      if (!resp.ok) return {} as any
       const { url } = await resp.json()
       return await fetch(url).then(r => r.json())
     })())
-    
-    // Add data to map
+
     vegMapRef.value.data.addGeoJson(geo)
-    
-    // Set style after data is loaded
     vegMapRef.value.data.setStyle(vegStyleFeature)
-    
-    console.log('Vegetation layer loaded successfully')
   } catch (error) {
     console.error('Error loading vegetation layer:', error)
   }
@@ -857,10 +1082,14 @@ async function loadBoundaries(simplified: boolean) {
   const toRemove: any[] = []
   gmapRef.value!.data.forEach((f: any) => toRemove.push(f))
   toRemove.forEach((f: any) => gmapRef.value!.data.remove(f))
-  const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
-  const { url } = await resp.json()
+
   const pre = getBoundaryGeo(simplified)
-  const geo = pre || (await fetch(url).then(r => r.json()))
+  const geo = pre || (await (async () => {
+    const resp = await fetch(uhiUrl(`/api/v1/uhi/boundaries?simplified=${simplified ? 'true' : 'false'}`))
+    const { url } = await resp.json()
+    return await fetch(url).then(r => r.json())
+  })())
+
   gmapRef.value!.data.addGeoJson(geo)
   gmapRef.value!.data.setStyle(styleFeature)
 
@@ -877,7 +1106,6 @@ async function loadBoundaries(simplified: boolean) {
     infowindow.close()
   })
 
-  // Also sync our quick lookup maps for history display
   heatAvgByName = {}
   heatCatByName = {}
   heatAvgByNameNorm = {}
@@ -897,7 +1125,6 @@ async function loadBoundaries(simplified: boolean) {
 function buildLegend(categories: Record<string, any>) {
   let entries = Object.entries(categories)
   if (!entries.length) return
-  // sort by min descending so hottest on top
   entries = entries.sort((a: any, b: any) => {
     const am = typeof a[1]?.min === 'number' ? a[1].min : -Infinity
     const bm = typeof b[1]?.min === 'number' ? b[1].min : -Infinity
@@ -915,9 +1142,9 @@ function buildLegend(categories: Record<string, any>) {
       else if (lo != null && (hi == null || hi >= 900)) range = ` (>=${fmt(lo)}°C)`
       else if (hi != null && (lo == null)) range = ` (<=${fmt(hi)}°C)`
       return `
-      <div class="legend-row" style="display:flex; align-items:center; gap:12px;">
+      <div class="legend-row">
         <span class="legend-label">${v.label}${range}</span>
-        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); margin-left:auto;"></span>
+        <span style="background:${v.color}; width:18px; height:18px; display:inline-block; border-radius:3px; border:1px solid rgba(0,0,0,0.25); margin-left:auto;"></span>
       </div>
     `
     }),
@@ -925,313 +1152,19 @@ function buildLegend(categories: Record<string, any>) {
   legendHtml.value = html
 }
 
-onMounted(async () => {
-  try {
-    await loadGoogleMaps()
-    const center = { lat: -37.8136, lng: 144.9631 }
-    gmapRef.value = new (window as any).google.maps.Map(document.getElementById('gmap') as HTMLElement, {
-      center,
-      zoom: 13,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    })
-    // Create veg map if its container exists (we render both containers; veg may be hidden)
-    const vegEl = document.getElementById('vegmap')
-    if (vegEl && !vegMapRef.value) {
-      vegMapRef.value = new (window as any).google.maps.Map(vegEl as HTMLElement, {
-        center,
-        zoom: 13,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      })
-    }
-    // Load saved history first so UI is populated quickly
-    loadHistoryFromStorage()
-
-    // Load heat/vegetation stats once so history card can show values
-    await loadUhiDataOnce()
-    refreshHistoryStats()
-    await initUhiOnMap()
-    if (vegMapRef.value) await initVegetationMap()
-
-    // Setup Google Places Autocomplete on search input
-    if (searchInputRef.value) {
-    const autocomplete = new (window as any).google.maps.places.Autocomplete(searchInputRef.value as HTMLInputElement, {
-      fields: ['geometry', 'name', 'formatted_address'],
-      types: ['geocode'],
-      componentRestrictions: { country: 'au' },
-      bounds: gmapRef.value?.getBounds?.(),
-      strictBounds: true,
-    })
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace()
-        const loc = place?.geometry?.location
-        if (loc) {
-          const center = { lat: loc.lat(), lng: loc.lng() }
-          // Prefer short name without state prefix; fall back to name or coords
-          let label = place.name || place.formatted_address || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`
-          if (place.formatted_address) {
-            const parts = String(place.formatted_address).split(',').map(s => s.trim())
-            // Remove leading country/state like 'Australia' or 'Victoria'
-            if (parts.length > 1) {
-              const lastTwo = parts.slice(0, -2).join(', ')
-              label = lastTwo || (place.name || parts[0])
-            }
-          }
-        // Only accept results that lie within our suburb polygons
-        if (activeLayer.value === 'heat') {
-          const liveHeat = getHeatAtLatLng(center.lat, center.lng)
-          if (liveHeat.avg == null) {
-            errorMsg.value = OUT_OF_COVERAGE_MSG
-            return
-          }
-          // Clear any previous error on successful match within dataset
-          errorMsg.value = ''
-          // Use polygon suburb name as canonical label (case-insensitive, consistent)
-          if (liveHeat.name) label = liveHeat.name
-          // center only after validating within dataset
-          if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
-          placeCenterMarker(center, 'heat')
-          const heatVal = liveHeat.avg
-          const heatCat = liveHeat.category
-          // Store precise map-derived value immediately
-          const heatRank = findMapValue(label, heatRankMap) as number | undefined
-          searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: heatVal as number | undefined, veg: undefined, heatCategory: heatCat as string | undefined, rank: heatRank })
-          if (searchHistory.value.length > 8) searchHistory.value.pop()
-          refreshHistoryStats()
-          saveHistoryToStorage()
-        } else {
-          // Vegetation: detect polygon name then map to veg percentage
-          const liveHeat = getHeatAtLatLng(center.lat, center.lng)
-          const suburbName = liveHeat.name
-          const vegVal = suburbName ? vegTotalsMap[normKey(suburbName)] : undefined
-          if (vegVal == null) {
-            errorMsg.value = OUT_OF_COVERAGE_MSG
-            return
-          }
-          // Clear any previous error on successful match within dataset
-          errorMsg.value = ''
-          if (suburbName) label = suburbName
-          if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
-          placeCenterMarker(center, 'veg')
-          const vegRank = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
-          searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank })
-          if (searchHistory.value.length > 8) searchHistory.value.pop()
-          refreshHistoryStats()
-          saveHistoryToStorage()
-        }
-        }
-      })
-
-    // Support pressing Enter to search by free text using Geocoder
-    searchInputRef.value.addEventListener('keydown', (e: any) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        const q = (searchInputRef.value as HTMLInputElement).value?.trim()
-        if (!q) return
-        const geocoder = new (window as any).google.maps.Geocoder()
-        const req: any = {
-          address: q,
-          region: 'AU',
-          componentRestrictions: { country: 'AU', administrativeArea: 'VIC' },
-        }
-        const b = gmapRef.value?.getBounds?.()
-        if (b) req.bounds = b
-        geocoder.geocode(req, (results: any, status: string) => {
-          if (status === 'OK' && results && results[0]) {
-            const vicPreferred = Array.isArray(results) ? (results.find((r: any) => isVicGeocodeResult(r)) || results[0]) : results[0]
-            const r = vicPreferred
-            const loc = r.geometry?.location
-            if (!loc) return
-            const center = { lat: loc.lat(), lng: loc.lng() }
-
-            // Build a concise label: prefer the first segment before comma
-            let label = String(r.formatted_address || q)
-            if (label.includes(',')) label = label.split(',')[0].trim()
-            // Only accept if inside our dataset polygon
-            if (activeLayer.value === 'heat') {
-              const liveHeat = getHeatAtLatLng(center.lat, center.lng)
-              if (liveHeat.avg == null) {
-                errorMsg.value = OUT_OF_COVERAGE_MSG
-                return
-              }
-              // Clear any previous error on successful match within dataset
-              errorMsg.value = ''
-              if (liveHeat.name) label = liveHeat.name
-              if (gmapRef.value) { gmapRef.value.setCenter(center); gmapRef.value.setZoom(13) }
-              placeCenterMarker(center, 'heat')
-              // Store precise map-derived value immediately
-              const heatRank2 = findMapValue(label, heatRankMap) as number | undefined
-              searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: liveHeat.avg as number | undefined, veg: undefined, heatCategory: liveHeat.category as string | undefined, rank: heatRank2 })
-              if (searchHistory.value.length > 8) searchHistory.value.pop()
-              refreshHistoryStats()
-              saveHistoryToStorage()
-            } else {
-              const liveHeat = getHeatAtLatLng(center.lat, center.lng)
-              const suburbName = liveHeat.name
-              const vegVal = suburbName ? vegTotalsMap[normKey(suburbName)] : undefined
-              if (vegVal == null) {
-                errorMsg.value = OUT_OF_COVERAGE_MSG
-                return
-              }
-              errorMsg.value = ''
-              if (suburbName) label = suburbName
-              if (vegMapRef.value) { vegMapRef.value.setCenter(center); vegMapRef.value.setZoom(13) }
-              placeCenterMarker(center, 'veg')
-              const vegRank2 = suburbName ? (vegRankMap[normKey(suburbName)] as number | undefined) : undefined
-              searchHistory.value.unshift({ id: cryptoRandom(), label, center, layer: activeLayer.value, key: normKey(label), heat: undefined, veg: vegVal as number | undefined, heatCategory: undefined, rank: vegRank2 })
-              if (searchHistory.value.length > 8) searchHistory.value.pop()
-              refreshHistoryStats()
-              saveHistoryToStorage()
-            }
-          }
-        })
-      }
-    })
-    }
-
-    // Load chart data once
-    await buildCharts()
-    // After charts data ready, render canvas charts
-    await nextTick()
-    try {
-      const donut = document.getElementById('heat-donut') as HTMLCanvasElement | null
-      if (donut && heatChartRows.value.length) {
-        const labels = heatChartRows.value.map(r => r.label)
-        const values = heatChartRows.value.map(r => r.count)
-        const colors = heatChartRows.value.map(r => r.color)
-        new Chart(donut.getContext('2d')!, {
-          type: 'doughnut',
-          data: { labels, datasets: [{ data: values, backgroundColor: colors }] },
-          options: {
-            plugins: {
-              legend: { position: 'bottom', labels: { boxWidth: 12 } },
-              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw}` } }
-            },
-            cutout: '60%',
-            responsive: true,
-            maintainAspectRatio: true,
-          }
-        })
-      }
-
-      // Vegetation donut using vegChartRows order/colors
-      const vDonut = document.getElementById('veg-donut') as HTMLCanvasElement | null
-      if (vDonut && vegChartRows.value.length) {
-        const vLabels = vegChartRows.value.map(r => r.bucket)
-        const vValues = vegChartRows.value.map(r => r.count)
-        const vColors = vegChartRows.value.map(r => r.color)
-        new Chart(vDonut.getContext('2d')!, {
-          type: 'doughnut',
-          data: { labels: vLabels, datasets: [{ data: vValues, backgroundColor: vColors }] },
-          options: {
-            plugins: {
-              legend: { position: 'bottom', labels: { boxWidth: 12 } },
-              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw}` } }
-            },
-            cutout: '60%',
-            responsive: true,
-            maintainAspectRatio: true,
-          }
-        })
-      }
-      const scatter = document.getElementById('heat-veg-scatter') as HTMLCanvasElement | null
-      if (scatter) {
-        new Chart(scatter.getContext('2d')!, {
-          type: 'scatter',
-          data: { datasets: [{ label: 'Suburbs', data: (scatterPairs.value.length ? scatterPairs.value : [{ x: 0, y: 0, color: '#d1d5db' }]).map(p => ({ x: p.x, y: p.y })), pointRadius: 3, backgroundColor: (scatterPairs.value.length ? scatterPairs.value : [{ x: 0, y: 0, color: '#d1d5db' }]).map(p => p.color) }] },
-          options: {
-            scales: { x: { title: { display: true, text: 'Vegetation %' } }, y: { title: { display: true, text: 'Heat (°C)' } } },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx: any) => `(${ctx.parsed.x}, ${ctx.parsed.y})` } } },
-            responsive: true,
-            maintainAspectRatio: true,
-          }
-        })
-      }
-    } catch {}
-  } catch {
-    // fail silent to avoid breaking dashboard
-  }
-})
-
-// Ensure vegetation map is created when user switches to it and keep instances in sync
-watch(activeLayer, async (layer) => {
-  if (layer === 'veg') {
-    await nextTick()
-    
-    // Create veg map if it doesn't exist
-    if (!vegMapRef.value) {
-      const el = document.getElementById('vegmap') as HTMLElement | null
-      if (!el || !(window as any).google?.maps) return
-      const currentCenter = gmapRef.value?.getCenter?.()
-      const center = currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : { lat: -37.8136, lng: 144.9631 }
-      const zoom = gmapRef.value?.getZoom?.() || 13
-      vegMapRef.value = new (window as any).google.maps.Map(el, {
-        center,
-        zoom,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      })
-    }
-    
-    // Always reload vegetation data when switching to veg layer
-    await initVegetationMap()
-    // Move marker to vegetation map if present
-    const vc2 = vegMapRef.value?.getCenter?.()
-    if (vc2) placeCenterMarker({ lat: vc2.lat(), lng: vc2.lng() }, 'veg')
-  } else if (layer === 'heat' && gmapRef.value && vegMapRef.value) {
-    // When switching back, sync center/zoom from vegetation map if available
-    const vc = vegMapRef.value.getCenter?.()
-    if (vc) {
-      gmapRef.value.setCenter({ lat: vc.lat(), lng: vc.lng() })
-    }
-    const vz = vegMapRef.value.getZoom?.()
-    if (vz) {
-      gmapRef.value.setZoom(vz)
-    }
-    const hc = gmapRef.value?.getCenter?.()
-    if (hc) placeCenterMarker({ lat: hc.lat(), lng: hc.lng() }, 'heat')
-  }
-})
-
-// legacy helper (kept for potential future use)
-// function addHistory(...) deprecated; inlined into search handlers to ensure fresh data
-
-function centerTo(item: { label: string; center: { lat: number; lng: number }; layer?: 'heat' | 'veg' }) {
-  const { center } = item
-  if (item.layer) activeLayer.value = item.layer
-  if (gmapRef.value) { gmapRef.value.setCenter(center) }
-  if (vegMapRef.value) { vegMapRef.value.setCenter(center) }
-  placeCenterMarker(center, item.layer)
-}
-
-function removeHistory(item: { label: string; id?: string }) {
-  // Remove by id when available; fallback to first label match
-  if (item.id) {
-    const posById = searchHistory.value.findIndex(h => h.id === item.id)
-    if (posById >= 0) searchHistory.value.splice(posById, 1)
-  } else {
-    const pos = searchHistory.value.findIndex(h => h.label === item.label)
-    if (pos >= 0) searchHistory.value.splice(pos, 1)
-  }
-  saveHistoryToStorage()
-}
-
-// keep for potential future UI; remove if unused elsewhere
-
 async function buildCharts() {
   try {
-    // Use the same /data payload already fetched above where possible
-    const resp = await fetch(uhiUrl('/api/v1/uhi/data'))
-    if (!resp.ok) return
-    const payload = await resp.json()
+    // Use cached data if available, otherwise fetch
+    let payload = getUhiData()
+    if (!payload) {
+      const resp = await fetch(uhiUrl('/api/v1/uhi/data'))
+      if (!resp.ok) return
+      payload = await resp.json()
+    }
     const suburbs: Array<any> = Array.isArray(payload?.suburbs) ? payload.suburbs : []
-
-    // Heat categories count using metadata colors
     const metaCats = payload?.heat_categories || categoriesMap || {}
+
+    // Heat categories
     const counts: Record<string, { label: string; color: string; count: number }> = {}
     Object.entries(metaCats).forEach(([k, v]: any) => {
       counts[k] = { label: v?.label || k, color: v?.color || '#9ca3af', count: 0 }
@@ -1249,13 +1182,13 @@ async function buildCharts() {
       percent: Math.round((v.count / total) * 100)
     })).sort((a, b) => b.percent - a.percent)
 
-    // Vegetation buckets (0-10,10-20,20-30,30-40,40+)
+    // Vegetation buckets
     const buckets = [
-      { name: '0-10', min: 0, max: 10, color: '#fef3c7' },
-      { name: '10-20', min: 10, max: 20, color: '#fde68a' },
-      { name: '20-30', min: 20, max: 30, color: '#86efac' },
-      { name: '30-40', min: 30, max: 40, color: '#34d399' },
-      { name: '40+', min: 40, max: 1000, color: '#059669' },
+      { name: '0-10', min: 0, max: 10, color: '#FFB84D' },
+      { name: '10-20', min: 10, max: 20, color: '#FFE066' },
+      { name: '20-30', min: 20, max: 30, color: '#90EE90' },
+      { name: '30-40', min: 30, max: 40, color: '#4CBB17' },
+      { name: '40+', min: 40, max: 1000, color: '#228B22' },
     ]
     const vegCounts: Record<string, number> = {}
     buckets.forEach(b => { vegCounts[b.name] = 0 })
@@ -1272,30 +1205,7 @@ async function buildCharts() {
       percent: Math.round(((vegCounts[b.name] || 0) / total) * 100)
     }))
 
-    // Heat bins (<=0,0-4,4-8,8-12,>12)
-    const hBins = [
-      { name: '<=0', min: -1000, max: 0, color: '#93c5fd' },
-      { name: '0-4', min: 0, max: 4, color: '#60a5fa' },
-      { name: '4-8', min: 4, max: 8, color: '#f59e0b' },
-      { name: '8-12', min: 8, max: 12, color: '#ef4444' },
-      { name: '>12', min: 12, max: 1000, color: '#7f1d1d' },
-    ]
-    const hCounts: Record<string, number> = {}
-    hBins.forEach(b => { hCounts[b.name] = 0 })
-    suburbs.forEach((s: any) => {
-      const v = Number(s?.heat?.avg ?? s?.heat?.intensity)
-      if (!Number.isFinite(v)) return
-      const b = hBins.find(b => v >= b.min && v < b.max)
-      if (b) hCounts[b.name] += 1
-    })
-    heatBinRows.value = hBins.map(b => ({
-      bucket: b.name,
-      color: b.color,
-      count: hCounts[b.name] || 0,
-      percent: Math.round(((hCounts[b.name] || 0) / total) * 100)
-    }))
-
-    // Top N lists
+    // Top lists
     const byHeat = suburbs
       .map((s: any) => ({ name: String(s?.name || s?.id || ''), heat: Number(s?.heat?.avg ?? s?.heat?.intensity) }))
       .filter(x => x.name && Number.isFinite(x.heat))
@@ -1312,12 +1222,12 @@ async function buildCharts() {
     const vMax = byVeg[0]?.veg || 1
     topGreenRows.value = byVeg.map(x => ({ ...x, percent: Math.round((x.veg / vMax) * 100) }))
 
-    // Pearson correlation between vegetation total and heat avg
+    // Correlation
     const pairs = suburbs
       .map((s: any) => ({
         x: Number(s?.vegetation?.total),
         y: Number(s?.heat?.avg ?? s?.heat?.intensity),
-        color: ((payload?.heat_categories || categoriesMap || {})[String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')]?.color) || '#9ca3af'
+        color: ((metaCats || {})[String(s?.heat?.category || '').toLowerCase().replace(/\s+/g, '_')]?.color) || '#9ca3af'
       }))
       .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
     scatterPairs.value = pairs
@@ -1331,20 +1241,190 @@ async function buildCharts() {
       const sx = Math.sqrt(pairs.reduce((acc, p) => acc + Math.pow(p.x - mx, 2), 0))
       const sy = Math.sqrt(pairs.reduce((acc, p) => acc + Math.pow(p.y - my, 2), 0))
       correlationR.value = sx && sy ? (cov / (sx * sy)) : 0
-    } else {
-      correlationR.value = 0
     }
   } catch {
-    // ignore chart errors
+    console.error('Chart building failed')
   }
+}
+
+onMounted(async () => {
+  try {
+    // Start loading Google Maps and data in parallel
+    const [googleMaps] = await Promise.all([
+      loadGoogleMaps(),
+      loadUhiDataOnce(), // Pre-load data while maps are loading
+      loadSuburbs() // Load suburbs in parallel
+    ])
+
+    const center = { lat: -37.8136, lng: 144.9631 }
+
+    // Initialize both maps immediately
+    gmapRef.value = new (window as any).google.maps.Map(document.getElementById('gmap') as HTMLElement, {
+      center,
+      zoom: 11,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    })
+
+    const vegEl = document.getElementById('vegmap')
+    if (vegEl && !vegMapRef.value) {
+      vegMapRef.value = new (window as any).google.maps.Map(vegEl as HTMLElement, {
+        center,
+        zoom: 11,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      })
+    }
+
+    // Show UI immediately, then load map layers in parallel
+    isLoading.value = false
+    await nextTick()
+
+    // Initialize map layers and build charts in parallel (non-blocking)
+    Promise.all([
+      initUhiOnMap(),
+      vegMapRef.value ? initVegetationMap() : Promise.resolve(),
+      buildCharts() // Build charts in parallel with map initialization
+    ]).then(() => {
+      // Render charts after data is ready
+      nextTick(() => {
+        renderCharts()
+      })
+    })
+
+    // Setup scroll animations immediately
+    setupScrollAnimations()
+  } catch (e) {
+    console.error('Dashboard initialization failed', e)
+    isLoading.value = false
+  }
+})
+
+function renderCharts() {
+  try {
+      const donut = document.getElementById('heat-donut') as HTMLCanvasElement | null
+      if (donut && heatChartRows.value.length) {
+        const labels = heatChartRows.value.map(r => r.label)
+        const values = heatChartRows.value.map(r => r.count)
+        const colors = heatChartRows.value.map(r => r.color)
+        new Chart(donut.getContext('2d')!, {
+          type: 'doughnut',
+          data: { labels, datasets: [{ data: values, backgroundColor: colors }] },
+          options: {
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw} suburbs` } }
+            },
+            cutout: '65%',
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+
+      const vDonut = document.getElementById('veg-donut') as HTMLCanvasElement | null
+      if (vDonut && vegChartRows.value.length) {
+        const vLabels = vegChartRows.value.map(r => r.bucket)
+        const vValues = vegChartRows.value.map(r => r.count)
+        const vColors = vegChartRows.value.map(r => r.color)
+        new Chart(vDonut.getContext('2d')!, {
+          type: 'doughnut',
+          data: { labels: vLabels, datasets: [{ data: vValues, backgroundColor: vColors }] },
+          options: {
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+              tooltip: { callbacks: { label: (ctx: any) => `${ctx.label}: ${ctx.raw} suburbs` } }
+            },
+            cutout: '65%',
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+
+      const scatter = document.getElementById('heat-veg-scatter') as HTMLCanvasElement | null
+      if (scatter && scatterPairs.value.length) {
+        new Chart(scatter.getContext('2d')!, {
+          type: 'scatter',
+          data: {
+            datasets: [{
+              label: 'Melbourne Suburbs',
+              data: scatterPairs.value.map(p => ({ x: p.x, y: p.y })),
+              pointRadius: 4,
+              pointBackgroundColor: scatterPairs.value.map(p => p.color),
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 1
+            }]
+          },
+          options: {
+            scales: {
+              x: {
+                title: { display: true, text: 'Vegetation Coverage (%)', font: { size: 13, weight: 'bold' } },
+                grid: { color: 'rgba(0,0,0,0.05)' }
+              },
+              y: {
+                title: { display: true, text: 'Temperature (°C)', font: { size: 13, weight: 'bold' } },
+                grid: { color: 'rgba(0,0,0,0.05)' }
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx: any) => `${ctx.parsed.x.toFixed(1)}% vegetation, ${ctx.parsed.y.toFixed(1)}°C`
+                }
+              }
+            },
+            responsive: true,
+            maintainAspectRatio: true,
+          }
+        })
+      }
+  } catch (e) {
+    console.error('Chart rendering failed', e)
+  }
+}
+
+function setupScrollAnimations() {
+  const observerOptions = {
+    threshold: 0.15,
+    rootMargin: '0px 0px -100px 0px'
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible')
+      }
+    })
+  }, observerOptions)
+
+  const sections = [
+    heroSection.value,
+    snapshotSection.value,
+    mapSection.value,
+    patternSection.value,
+    impactSection.value,
+    chartsSection.value,
+    solutionSection.value,
+    ctaSection.value
+  ].filter(Boolean)
+
+  sections.forEach(section => {
+    if (section) observer.observe(section)
+  })
 }
 </script>
 
 <style scoped>
+/* Base Styles */
 .dashboard {
-  min-height: calc(100vh - 64px);
-  background: transparent;
-  padding: 2rem 0;
+  min-height: 100vh;
+  background: #000;
+  position: relative;
+  overflow-x: hidden;
 }
 
 .page-bg {
@@ -1353,148 +1433,1186 @@ async function buildCharts() {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: -1;
-  filter: brightness(0.9);
-  pointer-events: none;
+  z-index: 0;
+  filter: brightness(0.7);
 }
 
-.page-container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
-
-.hero-header { text-align: center; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3); margin-bottom: 1rem; }
-.hero-title { font-size: 3rem; font-weight: 800; margin-bottom: 0.5rem; }
-.hero-subtitle { font-size: 1.2rem; opacity: 0.9; margin: 0; }
-
-.content-card {
-  background: white;
-  border-radius: 1rem;
+/* Hero Section */
+.hero-section {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   padding: 2rem;
-  box-shadow:
-    0 1px 3px 0 rgba(0, 0, 0, 0.1),
-    0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 1s ease, transform 1s ease;
 }
 
-.map-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+.hero-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hero-content {
+  max-width: 900px;
+}
+
+.hero-title {
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 800;
+  color: white;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  line-height: 1.1;
+}
+
+.hero-subtitle {
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  color: rgba(255,255,255,0.95);
+  margin-bottom: 3rem;
+  line-height: 1.8;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.hero-subtitle strong {
+  color: #FCA5A5;
+  font-weight: 700;
+}
+
+.scroll-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.9rem;
+  animation: bounce 2s infinite;
+}
+
+.scroll-indicator svg {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  60% { transform: translateY(-5px); }
+}
+
+/* Data Snapshot Section */
+.data-snapshot {
+  position: relative;
+  z-index: 1;
+  padding: 4rem 2rem;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.data-snapshot.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.snapshot-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.stat-card {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 1rem;
+  color: #EF4444;
+}
+
+.stat-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.stat-number {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #1F2937;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 1rem;
+  color: #6B7280;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+/* Section Styles */
+section {
+  position: relative;
+  z-index: 1;
+  padding: 6rem 2rem;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.section-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section-header {
+  margin-bottom: 3rem;
+}
+
+.section-header.centered {
+  text-align: center;
+}
+
+.section-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  color: white;
+  margin-bottom: 1rem;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.section-subtitle {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: rgba(255,255,255,0.85);
+  line-height: 1.7;
+  max-width: 800px;
+  margin: 0 auto;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+/* Map Section */
+.map-section {
+  background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.5) 100%);
+}
+
+.map-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 2rem;
+  align-items: start;
+}
+
+.map-area {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.map-toolbar {
+  margin-bottom: 1rem;
+}
+
 .map-search-input {
   width: 100%;
-  max-width: 100%;
-  flex: 1 1 auto;
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 12px 16px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.map-search-input:focus {
   outline: none;
+  border-color: #065F46;
+  box-shadow: 0 0 0 3px rgba(6,95,70,0.1);
 }
-.map-search-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
-.inline-error { color: #b91c1c; font-size: 12px; background: #fee2e2; border: 1px solid #fecaca; padding: 6px 8px; border-radius: 6px; }
 
-.layout-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
-.layout-left { min-width: 0; }
-.layout-right { position: relative; min-width: 0; align-self: start; }
-.layer-fixed { position: sticky; top: 12px; z-index: 2; }
-.filter-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
-.filter-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
-.select-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; }
-.select-input:focus { border-color: #065f46; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
-.history-section { margin-top: 1rem; }
-.history-cards { display: grid; grid-template-rows: repeat(4, auto); gap: 0.75rem; max-height: 384px; overflow-y: auto; padding-right: 4px; width: 100%; }
-.history-card { padding: 12px; width: 100%; max-width: 100%; margin: 0; box-sizing: border-box; }
-.history-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.history-card-title { font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.history-card-actions { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
-.layer-value { font-size: 12px; color: #065f46; font-weight: 700; margin-left: 8px; margin-right: auto; }
-.value-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; margin-left: 8px; margin-right: auto; font-weight: 700; }
-.value-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
-.value-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
-.rank-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; background: #ffffff; }
-.rank-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
-.rank-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
-.value-group { display: flex; align-items: center; gap: 8px; margin-left: 8px; margin-right: auto; }
-.layer-badge { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; color: #374151; background: #ffffff; }
-.layer-badge.heat { border-color: #fca5a5; color: #7f1d1d; background: #fff1f2; }
-.layer-badge.veg { border-color: #86efac; color: #065f46; background: #ecfdf5; }
-.history-go { background: #065f46; color: white; border: none; border-radius: 999px; padding: 6px; font-size: 12px; cursor: pointer; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
-.history-go:hover { background: #047857; }
-.history-go svg { width: 16px; height: 16px; }
-.history-remove { background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 18px; line-height: 1; }
-.history-remove:hover { color: #6b7280; }
-.history-actions { margin-top: 8px; text-align: right; }
-.history-clear { background: transparent; border: none; color: #065f46; cursor: pointer; font-size: 12px; }
-.hint-text { color: #6b7280; font-size: 12px; margin-top: 8px; }
-.map-panel { position: relative; }
-.history-trend { margin-top: 6px; font-size: 12px; color: #374151; }
-.history-report { display: grid; grid-template-columns: 120px 1fr; gap: 12px; margin-top: 8px; align-items: start; }
-.report-media img { width: 100%; height: auto; border-radius: 8px; border: 1px solid #e5e7eb; }
-.heat-media {
-  width: 100%; height: 0; padding-bottom: 140px; border-radius: 8px; border: 1px solid #e5e7eb;
-  background: radial-gradient(circle at 30% 30%, rgba(239,68,68,0.9), rgba(239,68,68,0.4) 40%, rgba(239,68,68,0.2) 60%, rgba(239,68,68,0.05) 75%, rgba(255,255,255,1) 76%),
-              conic-gradient(from 0deg, rgba(239,68,68,0.85), rgba(245,158,11,0.85), rgba(59,130,246,0.4), rgba(34,197,94,0.65));
-  background-blend-mode: multiply;
+.search-container {
+  position: relative;
 }
-.report-content { display: grid; gap: 6px; }
-.report-title { font-weight: 700; color: #065f46; font-size: 12px; }
-.kpi-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.kpi { display: flex; justify-content: space-between; font-size: 12px; color: #374151; }
-.kpi-label { color: #6b7280; }
-.kpi-value { font-weight: 700; }
 
-.map-card-header { position: absolute; top: 12px; left: 12px; font-weight: 700; color: #065f46; background: #ffffff; padding: 6px 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #E5E7EB;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
 
-.map {
-  width: 100%;
-  height: 640px;
+.autocomplete-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover {
+  background-color: #F3F4F6;
+}
+
+.suburb-name {
+  font-weight: 500;
+  color: #1F2937;
+}
+
+.suburb-postcode {
+  font-size: 14px;
+  color: #6B7280;
+  margin-left: 8px;
+}
+
+.inline-error {
+  margin-top: 0.5rem;
+  padding: 8px 12px;
+  background: #FEE2E2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #B91C1C;
+  font-size: 13px;
+}
+
+.map-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.layer-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 10px;
+  background: #F9FAFB;
+  border: 2px solid #E5E7EB;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  color: #6B7280;
+}
+
+.layer-toggle:has(input:checked) {
+  background: #ECFDF5;
+  border-color: #065F46;
+  color: #065F46;
+}
+
+.layer-toggle input {
+  margin: 0;
+}
+
+.map-wrapper {
+  position: relative;
   border-radius: 12px;
   overflow: hidden;
 }
 
+.map {
+  width: 100%;
+  height: 600px;
+  border-radius: 12px;
+}
+
 .uhi-legend {
   position: absolute;
-  left: 24px;
-  bottom: 24px;
-  background: #ffffff;
+  left: 16px;
+  bottom: 16px;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  font-size: 12px;
+  min-width: 180px;
+}
+
+.legend-title {
+  font-weight: 700;
+  color: #065F46;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.legend-label {
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.legend-swatch {
+  flex-shrink: 0;
+}
+
+/* Info Panel */
+.info-panel {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  position: sticky;
+  top: 2rem;
+}
+
+.panel-content {
+  margin-bottom: 2rem;
+}
+
+.suburb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #F3F4F6;
+}
+
+.suburb-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0;
+}
+
+.heat-badge {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.heat-badge.very-hot {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.heat-badge.hot {
+  background: #FED7AA;
+  color: #9A3412;
+}
+
+.heat-badge.moderate {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.heat-badge.cool {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.suburb-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.stat-row.comparison {
+  border-top: 2px solid #F3F4F6;
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #6B7280;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1F2937;
+}
+
+.stat-value.heat {
+  color: #DC2626;
+}
+
+.stat-value.veg {
+  color: #059669;
+}
+
+.stat-value.cool {
+  color: #059669;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.action-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.action-btn.primary {
+  background: #065F46;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background: #047857;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(6,95,70,0.3);
+}
+
+.panel-placeholder {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #9CA3AF;
+}
+
+.panel-placeholder svg {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem;
+  opacity: 0.5;
+}
+
+.panel-placeholder p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quick-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #F3F4F6;
+}
+
+.quick-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 10px 12px;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: background 0.2s ease;
+}
+
+.quick-stat-item.hot {
+  background: linear-gradient(90deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%);
+  border-left: 3px solid #EF4444;
+}
+
+.quick-stat-item.cool {
+  background: linear-gradient(90deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 100%);
+  border-left: 3px solid #3B82F6;
+}
+
+.quick-stat-item.green {
+  background: linear-gradient(90deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 100%);
+  border-left: 3px solid #22C55E;
+}
+
+.quick-stat-item .label {
+  color: #6B7280;
+  font-weight: 600;
   font-size: 12px;
-  width: max-content;
-}
-.legend-title { font-weight: 700; margin-bottom: 6px; color: #065f46; }
-.legend-row { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; margin: 6px 0; }
-.legend-color { width: 18px; height: 18px; display: inline-block; border-radius: 3px; border: 1px solid rgba(0,0,0,0.25); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
-.legend-label { color: #374151; flex: 1 1 auto; }
-
-/* Charts */
-.charts-card { margin-top: 1.5rem; }
-.charts-section { margin-top: 0.25rem; display: grid; grid-template-columns: 1fr; gap: 1rem; }
-.chart-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
-.chart-title { font-weight: 700; color: #065f46; margin-bottom: 8px; }
-.chart-rows { display: grid; gap: 6px; }
-.chart-row { display: grid; grid-template-columns: 120px 1fr 48px; align-items: center; gap: 8px; }
-.chart-label { color: #374151; font-size: 12px; }
-.chart-bar { height: 10px; background: #eef2f7; border-radius: 8px; overflow: hidden; }
-.chart-bar-fill { height: 100%; border-radius: 8px; }
-.chart-value { text-align: right; font-size: 12px; color: #374151; }
-.chart-canvas { width: 100%; max-width: 520px; height: 260px; display: block; margin: 0 auto; }
-.charts-row-2 { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-@media (min-width: 900px) { .charts-row-2 { grid-template-columns: 1fr 1fr; } }
-
-.placeholder-text {
-  color: #6b7280;
-  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-/* Hide Google Maps InfoWindow close (X) button inside this component */
-:deep(.gm-ui-hover-effect) { display: none !important; }
+.quick-stat-item .value-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
 
-/* Split layout for chart + description */
-.chart-split { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
-@media (min-width: 900px) { .chart-split { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
-.chart-pane { min-width: 0; }
-.chart-desc { min-width: 0; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; }
-.desc-title { font-weight: 700; color: #065f46; margin-bottom: 6px; }
-.desc-text { color: #374151; font-size: 13px; line-height: 1.45; margin: 0 0 6px 0; }
-.desc-list { margin: 0; padding-left: 18px; color: #374151; font-size: 13px; }
+.quick-stat-item .value {
+  color: #1F2937;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.quick-stat-item .metric {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quick-stat-item.hot .metric {
+  color: #EF4444;
+}
+
+.quick-stat-item.cool .metric {
+  color: #3B82F6;
+}
+
+.quick-stat-item.green .metric {
+  color: #22C55E;
+}
+
+/* Pattern Section */
+.pattern-section {
+  background: linear-gradient(135deg, rgba(239,68,68,0.1) 0%, rgba(16,185,129,0.1) 100%);
+}
+
+.pattern-content {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+.chart-area {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.scatter-chart {
+  max-height: 500px;
+}
+
+.pattern-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.insight-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  display: flex;
+  gap: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.insight-card:hover {
+  transform: translateX(4px);
+}
+
+.insight-card.highlight {
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  border: 2px solid #059669;
+}
+
+.insight-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.insight-text strong {
+  display: block;
+  color: #1F2937;
+  font-size: 16px;
+  margin-bottom: 0.5rem;
+}
+
+.insight-text p {
+  color: #6B7280;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Impact Section */
+.impact-section {
+  background: rgba(0,0,0,0.6);
+}
+
+.impact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.impact-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+}
+
+.impact-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+}
+
+.impact-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.impact-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1F2937;
+  margin-bottom: 1rem;
+}
+
+.impact-stat {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 0.75rem;
+}
+
+.impact-card.health .impact-stat {
+  color: #DC2626;
+}
+
+.impact-card.economy .impact-stat {
+  color: #D97706;
+}
+
+.impact-card.environment .impact-stat {
+  color: #059669;
+}
+
+.impact-description {
+  color: #6B7280;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+/* Charts Section */
+.charts-section {
+  background: rgba(255,255,255,0.05);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+}
+
+.chart-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.chart-header {
+  margin-bottom: 1.5rem;
+}
+
+.chart-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1F2937;
+  margin-bottom: 0.75rem;
+}
+
+.chart-narrative {
+  font-size: 14px;
+  color: #6B7280;
+  line-height: 1.6;
+}
+
+.chart-body {
+  position: relative;
+}
+
+.chart-canvas {
+  max-height: 280px;
+}
+
+.bar-chart-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 32px 140px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+}
+
+.bar-rank {
+  font-size: 18px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-align: center;
+}
+
+.bar-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.bar-container {
+  height: 24px;
+  background: #F3F4F6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.bar-fill.heat {
+  background: linear-gradient(90deg, #EF4444 0%, #DC2626 100%);
+}
+
+.bar-fill.veg {
+  background: linear-gradient(90deg, #10B981 0%, #059669 100%);
+}
+
+.bar-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1F2937;
+  text-align: right;
+}
+
+/* Solution Section */
+.solution-section {
+  background: linear-gradient(180deg, rgba(6,95,70,0.1) 0%, rgba(16,185,129,0.05) 100%);
+}
+
+.solution-content {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+.solution-text .section-title {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.solution-description {
+  font-size: 1.25rem;
+  color: rgba(255,255,255,0.9);
+  line-height: 1.8;
+  margin-bottom: 2rem;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.solution-points {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.solution-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  color: rgba(255,255,255,0.9);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.solution-point svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: #10B981;
+  margin-top: 2px;
+}
+
+.solution-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thermometer-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 2.5rem 2rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.thermometer-content {
+  text-align: center;
+}
+
+.temp-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.temp-before,
+.temp-after {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  min-width: 180px;
+}
+
+.temp-before {
+  background: linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.1) 100%);
+  border: 2px solid rgba(239,68,68,0.3);
+}
+
+.temp-after {
+  background: linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.1) 100%);
+  border: 2px solid rgba(34,197,94,0.3);
+}
+
+.temp-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.temp-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.temp-label {
+  font-size: 14px;
+  color: rgba(255,255,255,0.9);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.temp-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255,255,255,0.9);
+}
+
+.temp-arrow svg {
+  width: 32px;
+  height: 32px;
+  opacity: 0.8;
+  animation: bounce-arrow 2s infinite;
+}
+
+.temp-arrow span {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 6px 16px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 20px;
+  backdrop-filter: blur(5px);
+}
+
+@keyframes bounce-arrow {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(8px); }
+  60% { transform: translateY(4px); }
+}
+
+.thermometer-caption {
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* CTA Section */
+.cta-section {
+  background: linear-gradient(135deg, rgba(6,95,70,0.9) 0%, rgba(16,185,129,0.8) 100%);
+  padding: 8rem 2rem 0 2rem;
+}
+
+.cta-content {
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto;
+  padding-bottom: 8rem;
+}
+
+.cta-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  color: white;
+  margin-bottom: 1rem;
+}
+
+.cta-subtitle {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: rgba(255,255,255,0.95);
+  line-height: 1.8;
+  margin-bottom: 3rem;
+}
+
+.cta-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.cta-btn {
+  padding: 16px 32px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.cta-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.cta-btn.primary {
+  background: white;
+  color: #065F46;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.cta-btn.primary:hover {
+  background: #F9FAFB;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.cta-btn.secondary {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+
+.cta-btn.secondary:hover {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.5);
+  transform: translateY(-2px);
+}
+
+.cta-btn.tertiary {
+  background: transparent;
+  color: rgba(255,255,255,0.9);
+  border: 2px solid rgba(255,255,255,0.2);
+}
+
+.cta-btn.tertiary:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.4);
+}
+
+/* Footnotes */
+.footnote-ref {
+  font-size: 0.7em;
+  vertical-align: super;
+  color: #059669;
+  font-weight: 600;
+  margin-left: 2px;
+  cursor: help;
+}
+
+/* References Section */
+.references-section {
+  background: linear-gradient(180deg, rgba(6,95,70,0.9) 0%, rgba(6,95,70,0.95) 100%);
+  padding: 4rem 2rem 6rem 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+.references-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid rgba(255,255,255,0.2);
+}
+
+.references-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1000px;
+}
+
+.reference-item {
+  display: flex;
+  gap: 1rem;
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.reference-number {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: rgba(255,255,255,0.95);
+}
+
+.reference-text {
+  flex: 1;
+}
+
+.reference-text a {
+  color: #A7F3D0;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.reference-text a:hover {
+  color: #D1FAE5;
+  border-bottom-color: #D1FAE5;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .map-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .info-panel {
+    position: static;
+  }
+
+  .pattern-content,
+  .solution-content {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  section {
+    padding: 4rem 1.5rem;
+  }
+
+  .snapshot-container {
+    grid-template-columns: 1fr;
+  }
+
+  .bar-row {
+    grid-template-columns: 28px 110px 1fr 70px;
+    gap: 8px;
+  }
+
+  .bar-label {
+    font-size: 13px;
+  }
+
+  .impact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Hide Google Maps default UI elements */
+:deep(.gm-ui-hover-effect) {
+  display: none !important;
+}
+
+:deep(.gm-style-iw-c) {
+  border-radius: 8px !important;
+}
+
+:deep(.gm-style-iw-d) {
+  overflow: hidden !important;
+}
 </style>
