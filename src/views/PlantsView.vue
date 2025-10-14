@@ -79,25 +79,7 @@
 
             <!-- Plants Grid (render even when loading is true) -->
             <div v-if="filteredPlants.length > 0" class="plants-results">
-              <!-- Plants Count and Page Size Selector -->
-              <div class="results-controls">
-                <div class="plants-count-display">
-                  Showing {{ plantsDisplayRange.start }}-{{ plantsDisplayRange.end }} of {{ totalPlants }} plants
-                </div>
-                <div class="page-size-selector">
-                  <label for="page-size">Plants per page:</label>
-                  <select
-                    id="page-size"
-                    v-model="plantsPerPage"
-                    @change="handlePageSizeChange"
-                    class="page-size-select"
-                  >
-                    <option v-for="size in pageSizeOptions" :key="size" :value="size">
-                      {{ size }}
-                    </option>
-                  </select>
-                </div>
-              </div>
+              <!-- Removed results summary and page-size selector per request -->
 
               <div class="plants-grid">
                 <div
@@ -414,7 +396,6 @@ const loadingModal = ref<{ show: boolean; message: string }>({ show: false, mess
 // Pagination state
 const currentPage = ref(1)
 const plantsPerPage = ref(12)
-const pageSizeOptions = [12, 24, 48, 96]
 const totalFromServer = ref(0)
 
 // Server-side pagination is used; the store already returns the current page
@@ -424,12 +405,7 @@ const filteredPlants = computed(() => plants.value)
 const totalPlants = computed(() => store.totalCount)
 const totalPages = computed(() => Math.max(1, Math.ceil(Math.max(0, totalPlants.value) / plantsPerPage.value)))
 
-// Plants display range computed property
-const plantsDisplayRange = computed(() => {
-  const start = (currentPage.value - 1) * plantsPerPage.value + 1
-  const end = Math.min(currentPage.value * plantsPerPage.value, totalPlants.value)
-  return { start, end }
-})
+// Removed explicit display range since the summary bar was removed
 // Show only pages that the frontend has already loaded (progressive reveal)
 const displayTotalPages = computed(() => Math.max(1, Math.min(totalPages.value, store.loadedPagesMax || 1)))
 
@@ -492,12 +468,7 @@ const loadPlants = async () => {
   totalFromServer.value = total
 }
 
-// Handle page size change
-const handlePageSizeChange = () => {
-  console.log('[PlantsView] Page size changed to:', plantsPerPage.value)
-  currentPage.value = 1 // Reset to first page when changing page size
-  loadPlants()
-}
+// Page-size change handler removed with the selector UI
 
 const handleSearch = () => {
   currentPage.value = 1
