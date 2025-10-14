@@ -376,7 +376,7 @@ import { plantApiService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useRecommendationsStore } from '@/stores/recommendations'
 import { usePlantsStore } from '@/stores/plants'
-import { SunIcon, MoonIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
+import { SunIcon, BeakerIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/solid'
 import SignInModal from '@/components/SignInModal.vue'
 import LoadingModal from '@/components/LoadingModal.vue'
 
@@ -428,6 +428,16 @@ async function toggleFav() {
     loadingModal.value = { show: true, message: 'Saving favourite...' }
     if (!plantStore.favouritesLoaded) await plantStore.loadFavouritesFromApi()
     await plantStore.toggleFavourite(String(props.plant.id))
+    // Ensure Profile page can map this favourite to a Plant object even if
+    // the All Plants store hasn't loaded this plant yet. We add it once.
+    try {
+      const idStr = String(props.plant.id)
+      const exists = plantStore.plants.some(p => String((p as unknown as { id: string }).id) === idStr)
+      if (!exists) {
+        // Push a lightweight copy; All Plants view may later overwrite with full data
+        ;(plantStore.plants as unknown as Array<typeof props.plant>).push(props.plant)
+      }
+    } catch {}
   } finally {
     loadingModal.value = { show: false, message: '' }
   }
@@ -816,17 +826,9 @@ const handleImageError = (event: Event) => {
 // formatSunlight helper no longer needed (icons component handles labels)
 
 // Local computed helpers for icons while preserving existing layout
-const sunType = computed<'full' | 'partial' | 'shade'>(() => {
-  const s = String(sunlightResolved.value || '').toLowerCase()
-  if (s.includes('partial') || s.includes('part')) return 'partial'
-  if (s.includes('shade')) return 'shade'
-  return 'full'
-})
+// sunType not used by UI; keep a simplified sunlight level only
 
-const resolvedSunlightLabel = computed(() => {
-  const s = sunType.value
-  return s === 'full' ? 'Full Sun' : s === 'partial' ? 'Partial Sun' : 'Shade'
-})
+// label helpers removed (icons already convey semantics)
 
 const waterLevel = computed<number>(() => {
   const w = String(waterResolved.value || '').toLowerCase()
@@ -834,12 +836,7 @@ const waterLevel = computed<number>(() => {
   if (w.includes('med')) return 2
   return 1
 })
-const resolvedWaterLabel = computed(() => {
-  const w = String(waterResolved.value || '').toLowerCase()
-  if (w.includes('high')) return 'High'
-  if (w.includes('med')) return 'Medium'
-  return 'Low'
-})
+// removed unused water label helper
 
 const effortLevel = computed<number>(() => {
   const e = String(effortResolved.value || '').toLowerCase()
@@ -847,12 +844,7 @@ const effortLevel = computed<number>(() => {
   if (e.includes('med')) return 2
   return 1
 })
-const resolvedEffortLabel = computed(() => {
-  const e = String(effortResolved.value || '').toLowerCase()
-  if (e.includes('high')) return 'High'
-  if (e.includes('med')) return 'Medium'
-  return 'Low'
-})
+// removed unused effort label helper
 
 // Sunlight level for enhanced display
 const sunLevelComputed = computed<number>(() => {

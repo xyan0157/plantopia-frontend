@@ -20,12 +20,8 @@
       <div v-if="tokenWarning" class="token-warning">Warning: high token usage ({{ totalTokens }}).</div>
     </div>
     <div class="chat-input">
-      <label class="attach">
-        <input type="file" accept="image/*" @change="onAttach" />
-        +
-      </label>
       <textarea class="input" rows="2" v-model="inputText" placeholder="Ask about your plant or describe an issue"></textarea>
-      <button class="btn primary" @click="sendMessage" :disabled="aiLoading || (!inputText.trim() && !attachPreview) || !hasEmail">Send</button>
+      <button class="btn primary" @click="sendMessage" :disabled="aiLoading || !inputText.trim() || !hasEmail">Send</button>
     </div>
   </div>
   
@@ -40,7 +36,6 @@ type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; image?: s
 
 const chatMessages = ref<ChatMsg[]>([])
 const inputText = ref('')
-const attachPreview = ref<string | null>(null)
 const chatWindowRef = ref<HTMLDivElement | null>(null)
 const aiLoading = ref(false)
 const chatId = ref<number | null>(null)
@@ -59,27 +54,16 @@ function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
-function onAttach(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (!files || !files[0]) { attachPreview.value = null; return }
-  const reader = new FileReader()
-  reader.onload = () => { attachPreview.value = String(reader.result || '') }
-  reader.readAsDataURL(files[0])
-}
-
-function clearAttach() { attachPreview.value = null }
-
 function scrollToBottom() {
   const el = chatWindowRef.value
   if (el) el.scrollTop = el.scrollHeight
 }
 
 async function sendMessage() {
-  if (!inputText.value.trim() && !attachPreview.value) return
-  const userMsg: ChatMsg = { id: generateId(), role: 'user', text: inputText.value.trim(), image: attachPreview.value }
+  if (!inputText.value.trim()) return
+  const userMsg: ChatMsg = { id: generateId(), role: 'user', text: inputText.value.trim() }
   chatMessages.value.push(userMsg)
   inputText.value = ''
-  attachPreview.value = null
   await nextTick(); scrollToBottom()
 
   aiLoading.value = true
@@ -91,11 +75,7 @@ async function sendMessage() {
       chatId.value = res.chat_id
     }
 
-    const { reply, token_warning, total_tokens } = await plantApiService.sendGeneralChatMessage({
-      chat_id: chatId.value!,
-      message: userMsg.text,
-      image: userMsg.image || undefined,
-    })
+    const { reply, token_warning, total_tokens } = await plantApiService.sendGeneralChatMessage({ chat_id: chatId.value!, message: userMsg.text })
     tokenWarning.value = Boolean(token_warning)
     totalTokens.value = total_tokens
     const replyMsg: ChatMsg = { id: generateId(), role: 'assistant', text: reply || 'No reply' }
@@ -132,8 +112,6 @@ async function sendMessage() {
 @keyframes blink { 0%, 80%, 100% {opacity: .2} 40% {opacity: 1} }
 .token-warning { background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; margin: 6px 12px; padding:6px 8px; border-radius:8px; font-size:12px; }
 .chat-input { display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid #e5e7eb; background:#ffffff; }
-.attach input{ display:none; }
-.attach { width:28px; height:28px; border-radius:6px; background:#f3f4f6; color:#374151; display:grid; place-items:center; cursor:pointer; }
 .input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:14px; }
 .btn.primary { background:#10b981; color:#fff; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; }
 .btn.primary:disabled { background:#a7f3d0; cursor:not-allowed; }
