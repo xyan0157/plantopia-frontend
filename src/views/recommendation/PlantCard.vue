@@ -163,31 +163,31 @@ const contentStyle = computed(() => ({
   background: 'transparent'
 }))
 
-// Function to get image source with Victoria Plants Data priority
+// Function to get image source with proper priority
 const getImageSource = (): string => {
-  // Priority 1: Use Base64 data if available
-  if (props.plant.imageData) {
-    // Check if it's already a data URL
-    if (props.plant.imageData.startsWith('data:')) {
-      return props.plant.imageData
-    }
-    
-    // If it's just the base64 string, add the data URL prefix
-    return `data:image/jpeg;base64,${props.plant.imageData}`
+  // Priority 1: Base64 (new field image_base64 or legacy imageData)
+  const imageBase64 = (props.plant as unknown as { image_base64?: string; imageData?: string }).image_base64
+    || (props.plant as unknown as { image_base64?: string; imageData?: string }).imageData
+  if (typeof imageBase64 === 'string' && imageBase64.length) {
+    return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
   }
-  
-  // Priority 2: Try Victoria Plants Data image
+
+  // Priority 2: Direct URL from API (backend now provides)
+  const imageUrl = (props.plant as unknown as { image_url?: string }).image_url
+  if (typeof imageUrl === 'string' && imageUrl) return imageUrl
+
+  // Priority 3: Try Victoria Plants Data image
   const victoriaImage = findVictoriaPlantImage()
   if (victoriaImage) {
     return victoriaImage
   }
   
-  // Priority 3: Fall back to existing URL construction
+  // Priority 4: Fall back to backend proxy using imagePath
   if (props.plant.imagePath) {
     return getImageUrl(props.plant.imagePath)
   }
   
-  // Priority 4: Use category-specific placeholder image
+  // Priority 5: Category placeholder
   return getCategoryPlaceholder()
 }
 

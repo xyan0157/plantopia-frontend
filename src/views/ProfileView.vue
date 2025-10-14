@@ -45,7 +45,7 @@
               >
                 <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlantDetail(p)" style="cursor:pointer;">
                   <div class="plant-thumb">
-                    <img :src="getPlantPreviewImage(p)" alt="thumb" />
+                    <img :src="getPlantPreviewImage(p)" alt="thumb" @error="(event) => handleFavImgError(event, p)" />
                   </div>
                 </div>
               </div>
@@ -383,6 +383,7 @@ import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 import { renderMarkdown } from '@/services/markdownService'
 import LoadingModal from '@/components/LoadingModal.vue'
+import { handleImageError as handleImageErrorHelper } from '@/utils/imageHelper'
 
 const auth = useAuthStore()
 // const router = useRouter()
@@ -517,6 +518,14 @@ function getJournalPreviewImage(jp: { image_url?: string; plant_name: string; pl
   if (jp.image_url) return jp.image_url
   // fallback by category unknown -> placeholder
   return '/placeholder-plant.svg'
+}
+
+function handleFavImgError(event: Event, p: Plant | Record<string, unknown>) {
+  const category = (p as unknown as { category?: string }).category
+  try { handleImageErrorHelper(event, category) } catch {
+    const img = event.target as HTMLImageElement
+    img.style.display = 'none'
+  }
 }
 
 // Journal card background style (align with All Plants gradient logic)
