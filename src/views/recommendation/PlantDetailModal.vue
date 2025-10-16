@@ -544,8 +544,30 @@ let currentRequestController: AbortController | null = null
 const temperatureReduction = computed(() => Number(impactData.value?.quantified_impact.temperature_reduction_c || 0))
 const airQualityPoints = computed<number>(() => Number(impactData.value?.quantified_impact.air_quality_points || 0))
 const co2Absorption = computed<number>(() => {
-  const apiVal = Number(impactData.value?.quantified_impact.co2_absorption_kg_year)
-  return Number.isFinite(apiVal) && apiVal > 0 ? apiVal : 0
+  // Backend now sends co2_absorption_g_year (grams), not co2_absorption_kg_year (kg)
+  const gramsValue = impactData.value?.quantified_impact.co2_absorption_g_year
+  const kgValue = impactData.value?.quantified_impact.co2_absorption_kg_year
+
+  console.log('[IMPACT] Computing CO2 Absorption - Grams value:', gramsValue)
+  console.log('[IMPACT] Computing CO2 Absorption - KG value (legacy):', kgValue)
+
+  // Prefer grams value (new backend format), fallback to kg value (legacy)
+  let finalValue: number
+  if (gramsValue !== undefined && gramsValue !== null) {
+    // Backend sends grams directly, use as-is
+    finalValue = Number(gramsValue)
+    console.log('[IMPACT] Using grams value:', finalValue)
+  } else if (kgValue !== undefined && kgValue !== null) {
+    // Legacy: backend sent kg, convert to grams
+    finalValue = Number(kgValue) * 1000
+    console.log('[IMPACT] Using legacy kg value, converted to grams:', finalValue)
+  } else {
+    finalValue = 0
+    console.log('[IMPACT] No CO2 value found, defaulting to 0')
+  }
+
+  console.log('[IMPACT] Final CO2 value (grams):', finalValue)
+  return Number.isFinite(finalValue) && finalValue > 0 ? finalValue : 0
 })
 const waterProcessed = computed<number>(() => Number(impactData.value?.quantified_impact.water_processed_l_week || 0))
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
@@ -553,19 +575,17 @@ const confidence = computed<string>(() => String(impactData.value?.quantified_im
 
 // Format CO2 units in grams per year (plants absorb 50-200g annually)
 const co2AbsorptionFormatted = computed<string>(() => {
-  const kg = co2Absorption.value
-  if (!Number.isFinite(kg)) return '0 g/year'
-  // Convert kg to grams
-  const grams = kg * 1000
+  const grams = co2Absorption.value
+  if (!Number.isFinite(grams)) return '0 g/year'
+  // Value is already in grams, just format it
   return `${grams.toFixed(0)} g/year`
 })
 
 // Gauge helpers - scale for 50-200g range (typical plant CO2 absorption)
 const co2Gauge = computed(() => {
-  const kg = co2Absorption.value
-  if (!Number.isFinite(kg) || kg <= 0) return { value: 0, max: 200 }
-  // Convert kg to grams for proper scale
-  const grams = kg * 1000
+  const grams = co2Absorption.value
+  if (!Number.isFinite(grams) || grams <= 0) return { value: 0, max: 200 }
+  // Value is already in grams, use directly for gauge scale
   // Scale: 0-200 grams per year
   return { value: grams, max: 200 }
 })
@@ -648,11 +668,14 @@ async function fetchImpact() {
       // quantify per plant
       user_preferences: {},
     }, currentRequestController.signal)
-    
+
     // Only update if this request hasn't been cancelled
     if (!currentRequestController.signal.aborted) {
       impactData.value = res
-      // console.debug('[IMPACT] Successfully loaded impact data')
+      console.log('[IMPACT] Full API Response:', res)
+      console.log('[IMPACT] Quantified Impact:', res.quantified_impact)
+      console.log('[IMPACT] CO2 Absorption Raw:', res.quantified_impact?.co2_absorption_kg_year)
+      console.log('[IMPACT] CO2 Absorption Type:', typeof res.quantified_impact?.co2_absorption_kg_year)
     }
   } catch (e) {
     // Only show error if this request hasn't been cancelled

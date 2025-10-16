@@ -148,14 +148,14 @@
             <!-- Quick Stats -->
             <div class="quick-stats">
               <div class="quick-stat-item hot">
-                <span class="label">Hottest</span>
+                <span class="label">Hottest (Highest Urban Heat Intensity)</span>
                 <div class="value-group">
                   <span class="value">{{ hottestSuburb }}</span>
                   <span class="metric">{{ hottestTemp }}</span>
                 </div>
               </div>
               <div class="quick-stat-item cool">
-                <span class="label">Coolest</span>
+                <span class="label">Coolest (Lowest Urban Heat Intensity)</span>
                 <div class="value-group">
                   <span class="value">{{ coolestSuburb }}</span>
                   <span class="metric">{{ coolestTemp }}</span>
@@ -432,43 +432,43 @@
     </section>
 
     <!-- References Section -->
-    <section class="references-section">
+    <section class="references-section" ref="referencesSection">
       <div class="section-container">
         <h3 class="references-title">References</h3>
         <div class="references-list">
           <div class="reference-item">
             <span class="reference-number">1.</span>
             <span class="reference-text">
-              Bowler, D.E., et al. (2010). Urban greening to cool towns and cities: A systematic review of the empirical evidence.
-              <a href="https://doi.org/10.1016/j.landurbplan.2010.05.006" target="_blank" rel="noopener">Landscape and Urban Planning, 97(3), 147-155</a>
+              Chen, S., et al. (2024). Urban vegetation cooling effect: A study of Shenzhen, China.
+              <a href="https://www.sciencedirect.com/science/article/pii/S2095633924000029" target="_blank" rel="noopener">Urban Climate, 53, 101759</a>
             </span>
           </div>
           <div class="reference-item">
             <span class="reference-number">2.</span>
             <span class="reference-text">
-              Victorian Department of Health (2023). Heat Health Impacts in Victoria.
-              <a href="https://www.health.vic.gov.au/environmental-health/heat-health-impacts" target="_blank" rel="noopener">Victorian Government Health Information</a>
+              Victorian Department of Health (2009). January 2009 Heatwave in Victoria: An Assessment of Health Impacts.
+              <a href="https://www.health.vic.gov.au/" target="_blank" rel="noopener">Victorian Government - 514 heat-related hospital presentations, 374 excess deaths</a>
             </span>
           </div>
           <div class="reference-item">
             <span class="reference-number">3.</span>
             <span class="reference-text">
-              Australian Energy Regulator (2024). Energy costs and urban heat islands.
-              <a href="https://www.aer.gov.au/industry/registers/resources/publications" target="_blank" rel="noopener">AER Publications</a>
+              Victorian Council of Social Service (2022). Melbourne's Hot Divide: Cooling inequality in a warming city.
+              <a href="https://vcoss.org.au/policy-advocacy/melbournes-hot-divide/" target="_blank" rel="noopener">VCOSS Research Report</a>
             </span>
           </div>
           <div class="reference-item">
             <span class="reference-number">4.</span>
             <span class="reference-text">
-              Climate Council of Australia (2023). Urban Heat Island Effect and Emissions.
-              <a href="https://www.climatecouncil.org.au/resources/" target="_blank" rel="noopener">Climate Council Resources</a>
+              U.S. Environmental Protection Agency (2024). Heat Islands and Climate Change.
+              <a href="https://www.epa.gov/heatislands/climate-change-and-heat-islands" target="_blank" rel="noopener">EPA Climate Adaptation Resource Center</a>
             </span>
           </div>
           <div class="reference-item">
             <span class="reference-number">5.</span>
             <span class="reference-text">
-              Akbari, H., et al. (2016). Local climate change and urban heat island mitigation techniques.
-              <a href="https://doi.org/10.1016/j.uclim.2015.11.001" target="_blank" rel="noopener">Urban Climate, 14, 286-302</a>
+              Sanusi, R., et al. (2017). Street orientation and side of the street greatly influence the microclimatic benefits street trees can provide in summer.
+              <a href="https://doi.org/10.1016/j.jenvman.2016.11.055" target="_blank" rel="noopener">Journal of Environmental Management, 187, 140-151</a>
             </span>
           </div>
           <div class="reference-item">
@@ -481,7 +481,7 @@
           <div class="reference-item">
             <span class="reference-number">7.</span>
             <span class="reference-text">
-              Norton, B.A., et al. (2015). Planning for cooler cities: A framework to prioritise green infrastructure.
+              Norton, B.A., et al. (2015). Planning for cooler cities: A framework to prioritise green infrastructure to ameliorate urban heat island effects.
               <a href="https://doi.org/10.1016/j.landurbplan.2015.04.018" target="_blank" rel="noopener">Landscape and Urban Planning, 134, 127-138</a>
             </span>
           </div>
@@ -493,7 +493,7 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { onMounted, ref, computed, nextTick } from 'vue'
+import { onMounted, ref, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Chart from 'chart.js/auto'
 import { ensureGoogleMapsLoaded } from '@/services/gmapsLoader'
@@ -513,6 +513,8 @@ const errorMsg = ref('')
 const activeLayer = ref<'heat' | 'veg'>('heat')
 const selectedSuburb = ref<any>(null)
 const searchMarker = ref<any>(null)
+const vegSearchMarker = ref<any>(null)
+const allMarkers = ref<any[]>([])
 
 // Custom autocomplete for suburbs
 const suburbsList = ref<Array<{ id: number; name: string; postcode: string; latitude: number; longitude: number; state: string }>>([])
@@ -531,6 +533,7 @@ const impactSection = ref<HTMLElement | null>(null)
 const chartsSection = ref<HTMLElement | null>(null)
 const solutionSection = ref<HTMLElement | null>(null)
 const ctaSection = ref<HTMLElement | null>(null)
+const referencesSection = ref<HTMLElement | null>(null)
 
 // Data
 let categoriesMap: Record<string, { color: string; label: string }> = {}
@@ -550,6 +553,7 @@ let lastSimplified = true
 const heatChartRows = ref<Array<{ key: string; label: string; color: string; count: number; percent: number }>>([])
 const vegChartRows = ref<Array<{ bucket: string; color: string; count: number; percent: number }>>([])
 const topHotRows = ref<Array<{ name: string; heat: number; percent: number }>>([])
+const topCoolRows = ref<Array<{ name: string; heat: number; percent: number }>>([])
 const topGreenRows = ref<Array<{ name: string; veg: number; percent: number }>>([])
 const correlationR = ref<number>(0)
 const scatterPairs = ref<Array<{ x: number; y: number; color: string }>>([])
@@ -591,8 +595,7 @@ const hottestSuburb = computed(() => {
 })
 
 const coolestSuburb = computed(() => {
-  const sorted = [...topHotRows.value].sort((a, b) => a.heat - b.heat)
-  return sorted.length > 0 ? sorted[0].name : 'Loading...'
+  return topCoolRows.value.length > 0 ? topCoolRows.value[0].name : 'Loading...'
 })
 
 const greenestSuburb = computed(() => {
@@ -604,8 +607,7 @@ const hottestTemp = computed(() => {
 })
 
 const coolestTemp = computed(() => {
-  const sorted = [...topHotRows.value].sort((a, b) => a.heat - b.heat)
-  return sorted.length > 0 ? `${sorted[0].heat.toFixed(1)}°C` : '...'
+  return topCoolRows.value.length > 0 ? `${topCoolRows.value[0].heat.toFixed(1)}°C` : '...'
 })
 
 const greenestVeg = computed(() => {
@@ -643,6 +645,11 @@ const keyStats = computed(() => [
   }
 ])
 
+// Watch for layer changes (for future enhancements if needed)
+watch(activeLayer, () => {
+  // Markers are already on both maps, no action needed
+})
+
 // Navigation
 const goToRecommendations = (suburb?: string) => {
   if (suburb) {
@@ -657,12 +664,15 @@ const filteredSuburbs = computed(() => {
   if (!searchQuery.value || searchQuery.value.trim() === '') return []
 
   const query = searchQuery.value.toLowerCase().trim()
-  return suburbsList.value
+  const filtered = suburbsList.value
     .filter(suburb =>
       suburb.name.toLowerCase().includes(query) ||
       suburb.postcode.includes(query)
     )
     .slice(0, 10) // Limit to 10 results
+
+  console.log('[Dashboard] Filtered suburbs:', filtered.length, 'for query:', query)
+  return filtered
 })
 
 const goToPlants = () => {
@@ -695,15 +705,59 @@ function getHeatClass(category: string | undefined): string {
 // Custom autocomplete functions
 async function loadSuburbs() {
   try {
-    const resp = await fetch(uhiUrl('/api/v1/suburbs'))
+    // Load suburbs from UHI data endpoint to get all suburbs shown on the map
+    const url = uhiUrl('/api/v1/uhi/data')
+    console.log('[Dashboard] Loading suburbs from:', url)
+    const resp = await fetch(url)
     if (!resp.ok) {
-      console.error('Failed to load suburbs')
+      console.error('[Dashboard] Failed to load suburbs from UHI data, status:', resp.status)
       return
     }
     const data = await resp.json()
-    suburbsList.value = data.suburbs || []
+    console.log('[Dashboard] Raw API response:', data)
+    const suburbs: Array<any> = Array.isArray(data?.suburbs) ? data.suburbs : []
+    console.log('[Dashboard] Suburbs array from API:', suburbs.length)
+
+    // Log first suburb to see structure
+    if (suburbs.length > 0) {
+      console.log('[Dashboard] First suburb structure:', suburbs[0])
+    }
+
+    // Transform UHI suburb data to match the expected format
+    // The API returns coordinates as {lat, lng} not {latitude, longitude}
+    const transformedSuburbs = suburbs
+      .filter((s: any) => {
+        const hasName = Boolean(s?.name)
+        const hasCoordinates = s?.coordinates?.lat && s?.coordinates?.lng
+        return hasName && hasCoordinates
+      })
+      .map((s: any) => ({
+        id: s.id || 0,
+        name: s.name || '',
+        postcode: s.postcode || '',
+        latitude: s.coordinates?.lat || 0,
+        longitude: s.coordinates?.lng || 0,
+        state: s.state || 'VIC'
+      }))
+
+    // Remove duplicates based on suburb name (case-insensitive)
+    const uniqueSuburbs = transformedSuburbs.reduce((acc: any[], suburb: any) => {
+      const exists = acc.find(s => s.name.toLowerCase() === suburb.name.toLowerCase())
+      if (!exists) {
+        acc.push(suburb)
+      }
+      return acc
+    }, [])
+
+    // Sort alphabetically
+    suburbsList.value = uniqueSuburbs.sort((a, b) => a.name.localeCompare(b.name))
+
+    console.log('[Dashboard] Loaded suburbs for autocomplete:', suburbsList.value.length)
+    if (suburbsList.value.length > 0) {
+      console.log('[Dashboard] Sample suburb:', suburbsList.value[0])
+    }
   } catch (e) {
-    console.error('Error loading suburbs:', e)
+    console.error('[Dashboard] Error loading suburbs:', e)
   }
 }
 
@@ -733,21 +787,53 @@ function selectSuburb(suburb: any) {
     return
   }
 
+  // Clear ALL existing markers - comprehensive approach
+  const markersToRemove = [...allMarkers.value]
+  markersToRemove.forEach((marker) => {
+    try {
+      if (marker && typeof marker.setMap === 'function') {
+        marker.setVisible(false)
+        marker.setMap(null)
+      }
+    } catch (e) {
+      console.error('Error removing marker from array:', e)
+    }
+  })
+
+  // Clear specific marker refs
+  if (searchMarker.value) {
+    try {
+      searchMarker.value.setVisible(false)
+      searchMarker.value.setMap(null)
+    } catch (e) {
+      console.error('Error removing searchMarker:', e)
+    }
+  }
+
+  if (vegSearchMarker.value) {
+    try {
+      vegSearchMarker.value.setVisible(false)
+      vegSearchMarker.value.setMap(null)
+    } catch (e) {
+      console.error('Error removing vegSearchMarker:', e)
+    }
+  }
+
+  // Reset all marker references
+  searchMarker.value = null
+  vegSearchMarker.value = null
+  allMarkers.value = []
+
+  // Handle heat map
   if (gmapRef.value) {
     gmapRef.value.setCenter(center)
     gmapRef.value.setZoom(13)
 
-    // Remove existing marker if any
-    if (searchMarker.value) {
-      searchMarker.value.setMap(null)
-    }
-
     // Create new marker at search location with white pin
-    searchMarker.value = new (window as any).google.maps.Marker({
+    const heatMarker = new (window as any).google.maps.Marker({
       position: center,
       map: gmapRef.value,
       title: label,
-      animation: (window as any).google.maps.Animation.DROP,
       icon: {
         path: (window as any).google.maps.SymbolPath.CIRCLE,
         scale: 12,
@@ -757,6 +843,149 @@ function selectSuburb(suburb: any) {
         strokeWeight: 3
       }
     })
+    searchMarker.value = heatMarker
+    allMarkers.value.push(heatMarker)
+
+    // Create and show info window for the searched location
+    const heatInfoWindow = new (window as any).google.maps.InfoWindow({
+      content: `
+        <div style="
+          padding: 12px 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          min-width: 180px;
+        ">
+          <div style="
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #111827;
+            letter-spacing: -0.01em;
+          ">${label}</div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+          ">
+            <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Heat Intensity</span>
+            <span style="color: #DC2626; font-size: 14px; font-weight: 700;">${liveHeat.avg.toFixed(1)}°C</span>
+          </div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 6px;
+            border-top: 1px solid #E5E7EB;
+          ">
+            <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Category</span>
+            <span style="
+              color: #065F46;
+              font-size: 12px;
+              font-weight: 600;
+              background: #D1FAE5;
+              padding: 2px 8px;
+              border-radius: 4px;
+            ">${liveHeat.category}</span>
+          </div>
+        </div>
+      `
+    })
+    heatInfoWindow.open(gmapRef.value, heatMarker)
+  }
+
+  // Handle vegetation map
+  if (vegMapRef.value) {
+    vegMapRef.value.setCenter(center)
+    vegMapRef.value.setZoom(13)
+
+    // Get vegetation percentage for this location
+    const vegVal = findMapValue(label, vegTotalsMap) as number | undefined
+    const vegPct = vegVal || 0
+
+    // Determine vegetation status
+    let vegStatus = 'Low'
+    let vegColor = '#DC2626'
+    let vegBg = '#FEE2E2'
+    if (vegPct >= 40) {
+      vegStatus = 'Excellent'
+      vegColor = '#065F46'
+      vegBg = '#D1FAE5'
+    } else if (vegPct >= 30) {
+      vegStatus = 'Good'
+      vegColor = '#047857'
+      vegBg = '#D1FAE5'
+    } else if (vegPct >= 20) {
+      vegStatus = 'Moderate'
+      vegColor = '#D97706'
+      vegBg = '#FEF3C7'
+    } else if (vegPct >= 10) {
+      vegStatus = 'Fair'
+      vegColor = '#EA580C'
+      vegBg = '#FFEDD5'
+    }
+
+    // Create new marker at search location with white pin
+    const vegMarker = new (window as any).google.maps.Marker({
+      position: center,
+      map: vegMapRef.value,
+      title: label,
+      icon: {
+        path: (window as any).google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#FFFFFF',
+        fillOpacity: 1,
+        strokeColor: '#065F46',
+        strokeWeight: 3
+      }
+    })
+    vegSearchMarker.value = vegMarker
+    allMarkers.value.push(vegMarker)
+
+    // Create and show info window for the searched location
+    const vegInfoWindow = new (window as any).google.maps.InfoWindow({
+      content: `
+        <div style="
+          padding: 12px 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          min-width: 180px;
+        ">
+          <div style="
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #111827;
+            letter-spacing: -0.01em;
+          ">${label}</div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+          ">
+            <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Vegetation Coverage</span>
+            <span style="color: #059669; font-size: 14px; font-weight: 700;">${vegPct.toFixed(1)}%</span>
+          </div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 6px;
+            border-top: 1px solid #E5E7EB;
+          ">
+            <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Status</span>
+            <span style="
+              color: ${vegColor};
+              font-size: 12px;
+              font-weight: 600;
+              background: ${vegBg};
+              padding: 2px 8px;
+              border-radius: 4px;
+            ">${vegStatus}</span>
+          </div>
+        </div>
+      `
+    })
+    vegInfoWindow.open(vegMapRef.value, vegMarker)
   }
 
   const heatRank = findMapValue(label, heatRankMap) as number | undefined
@@ -1061,6 +1290,221 @@ async function loadVegetationLayer(simplified: boolean) {
 
     vegMapRef.value.data.addGeoJson(geo)
     vegMapRef.value.data.setStyle(vegStyleFeature)
+
+    // Add hover mechanics for vegetation layer
+    const vegInfowindow = new (window as any).google.maps.InfoWindow()
+    vegMapRef.value.data.addListener('mouseover', (e: any) => {
+      const name = e.feature.getProperty('SUBURB_NAME') || ''
+      const sid = e.feature.getProperty('SUBURB_ID') || e.feature.getProperty('id')
+      const sname = e.feature.getProperty('SUBURB_NAME') || e.feature.getProperty('name')
+      const keyId = normKey(sid)
+      const keyName = normKey(sname)
+      const vegPct = (vegTotalsMap[keyId] ?? vegTotalsMap[keyName] ?? 0) as number
+
+      // Determine vegetation status based on percentage
+      let vegStatus = 'Low'
+      let vegColor = '#DC2626'
+      let vegBg = '#FEE2E2'
+      if (vegPct >= 40) {
+        vegStatus = 'Excellent'
+        vegColor = '#065F46'
+        vegBg = '#D1FAE5'
+      } else if (vegPct >= 30) {
+        vegStatus = 'Good'
+        vegColor = '#047857'
+        vegBg = '#D1FAE5'
+      } else if (vegPct >= 20) {
+        vegStatus = 'Moderate'
+        vegColor = '#D97706'
+        vegBg = '#FEF3C7'
+      } else if (vegPct >= 10) {
+        vegStatus = 'Fair'
+        vegColor = '#EA580C'
+        vegBg = '#FFEDD5'
+      }
+
+      vegInfowindow.setContent(`
+        <div style="
+          padding: 12px 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          min-width: 180px;
+        ">
+          <div style="
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #111827;
+            letter-spacing: -0.01em;
+          ">${name}</div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+          ">
+            <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Vegetation Coverage</span>
+            <span style="color: #059669; font-size: 14px; font-weight: 700;">${vegPct.toFixed(1)}%</span>
+          </div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 6px;
+            border-top: 1px solid #E5E7EB;
+          ">
+            <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Status</span>
+            <span style="
+              color: ${vegColor};
+              font-size: 12px;
+              font-weight: 600;
+              background: ${vegBg};
+              padding: 2px 8px;
+              border-radius: 4px;
+            ">${vegStatus}</span>
+          </div>
+        </div>
+      `)
+      vegInfowindow.setPosition(e.latLng)
+      vegInfowindow.open(vegMapRef.value)
+    })
+    vegMapRef.value.data.addListener('mouseout', () => {
+      vegInfowindow.close()
+    })
+
+    // Add click listener to update marker and show info
+    vegMapRef.value.data.addListener('click', (e: any) => {
+      const name = e.feature.getProperty('SUBURB_NAME') || ''
+      const sid = e.feature.getProperty('SUBURB_ID') || e.feature.getProperty('id')
+      const sname = e.feature.getProperty('SUBURB_NAME') || e.feature.getProperty('name')
+      const keyId = normKey(sid)
+      const keyName = normKey(sname)
+      const vegPct = (vegTotalsMap[keyId] ?? vegTotalsMap[keyName] ?? 0) as number
+      const clickedLatLng = e.latLng
+
+      // Determine vegetation status
+      let vegStatus = 'Low'
+      let vegColor = '#DC2626'
+      let vegBg = '#FEE2E2'
+      if (vegPct >= 40) {
+        vegStatus = 'Excellent'
+        vegColor = '#065F46'
+        vegBg = '#D1FAE5'
+      } else if (vegPct >= 30) {
+        vegStatus = 'Good'
+        vegColor = '#047857'
+        vegBg = '#D1FAE5'
+      } else if (vegPct >= 20) {
+        vegStatus = 'Moderate'
+        vegColor = '#D97706'
+        vegBg = '#FEF3C7'
+      } else if (vegPct >= 10) {
+        vegStatus = 'Fair'
+        vegColor = '#EA580C'
+        vegBg = '#FFEDD5'
+      }
+
+      // Clear existing markers
+      const markersToRemove = [...allMarkers.value]
+      markersToRemove.forEach((marker) => {
+        try {
+          if (marker && typeof marker.setMap === 'function') {
+            marker.setVisible(false)
+            marker.setMap(null)
+          }
+        } catch (err) {
+          console.error('Error removing marker:', err)
+        }
+      })
+      if (vegSearchMarker.value) {
+        try {
+          vegSearchMarker.value.setVisible(false)
+          vegSearchMarker.value.setMap(null)
+        } catch (err) {}
+      }
+      vegSearchMarker.value = null
+      allMarkers.value = []
+
+      // Create new marker at clicked location
+      const newMarker = new (window as any).google.maps.Marker({
+        position: clickedLatLng,
+        map: vegMapRef.value,
+        title: name,
+        icon: {
+          path: (window as any).google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: '#FFFFFF',
+          fillOpacity: 1,
+          strokeColor: '#065F46',
+          strokeWeight: 3
+        }
+      })
+      vegSearchMarker.value = newMarker
+      allMarkers.value.push(newMarker)
+
+      // Show info window at marker
+      const clickInfoWindow = new (window as any).google.maps.InfoWindow({
+        content: `
+          <div style="
+            padding: 12px 14px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-width: 180px;
+          ">
+            <div style="
+              font-weight: 700;
+              font-size: 15px;
+              margin-bottom: 10px;
+              color: #111827;
+              letter-spacing: -0.01em;
+            ">${name}</div>
+            <div style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 6px;
+            ">
+              <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Vegetation Coverage</span>
+              <span style="color: #059669; font-size: 14px; font-weight: 700;">${vegPct.toFixed(1)}%</span>
+            </div>
+            <div style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding-top: 6px;
+              border-top: 1px solid #E5E7EB;
+            ">
+              <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Status</span>
+              <span style="
+                color: ${vegColor};
+                font-size: 12px;
+                font-weight: 600;
+                background: ${vegBg};
+                padding: 2px 8px;
+                border-radius: 4px;
+              ">${vegStatus}</span>
+            </div>
+          </div>
+        `
+      })
+      clickInfoWindow.open(vegMapRef.value, newMarker)
+
+      // Center map on clicked location
+      vegMapRef.value.panTo(clickedLatLng)
+
+      // Get heat data for this location
+      const liveHeat = getHeatAtLatLng(clickedLatLng.lat(), clickedLatLng.lng())
+      const heatRank = findMapValue(name, heatRankMap) as number | undefined
+
+      // Update selected suburb data
+      selectedSuburb.value = {
+        label: name,
+        center: { lat: clickedLatLng.lat(), lng: clickedLatLng.lng() },
+        layer: 'veg',
+        heat: liveHeat.avg,
+        veg: vegPct,
+        heatCategory: liveHeat.category,
+        rank: heatRank
+      }
+    })
   } catch (error) {
     console.error('Error loading vegetation layer:', error)
   }
@@ -1098,12 +1542,160 @@ async function loadBoundaries(simplified: boolean) {
     const name = e.feature.getProperty('SUBURB_NAME') || ''
     const avg = e.feature.getProperty('AVG_HEAT')
     const cat = e.feature.getProperty('HEAT_CATEGORY')
-    infowindow.setContent(`<div style="font-weight:600">${name}</div><div>Heat: ${avg?.toFixed ? avg.toFixed(1) : avg}°C (${cat})</div>`)
+    infowindow.setContent(`
+      <div style="
+        padding: 12px 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        min-width: 180px;
+      ">
+        <div style="
+          font-weight: 700;
+          font-size: 15px;
+          margin-bottom: 10px;
+          color: #111827;
+          letter-spacing: -0.01em;
+        ">${name}</div>
+        <div style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 6px;
+        ">
+          <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Heat Intensity</span>
+          <span style="color: #DC2626; font-size: 14px; font-weight: 700;">${avg?.toFixed ? avg.toFixed(1) : avg}°C</span>
+        </div>
+        <div style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-top: 6px;
+          border-top: 1px solid #E5E7EB;
+        ">
+          <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Category</span>
+          <span style="
+            color: #065F46;
+            font-size: 12px;
+            font-weight: 600;
+            background: #D1FAE5;
+            padding: 2px 8px;
+            border-radius: 4px;
+          ">${cat}</span>
+        </div>
+      </div>
+    `)
     infowindow.setPosition(e.latLng)
     infowindow.open(gmapRef.value)
   })
   gmapRef.value!.data.addListener('mouseout', () => {
     infowindow.close()
+  })
+
+  // Add click listener to update marker and show info
+  gmapRef.value!.data.addListener('click', (e: any) => {
+    const name = e.feature.getProperty('SUBURB_NAME') || ''
+    const avg = e.feature.getProperty('AVG_HEAT')
+    const cat = e.feature.getProperty('HEAT_CATEGORY')
+    const clickedLatLng = e.latLng
+
+    // Clear existing markers
+    const markersToRemove = [...allMarkers.value]
+    markersToRemove.forEach((marker) => {
+      try {
+        if (marker && typeof marker.setMap === 'function') {
+          marker.setVisible(false)
+          marker.setMap(null)
+        }
+      } catch (err) {
+        console.error('Error removing marker:', err)
+      }
+    })
+    if (searchMarker.value) {
+      try {
+        searchMarker.value.setVisible(false)
+        searchMarker.value.setMap(null)
+      } catch (err) {}
+    }
+    searchMarker.value = null
+    allMarkers.value = []
+
+    // Create new marker at clicked location
+    const newMarker = new (window as any).google.maps.Marker({
+      position: clickedLatLng,
+      map: gmapRef.value,
+      title: name,
+      icon: {
+        path: (window as any).google.maps.SymbolPath.CIRCLE,
+        scale: 12,
+        fillColor: '#FFFFFF',
+        fillOpacity: 1,
+        strokeColor: '#065F46',
+        strokeWeight: 3
+      }
+    })
+    searchMarker.value = newMarker
+    allMarkers.value.push(newMarker)
+
+    // Show info window at marker
+    const clickInfoWindow = new (window as any).google.maps.InfoWindow({
+      content: `
+        <div style="
+          padding: 12px 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          min-width: 180px;
+        ">
+          <div style="
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #111827;
+            letter-spacing: -0.01em;
+          ">${name}</div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+          ">
+            <span style="color: #6B7280; font-size: 13px; font-weight: 500;">Heat Intensity</span>
+            <span style="color: #DC2626; font-size: 14px; font-weight: 700;">${avg?.toFixed ? avg.toFixed(1) : avg}°C</span>
+          </div>
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 6px;
+            border-top: 1px solid #E5E7EB;
+          ">
+            <span style="color: #6B7280; font-size: 12px; font-weight: 500;">Category</span>
+            <span style="
+              color: #065F46;
+              font-size: 12px;
+              font-weight: 600;
+              background: #D1FAE5;
+              padding: 2px 8px;
+              border-radius: 4px;
+            ">${cat}</span>
+          </div>
+        </div>
+      `
+    })
+    clickInfoWindow.open(gmapRef.value, newMarker)
+
+    // Center map on clicked location
+    gmapRef.value.panTo(clickedLatLng)
+
+    // Update selected suburb data
+    const heatRank = findMapValue(name, heatRankMap) as number | undefined
+    const vegVal = findMapValue(name, vegTotalsMap) as number | undefined
+    selectedSuburb.value = {
+      label: name,
+      center: { lat: clickedLatLng.lat(), lng: clickedLatLng.lng() },
+      layer: 'heat',
+      heat: avg,
+      veg: vegVal,
+      heatCategory: cat,
+      rank: heatRank
+    }
   })
 
   heatAvgByName = {}
@@ -1213,6 +1805,15 @@ async function buildCharts() {
       .slice(0, 5)
     const hMax = byHeat[0]?.heat || 1
     topHotRows.value = byHeat.map(x => ({ ...x, percent: Math.round((x.heat / hMax) * 100) }))
+
+    // Coolest suburbs (sorted by lowest heat)
+    const byCool = suburbs
+      .map((s: any) => ({ name: String(s?.name || s?.id || ''), heat: Number(s?.heat?.avg ?? s?.heat?.intensity) }))
+      .filter(x => x.name && Number.isFinite(x.heat))
+      .sort((a, b) => a.heat - b.heat)
+      .slice(0, 5)
+    const cMax = byCool[0]?.heat || 1
+    topCoolRows.value = byCool.map(x => ({ ...x, percent: Math.round((x.heat / cMax) * 100) }))
 
     const byVeg = suburbs
       .map((s: any) => ({ name: String(s?.name || s?.id || ''), veg: Number(s?.vegetation?.total) }))
@@ -1409,7 +2010,8 @@ function setupScrollAnimations() {
     impactSection.value,
     chartsSection.value,
     solutionSection.value,
-    ctaSection.value
+    ctaSection.value,
+    referencesSection.value
   ].filter(Boolean)
 
   sections.forEach(section => {
@@ -1770,28 +2372,33 @@ section.visible {
 }
 
 .legend-title {
-  font-weight: 700;
+  font-weight: 800;
   color: #065F46;
-  margin-bottom: 8px;
-  font-size: 13px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
 
 .legend-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  margin: 6px 0;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  padding: 2px 0;
 }
 
 .legend-label {
   color: #374151;
   font-size: 12px;
   font-weight: 500;
+  flex: 1;
 }
 
 .legend-swatch {
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* Info Panel */
@@ -2411,6 +3018,8 @@ section.visible {
 .cta-section {
   background: linear-gradient(135deg, rgba(6,95,70,0.9) 0%, rgba(16,185,129,0.8) 100%);
   padding: 8rem 2rem 0 2rem;
+  position: relative;
+  z-index: 1;
 }
 
 .cta-content {
@@ -2511,7 +3120,8 @@ section.visible {
   background: linear-gradient(180deg, rgba(6,95,70,0.9) 0%, rgba(6,95,70,0.95) 100%);
   padding: 4rem 2rem 6rem 2rem;
   position: relative;
-  z-index: 1;
+  z-index: 100;
+  margin-top: 0;
 }
 
 .references-title {

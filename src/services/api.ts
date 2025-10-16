@@ -1,9 +1,9 @@
 // API service for plantopiaa Recommendation Engine
 // Handles all communication with the backend recommendation API
 
-// Configuration - Now using Cloudflare Tunnel for HTTPS
-// Always use cloud API URL
-const PRIMARY_API_URL = import.meta.env.VITE_API_URL || 'https://budgets-accepting-porcelain-austin.trycloudflare.com'
+// Configuration - Use VITE_API_URL from .env, or fallback to empty string for Vite proxy
+// When VITE_API_URL is empty, API calls will go through Vite dev proxy
+const PRIMARY_API_URL = import.meta.env.VITE_API_URL || ''
 
 // API Response interfaces matching the backend structure
 export interface ApiPlantRecommendation {
@@ -166,7 +166,8 @@ export interface ApiQuantifyRequest {
 export interface ApiQuantifiedImpact {
   temperature_reduction_c: number
   air_quality_points: number
-  co2_absorption_kg_year: number
+  co2_absorption_kg_year?: number  // Legacy field (kg)
+  co2_absorption_g_year?: number   // New field from backend (grams)
   water_processed_l_week: number
   pollinator_support: string
   edible_yield: string | null
@@ -735,6 +736,30 @@ export class PlantRecommendationService {
 
   async getPlantInstructions(plantId: number): Promise<Record<string, unknown>> {
     const resp = await this.fetchWithFallback(`/api/v1/tracking/instructions/${encodeURIComponent(String(plantId))}`)
+    return await resp.json()
+  }
+
+  // --- Phase 1 New Endpoints ---
+
+  // Get checklist state for an instance
+  async getInstanceChecklist(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/checklist`)
+    return await resp.json()
+  }
+
+  // Mark setup as complete
+  async completeSetup(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/complete-setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    })
+    return await resp.json()
+  }
+
+  // Get comprehensive instance status
+  async getInstanceStatus(instanceId: number): Promise<Record<string, unknown>> {
+    const resp = await this.fetchWithFallback(`/api/v1/tracking/instance/${encodeURIComponent(String(instanceId))}/status`)
     return await resp.json()
   }
 
@@ -1541,9 +1566,11 @@ export function buildApiRequest(formData: {
       },
       preferences: {
         goal: goalMap[formData.goal] || 'mixed',
-        edible_types: edibleTypesLower.length > 0 ? edibleTypesLower : ['herbs', 'leafy'],
-        ornamental_types: ornamentalTypesLower.length > 0 ? ornamentalTypesLower : ['flowers'],
-        colors: colorsLower.length > 0 ? colorsLower : ['purple', 'white'],
+        // Only send edible_types if goal is edible or mixed, and user selected them
+        // Let backend use its own defaults if not specified
+        edible_types: edibleTypesLower.length > 0 ? edibleTypesLower : undefined,
+        ornamental_types: ornamentalTypesLower.length > 0 ? ornamentalTypesLower : undefined,
+        colors: colorsLower.length > 0 ? colorsLower : undefined,
         fragrant: formData.fragrant,
         maintainability: maintainabilityMap[formData.maintainability] || 'low',
         watering: wateringMap[formData.watering] || 'medium',

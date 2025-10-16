@@ -1666,14 +1666,14 @@ function onKeydown(e: KeyboardEvent) {
   max-width: 100%;
 }
 
-/* Headings with gradient backgrounds and icons */
+/* Headings with solid backgrounds and icons */
 .markdown-content h1 {
   font-size: 2.5rem;
   font-weight: 800;
   color: #065f46;
   margin: 2.5rem 0 1.5rem 0;
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  background: #d1fae5;
   border-left: 6px solid #10b981;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
@@ -1692,7 +1692,7 @@ function onKeydown(e: KeyboardEvent) {
   color: #047857;
   margin: 2rem 0 1rem 0;
   padding: 1rem 1.25rem;
-  background: linear-gradient(to right, #f0fdf4 0%, transparent 100%);
+  background: #f0fdf4;
   border-left: 5px solid #10b981;
   border-radius: 8px;
   position: relative;
@@ -1710,7 +1710,7 @@ function onKeydown(e: KeyboardEvent) {
   color: #065f46;
   margin: 1.5rem 0 0.75rem 0;
   padding: 0.75rem 1rem;
-  background: rgba(209, 250, 229, 0.3);
+  background: #f0fdf4;
   border-left: 4px solid #34d399;
   border-radius: 6px;
 }
@@ -1772,17 +1772,21 @@ function onKeydown(e: KeyboardEvent) {
 
 .markdown-content ol {
   counter-reset: item;
+  list-style: none;
 }
 
 .markdown-content ol li {
+  position: relative;
   margin: 0.75rem 0;
-  padding-left: 0.5rem;
+  padding-left: 2rem;
   counter-increment: item;
   line-height: 1.75;
 }
 
-.markdown-content ol li::marker {
+.markdown-content ol li::before {
   content: counter(item) ". ";
+  position: absolute;
+  left: 0;
   color: #10b981;
   font-weight: 700;
   font-size: 1.1rem;
@@ -1790,6 +1794,19 @@ function onKeydown(e: KeyboardEvent) {
 
 /* Nested lists */
 .markdown-content ul ul li::before {
+  content: '•';
+  color: #10b981;
+  font-size: 1.2rem;
+}
+
+/* Nested ordered lists inside unordered lists should use numbers */
+.markdown-content ul ol li::before {
+  content: counter(item) ". ";
+  color: #10b981;
+}
+
+/* Nested unordered lists inside ordered lists should use bullets */
+.markdown-content ol ul li::before {
   content: '•';
   color: #10b981;
   font-size: 1.2rem;
