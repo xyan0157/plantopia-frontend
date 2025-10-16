@@ -94,13 +94,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import SearchForm from './recommendation/SearchForm.vue'
 import PlantCard from './recommendation/PlantCard.vue'
 import PlantDetailModal from './recommendation/PlantDetailModal.vue'
 import FilterSidebar from './recommendation/FilterSidebar.vue'
 import { plantApiService, buildApiRequest, type Plant } from '@/services/api'
 import { useRecommendationsStore } from '@/stores/recommendations'
+
+const route = useRoute()
 
 // Search parameters interface matching the enhanced form
 interface SearchParams {
@@ -192,6 +195,33 @@ const handleUpdateFilters = (filters: typeof filterData.value) => {
   // Do NOT auto-run search when results are already shown.
   // Results remain fixed until the user submits a new search from the form.
 }
+
+// Handle route query parameters (from dashboard redirect)
+const handleRouteQuery = () => {
+  const suburb = route.query.suburb as string | undefined
+  if (suburb) {
+    // Clear previous results when coming from dashboard
+    recStore.clearResults()
+    // Prefill location in search params (will be picked up by SearchForm)
+    searchParams.value.location = suburb
+    // Clear the query parameter after handling it
+    // Note: We don't clear it from the URL to preserve the link
+  }
+}
+
+// Watch for route changes (in case user navigates away and back)
+watch(() => route.query.suburb, (newSuburb) => {
+  if (newSuburb) {
+    // Clear results and prefill location
+    recStore.clearResults()
+    searchParams.value.location = String(newSuburb)
+  }
+}, { immediate: false })
+
+// Check for suburb query parameter on mount
+onMounted(() => {
+  handleRouteQuery()
+})
 </script>
 
 <style scoped>

@@ -163,31 +163,43 @@ const contentStyle = computed(() => ({
   background: 'transparent'
 }))
 
-// Function to get image source with Victoria Plants Data priority
+// Function to get image source with proper priority
 const getImageSource = (): string => {
-  // Priority 1: Use Base64 data if available
+  // Priority 1: Use base64 field from new API
+  const imageBase64 = (props.plant as unknown as { image_base64?: string }).image_base64
+  if (imageBase64) {
+    return imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+  }
+
+  // Priority 2: Use Base64 data if available (legacy)
   if (props.plant.imageData) {
     // Check if it's already a data URL
     if (props.plant.imageData.startsWith('data:')) {
       return props.plant.imageData
     }
-    
+
     // If it's just the base64 string, add the data URL prefix
     return `data:image/jpeg;base64,${props.plant.imageData}`
   }
-  
-  // Priority 2: Try Victoria Plants Data image
+
+  // Priority 3: Use image_url from backend API (direct URL to actual image)
+  const imageUrl = (props.plant as unknown as { image_url?: string }).image_url
+  if (imageUrl) {
+    return imageUrl
+  }
+
+  // Priority 4: Try Victoria Plants Data image (GCS pattern matching)
   const victoriaImage = findVictoriaPlantImage()
   if (victoriaImage) {
     return victoriaImage
   }
-  
-  // Priority 3: Fall back to existing URL construction
+
+  // Priority 5: Fall back to existing URL construction
   if (props.plant.imagePath) {
     return getImageUrl(props.plant.imagePath)
   }
-  
-  // Priority 4: Use category-specific placeholder image
+
+  // Priority 6: Use category-specific placeholder image
   return getCategoryPlaceholder()
 }
 

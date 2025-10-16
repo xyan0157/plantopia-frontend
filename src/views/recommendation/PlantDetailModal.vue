@@ -551,28 +551,23 @@ const waterProcessed = computed<number>(() => Number(impactData.value?.quantifie
 const pollinatorSupport = computed<string>(() => String(impactData.value?.quantified_impact.pollinator_support || 'Unknown'))
 const confidence = computed<string>(() => String(impactData.value?.quantified_impact.confidence_level || 'Unknown'))
 
-// Format CO2 units dynamically based on value: g/kg/t per year
+// Format CO2 units in grams per year (plants absorb 50-200g annually)
 const co2AbsorptionFormatted = computed<string>(() => {
-  const v = co2Absorption.value
-  if (!Number.isFinite(v)) return '0.0 kg/year'
-  if (v >= 1000) {
-    return `${(v / 1000).toFixed(2)} t/year`
-  } else if (v < 1) {
-    return `${(v * 1000).toFixed(0)} g/year`
-  }
-  return `${v.toFixed(1)} kg/year`
+  const kg = co2Absorption.value
+  if (!Number.isFinite(kg)) return '0 g/year'
+  // Convert kg to grams
+  const grams = kg * 1000
+  return `${grams.toFixed(0)} g/year`
 })
 
-// Gauge helpers - scale needle by displayed unit (g/kg/t)
+// Gauge helpers - scale for 50-200g range (typical plant CO2 absorption)
 const co2Gauge = computed(() => {
   const kg = co2Absorption.value
-  if (!Number.isFinite(kg) || kg <= 0) return { value: 0, max: 1 }
-  // For small values, switch to grams scale (0..1000 g)
-  if (kg < 1) return { value: kg * 1000, max: 1000 }
-  // For very large values, switch to tonnes scale (0..5 t)
-  if (kg >= 1000) return { value: kg / 1000, max: 5 }
-  // Default kilograms scale (0..50 kg)
-  return { value: kg, max: 50 }
+  if (!Number.isFinite(kg) || kg <= 0) return { value: 0, max: 200 }
+  // Convert kg to grams for proper scale
+  const grams = kg * 1000
+  // Scale: 0-200 grams per year
+  return { value: grams, max: 200 }
 })
 
 const angle = computed(() => {
@@ -725,14 +720,21 @@ async function startTracking() {
     console.log('[UI][DetailModal] startTracking response', resp)
     const instanceId = Number((resp as unknown as { instance_id?: number })?.instance_id || 0)
     if (Number.isFinite(instanceId) && instanceId > 0) {
-      try { await plantApiService.startGrowingInstance(instanceId) } catch (e) { console.warn('[UI][DetailModal] startGrowingInstance failed', e) }
+      // Store the instance ID and plant ID to open the journal detail view after redirect
+      try {
+        localStorage.setItem('pending_journal_open_instance_id', String(instanceId))
+        localStorage.setItem('pending_journal_open_plant_id', String(pid))
+        localStorage.setItem('journal_refresh_at', String(Date.now()))
+      } catch {}
+
+      // Close this modal and redirect to profile page
+      emit('close')
+      router.push('/profile')
     }
-    try { localStorage.setItem('journal_refresh_at', String(Date.now())) } catch {}
   } catch (e) {
     console.error('[UI][DetailModal] startTracking error', e)
-  } finally {
-    starting.value = false
     loadingModal.value = { show: false, message: '' }
+    starting.value = false
   }
 }
 

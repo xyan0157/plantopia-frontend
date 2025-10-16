@@ -1,127 +1,202 @@
 <template>
-  <div class="profile-container recommendations-bg">
-    <div class="profile-card">
-      <div class="profile-header" v-if="isLoggedIn">
-        <h1 class="profile-title">Hi {{ displayName }},</h1>
-      </div>
-
-      <div class="profile-body">
-        <div v-if="isLoggedIn" class="profile-sections">
-          <!-- User Profile -->
-          <div class="section-card profile-info">
-            <div class="profile-fields">
-              <h3>User Profile</h3>
-              <div>
-                <div>Email: {{ userEmail || 'None' }}</div>
-                <div>Name: {{ displayName }}</div>
-              </div>
-              <div class="edit-actions">
-                <button class="btn" @click="openEdit">Edit</button>
-                
-              </div>
-            </div>
-          </div>
-
-          <!-- AI Q&A moved to floating widget -->
-
-          <!-- My Plant List -->
-          <div class="section-card plant-list">
-            <div class="section-title-row">
-              <h3>Favourite Plants</h3>
-            </div>
-            <div v-if="!plantsStore.favouritesLoaded" class="empty-fav">Loading...</div>
-            <div v-else-if="favouritePlants.length === 0" class="empty-fav">No favourites yet.</div>
-            <div v-else>
-              <div
-                class="plant-scroll"
-                tabindex="0"
-                ref="plantScrollRef"
-                :class="{ dragging: plantDragging }"
-                @pointerdown="onPlantPointerDown"
-                @pointermove="onPlantPointerMove"
-                @pointerup="onPlantPointerUp"
-                @pointerleave="onPlantPointerUp"
-                @pointercancel="onPlantPointerUp"
-              >
-                <div v-for="p in favouritePlants" :key="p.id" class="plant-item" @click="!plantDragMoved && openPlantDetail(p)" style="cursor:pointer;">
-                  <div class="plant-thumb">
-                    <img :src="getPlantPreviewImage(p)" alt="thumb" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        <!-- My Guide List (between My Plant List and Growth Timeline) -->
-        <div class="section-card guide-list">
-          <div class="section-title-row">
-            <h3>My Guide List</h3>
-          </div>
-          <div v-if="guidesStore.favouritesLoading || !guidesStore.favouritesLoaded" class="empty-fav">Loading...</div>
-          <div v-else-if="guideFavs.length === 0" class="empty-fav">No favourites yet.</div>
-          <ul v-else class="guide-fav-ul">
-            <li
-              v-for="key in guideFavs"
-              :key="key"
-              class="guide-fav-item clickable"
-              @click="openFavouriteGuide(key)"
-              title="View guide"
-            >
-              {{ key.split('///')[0] }} / {{ key.split('///')[1] }}
-            </li>
-          </ul>
-        </div>
-
-        <!-- Journal Plants (query from backend by email) -->
-        <div class="section-card plant-list">
-          <div class="section-title-row">
-            <h3>Journal Plants</h3>
-          </div>
-          <div v-if="journalLoading" class="empty-fav">Loading...</div>
-          <div v-else-if="visibleJournalPlants.length === 0 || journalError" class="empty-fav">No journal yet.</div>
-          <div v-else class="journal-scroll" ref="journalScrollRef">
-            <div
-              v-for="jp in visibleJournalPlants"
-              :key="jp.instance_id"
-              class="journal-card"
-              :style="getJournalCardStyle(jp)"
-              @click="openJournalTimelineFrom(jp)"
-              style="cursor:pointer;"
-            >
-              <div class="journal-thumb">
-                <img :src="getJournalPreviewImage(jp)" :alt="jp.plant_name" />
-              </div>
-              <div class="journal-meta">
-                <div class="journal-name">{{ jp.plant_name }}</div>
-                <div class="journal-sub">
-                  <div class="journal-row" v-if="isJournalStarted(jp.instance_id)">
-                  <span class="chip">Started: {{ jp.start_date || '-' }}</span>
-                  </div>
-                  <div class="journal-row stage-row" v-if="isJournalStarted(jp.instance_id)">
-                  <span class="chip" v-if="jp.current_stage">Stage: {{ jp.current_stage }}</span>
-                    <button class="btn-danger small" @click.stop="requestDeleteInstance(jp.instance_id)">Delete</button>
-                  </div>
-                  <div class="journal-row stage-row" v-else>
-                    <button class="btn-danger small" @click.stop="requestDeleteInstance(jp.instance_id)">Delete</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-
-        <template v-if="!isLoggedIn">
-          <div class="signin-title">Sign in with:</div>
+  <div class="profile-container-new recommendations-bg">
+    <!-- Not Logged In State -->
+    <template v-if="!isLoggedIn">
+      <div class="login-wrapper">
+        <div class="login-card">
+          <h1 class="login-title">Welcome to Your Profile</h1>
+          <div class="signin-title">Sign in to continue:</div>
           <div class="idp-list">
             <div ref="googleBtnContainer" class="google-button-host"></div>
           </div>
-        </template>
-
-        <div class="actions" v-else>
-          <button class="danger" @click="doLogout">Sign out</button>
         </div>
       </div>
+    </template>
+
+    <!-- Logged In State - Full Width Layout -->
+    <div v-else class="profile-layout">
+      <!-- Left Sidebar -->
+      <aside class="profile-sidebar">
+        <!-- User Profile Card -->
+        <div class="sidebar-section user-profile-card">
+          <div class="user-avatar-circle">
+            {{ displayName.charAt(0).toUpperCase() }}
+          </div>
+          <h2 class="user-name">{{ displayName }}</h2>
+          <p class="user-email">{{ userEmail }}</p>
+          <button class="btn-edit" @click="openEdit">Edit Profile</button>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="sidebar-section quick-stats">
+          <h3 class="sidebar-heading">Quick Stats</h3>
+          <div class="stat-item">
+            <span class="stat-label">Favourite Plants</span>
+            <span class="stat-value">{{ favouritePlants.length }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Journal Plants</span>
+            <span class="stat-value">{{ visibleJournalPlants.length }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Saved Guides</span>
+            <span class="stat-value">{{ guideFavs.length }}</span>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="sidebar-section nav-tabs">
+          <button
+            class="nav-tab"
+            :class="{ active: activeTab === 'favourites' }"
+            @click="activeTab = 'favourites'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"/>
+            </svg>
+            Favourites
+          </button>
+          <button
+            class="nav-tab"
+            :class="{ active: activeTab === 'journals' }"
+            @click="activeTab = 'journals'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            My Journal
+          </button>
+          <button
+            class="nav-tab"
+            :class="{ active: activeTab === 'guides' }"
+            @click="activeTab = 'guides'"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            My Guides
+          </button>
+        </div>
+
+        <!-- Sign Out Button -->
+        <div class="sidebar-section sidebar-footer">
+          <button class="btn-signout" @click="doLogout">Sign Out</button>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="profile-main-content">
+        <!-- Favourites Tab -->
+        <div v-if="activeTab === 'favourites'" class="content-section">
+          <div class="content-header">
+            <h1 class="content-title">Favourite Plants</h1>
+            <p class="content-subtitle">Plants you've saved from recommendations</p>
+          </div>
+
+          <div v-if="!plantsStore.favouritesLoaded" class="empty-state">Loading...</div>
+          <div v-else-if="favouritePlants.length === 0" class="empty-state">
+            <p>No favourite plants yet.</p>
+            <p class="empty-hint">Visit the All Plants or Recommendations page to add some!</p>
+          </div>
+          <div v-else class="plants-grid">
+            <div
+              v-for="p in favouritePlants"
+              :key="p.id"
+              class="plant-card-new"
+              @click="openPlantDetail(p)"
+            >
+              <div class="plant-card-thumb">
+                <img :src="getPlantPreviewImage(p)" :alt="p.name" />
+              </div>
+              <div class="plant-card-info">
+                <h3 class="plant-card-name">{{ p.name }}</h3>
+                <p class="plant-card-category">{{ p.category }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Journals Tab -->
+        <div v-if="activeTab === 'journals'" class="content-section">
+          <div class="content-header">
+            <h1 class="content-title">My Plant Journal</h1>
+            <p class="content-subtitle">Track your growing plants</p>
+          </div>
+
+          <div v-if="journalLoading" class="empty-state">Loading...</div>
+          <div v-else-if="visibleJournalPlants.length === 0 || journalError" class="empty-state">
+            <p>No journal plants yet.</p>
+            <p class="empty-hint">Start tracking a plant to see it here!</p>
+          </div>
+          <div v-else class="plants-grid">
+            <div
+              v-for="jp in visibleJournalPlants"
+              :key="jp.instance_id"
+              class="journal-card-new"
+              :style="getJournalCardStyle(jp)"
+              @click="openJournalDetailView(jp)"
+            >
+              <div class="plant-card-thumb">
+                <img :src="getJournalPreviewImage(jp)" :alt="jp.plant_name" />
+              </div>
+              <div class="plant-card-info">
+                <h3 class="plant-card-name">{{ jp.plant_name }}</h3>
+                <div class="journal-badges">
+                  <span v-if="jp.start_date" class="badge">{{ jp.start_date }}</span>
+                  <span v-if="jp.current_stage" class="badge badge-stage">{{ jp.current_stage }}</span>
+                </div>
+              </div>
+              <button
+                class="btn-delete-journal"
+                @click.stop="requestDeleteInstance(jp.instance_id)"
+                title="Delete"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Guides Tab -->
+        <div v-if="activeTab === 'guides'" class="content-section">
+          <div class="content-header">
+            <h1 class="content-title">My Saved Guides</h1>
+            <p class="content-subtitle">Growing guides you've bookmarked</p>
+          </div>
+
+          <div v-if="guidesStore.favouritesLoading || !guidesStore.favouritesLoaded" class="empty-state">Loading...</div>
+          <div v-else-if="guideFavs.length === 0" class="empty-state">
+            <p>No saved guides yet.</p>
+            <p class="empty-hint">Visit the Guides page to save some helpful resources!</p>
+          </div>
+          <ul v-else class="guides-list">
+            <li
+              v-for="key in guideFavs"
+              :key="key"
+              class="guide-item-new"
+              @click="openFavouriteGuide(key)"
+            >
+              <div class="guide-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </div>
+              <div class="guide-info">
+                <h3 class="guide-title">{{ key.split('///')[1] }}</h3>
+                <p class="guide-category">{{ key.split('///')[0] }}</p>
+              </div>
+              <svg class="guide-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </li>
+          </ul>
+        </div>
+      </main>
     </div>
   </div>
 
@@ -207,111 +282,217 @@
   <!-- Plant Detail Modal -->
   <PlantDetailModal :plant="detailPlant" @close="closeDetailModal" v-if="detailPlant" />
 
-  <!-- Timeline Modal -->
-  <div v-if="timelineModalOpen" class="modal-overlay" @click="timelineModalOpen = false">
-    <div class="modal-content timeline-modal" @click.stop>
-      <div class="modal-header">
-        <h2 class="modal-title">Growth Timeline - {{ timelinePlant?.name || '' }}</h2>
-        <button class="modal-close" @click="timelineModalOpen = false">&times;</button>
+  <!-- Journal Detail Modal (Three-Step Flow) -->
+  <div v-if="journalDetailOpen" class="journal-detail-overlay" @click="closeJournalDetailView">
+    <div class="journal-detail-modal" @click.stop>
+      <!-- Header with close button -->
+      <div class="journal-detail-header">
+        <div class="journal-detail-title">
+          <h2>{{ selectedJournalPlant?.plant_name || 'Plant Journal' }}</h2>
+          <p class="journal-detail-subtitle">Track your growing journey</p>
+        </div>
+        <button class="journal-detail-close" @click="closeJournalDetailView">&times;</button>
       </div>
-      <div class="modal-body wide">
-        <!-- Inline loading removed; blocking LoadingModal is used instead -->
-        <div v-if="timelineError" class="empty-fav">{{ timelineError }}</div>
-        <div v-else-if="timelineData" class="timeline-visual">
-          <!-- Top hero area: mimic image card, but holds the timeline -->
-          <div class="timeline-hero">
-            <div class="tv-track" :class="{ growing }">
-              <div class="tv-progress" :style="{ width: progressPercent + '%' }"></div>
-            <!-- Removed tick/marker/fill elements to show a clean baseline only -->
-            <div
-              v-for="(s, i) in timelineStages"
-              :key="'card-'+i"
-              class="tv-stage-card"
-              :class="{ top: i % 2 === 0, bottom: i % 2 === 1, selected: isStageSelected(s.stage_name) }"
-              :style="{ left: equalCardPercents[i] + '%' }"
-              @click="onSelectStage(s.stage_name)"
-            >
-              <div class="tv-stage-title">{{ s.stage_name }}</div>
-              <div class="tv-stage-range">Day {{ s.start_day }} - {{ s.end_day }}</div>
-              <div v-if="s.description" class="tv-stage-desc">{{ s.description }}</div>
-          </div>
 
-            </div>
-          </div>
-
-          <!-- Section header under the timeline -->
-          <div class="timeline-section">
-            <div class="timeline-section-title-row">
-              <div class="timeline-section-title">Detail & Tip</div>
-              <div class="stage-controls">
-                <span v-if="growing" class="chip">Day: {{ dayElapsed }}</span>
-                <span v-if="growing && currentStageDisplay" class="chip">Stage: {{ currentStageDisplay }}</span>
-                <button class="btn-green" :class="{ disabled: growing }" :disabled="growing" @click="startGrowing">{{ growing ? 'In Progress' : 'Start Growing' }}</button>
+      <!-- Progress Indicator (Step Navigation) -->
+      <div class="step-indicator">
+        <div class="step-item" :class="{ active: journalStep === 1, completed: journalStep > 1 }">
+          <div class="step-circle">1</div>
+          <div class="step-label">Checklist</div>
+        </div>
+        <div class="step-line" :class="{ filled: journalStep > 1 }"></div>
+        <div class="step-item" :class="{ active: journalStep === 2, completed: journalStep > 2 || (journalStep === 3 && setupComplete), locked: !checklistMeetsThreshold }">
+          <div class="step-circle">2</div>
+          <div class="step-label">Setup</div>
+        </div>
+        <div class="step-line" :class="{ filled: journalStep > 2 || setupComplete }"></div>
+        <div class="step-item" :class="{ active: journalStep === 3, locked: !setupComplete && journalStep < 3 }">
+          <div class="step-circle">3</div>
+          <div class="step-label">Timeline</div>
         </div>
       </div>
-            <div class="timeline-section-divider"></div>
-            <div class="detail-grid">
-              <!-- Instance overview removed as requested -->
-              <div class="detail-col">
-                <div class="detail-card">
-              <div class="detail-card-title-row">
-                <div class="detail-card-title">Requirements</div>
-                <button
-                  v-if="!growing"
-                  class="btn-green"
-                  @click="toggleChecklist"
-                >{{ showChecklist ? 'Hide Checklist' : 'Checklist' }}</button>
-                <button
-                  v-else
-                  class="btn-green"
-                  @click="openHelpChat"
-                >Help</button>
+
+      <!-- Step Content -->
+      <div class="journal-detail-body">
+        <!-- Step 1: Checklist (80% requirement) -->
+        <div v-if="journalStep === 1" class="step-content">
+          <div class="step-header">
+            <h3>Checklist</h3>
+            <p>Complete at least 80% to proceed to setup instructions</p>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="checklist-progress-section">
+            <div class="progress-bar-container">
+              <div class="progress-bar" :style="{ width: checklistPercent + '%' }"></div>
+            </div>
+            <div class="progress-text">{{ checklistCompleted }} / {{ checklistTotal }} items ({{ checklistPercent }}%)</div>
+          </div>
+
+          <!-- Loading/Error states -->
+          <div v-if="reqLoading" class="step-loading">Loading checklist...</div>
+          <div v-else-if="reqError" class="step-error">{{ reqError }}</div>
+
+          <!-- Checklist items by category -->
+          <div v-else-if="requirements?.requirements && requirements.requirements.length > 0" class="checklist-categories">
+            <div v-for="(cat, idx) in requirements.requirements" :key="'cat-' + idx" class="checklist-category">
+              <h4 class="category-title">{{ cat.category || 'Items' }}</h4>
+              <div class="checklist-items">
+                <label
+                  v-for="(item, itemIdx) in (cat.items || [])"
+                  :key="'item-' + itemIdx"
+                  class="checklist-item"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="isChecklistChecked(keyFor(cat.category, item.item))"
+                    @change="(e) => onChecklistChange(keyFor(cat.category, item.item), (e.target as HTMLInputElement).checked)"
+                  />
+                  <div class="checklist-item-content">
+                    <span class="checklist-item-name">{{ item.item }}</span>
+                    <span v-if="item.quantity" class="checklist-item-quantity">{{ item.quantity }}</span>
+                    <span v-if="item.optional" class="checklist-item-optional">(optional)</span>
+                  </div>
+                </label>
               </div>
-                  <!-- Inline loading removed; rely on LoadingModal -->
-                  <div v-if="reqError" class="empty-fav">{{ reqError }}</div>
-                  <div v-else-if="requirements && !showChecklist" class="detail-items">
-                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'req-'+idx" class="req-cat">
-                      <div class="req-title">{{ cat.category }}</div>
-                      <ul class="req-list">
-                        <li v-for="(it, j) in (cat.items || [])" :key="'req-it-'+j">{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></li>
-                      </ul>
-                    </div>
-                  </div>
-                  <!-- Checklist view -->
-                  <div v-else-if="requirements && showChecklist" class="checklist">
-                    <div class="checklist-summary">Completed {{ checklistCompleted }} / {{ checklistTotal }} ({{ checklistPercent }}%)</div>
-                    <div v-for="(cat, idx) in requirements.requirements || []" :key="'ck-'+idx" class="ck-cat">
-                      <div class="ck-title">{{ cat.category }}</div>
-                      <ul class="ck-list">
-                        <li v-for="(it, j) in (cat.items || [])" :key="'ck-it-'+j">
-                          <label class="ck-item">
-                            <input type="checkbox"
-                              :checked="isChecklistChecked(keyFor(cat.category, it.item))"
-                              @change="onChecklistChange(keyFor(cat.category, it.item), ($event.target as HTMLInputElement).checked)"/>
-                            <span>{{ it.item }} <span v-if="it.quantity">- {{ it.quantity }}</span></span>
-                          </label>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
+            </div>
+          </div>
+          <div v-else class="step-empty">No checklist items available</div>
+
+          <!-- Navigation buttons -->
+          <div class="step-footer">
+            <button class="btn-secondary" @click="closeJournalDetailView">Cancel</button>
+            <button
+              class="btn-primary"
+              :disabled="!checklistMeetsThreshold"
+              @click="journalStep = 2"
+            >
+              Begin Setup
+              <span v-if="!checklistMeetsThreshold"> ({{ checklistPercent }}% - need 80%)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Setup Instructions -->
+        <div v-if="journalStep === 2" class="step-content">
+          <div class="step-header">
+            <h3>Setup Instructions</h3>
+            <p>Follow these steps to prepare your plant</p>
+          </div>
+
+          <!-- Loading/Error states -->
+          <div v-if="insLoading" class="step-loading">Loading instructions...</div>
+          <div v-else-if="insError" class="step-error">{{ insError }}</div>
+
+          <!-- Instructions list -->
+          <div v-else-if="instructions?.instructions && instructions.instructions.length > 0" class="instruction-steps">
+            <div v-for="(ins, idx) in instructions.instructions" :key="'ins-' + idx" class="instruction-step">
+              <div class="instruction-number">Step {{ ins.step || (idx + 1) }}</div>
+              <div class="instruction-content">
+                <h4 class="instruction-title">{{ ins.title || 'Step ' + (idx + 1) }}</h4>
+                <p class="instruction-description">{{ ins.description || 'No description' }}</p>
+                <div v-if="ins.duration" class="instruction-meta">
+                  <svg class="instruction-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 6v6l4 2"></path>
+                  </svg>
+                  <span>{{ ins.duration }}</span>
                 </div>
-              </div>
-              <div class="detail-col">
-                <div class="detail-card">
-                  <div class="detail-card-title">Setup Instructions</div>
-                  <!-- Inline loading removed; rely on LoadingModal -->
-                  <div v-if="insError" class="empty-fav">{{ insError }}</div>
-                  <ol v-else-if="instructions && Array.isArray(instructions.instructions)" class="ins-list">
-                    <li v-for="(st, si) in instructions.instructions" :key="'st-'+si">
-                      <div class="ins-step">Step {{ st.step }}: {{ st.title }}</div>
-                      <div class="ins-desc">{{ st.description }}</div>
-                      <div class="ins-meta" v-if="st.duration">Duration: {{ st.duration }}</div>
-                      <ul class="ins-tips" v-if="Array.isArray(st.tips) && st.tips.length"><li v-for="(tp, ti) in st.tips" :key="'tp-'+ti">{{ tp }}</li></ul>
-                    </li>
-                  </ol>
+                <div v-if="ins.tips && ins.tips.length > 0" class="instruction-tips">
+                  <strong>Tips:</strong>
+                  <ul>
+                    <li v-for="(tip, tipIdx) in ins.tips" :key="'tip-' + tipIdx">{{ tip }}</li>
+                  </ul>
                 </div>
               </div>
             </div>
+          </div>
+          <div v-else class="step-empty">No setup instructions available</div>
+
+          <!-- Navigation buttons -->
+          <div class="step-footer">
+            <button class="btn-secondary" @click="journalStep = 1">Back to Checklist</button>
+            <button class="btn-primary" @click="markSetupComplete">Mark Setup Complete & Start Growing</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Vertical Timeline -->
+        <div v-if="journalStep === 3" class="step-content">
+          <div class="step-header">
+            <h3>Growth Timeline</h3>
+            <p>Track your plant's progress through each stage</p>
+          </div>
+
+          <!-- Current day display -->
+          <div class="timeline-current-day">
+            <div class="current-day-label">Current Day</div>
+            <div class="current-day-number">{{ dayElapsed }}</div>
+            <div v-if="currentStageDisplay" class="current-stage-badge">{{ currentStageDisplay }}</div>
+          </div>
+
+          <!-- Loading/Error states -->
+          <div v-if="timelineLoading" class="step-loading">Loading timeline...</div>
+          <div v-else-if="timelineError" class="step-error">{{ timelineError }}</div>
+
+          <!-- Vertical timeline -->
+          <div v-else-if="timelineStages.length > 0" class="vertical-timeline">
+            <div
+              v-for="(stage, idx) in timelineStages"
+              :key="'stage-' + idx"
+              class="timeline-stage"
+              :class="{
+                current: isStageSelected(stage.stage_name),
+                past: idx < timelineStages.findIndex(s => isStageSelected(s.stage_name)),
+                future: idx > timelineStages.findIndex(s => isStageSelected(s.stage_name))
+              }"
+            >
+              <div class="timeline-stage-marker">
+                <div class="timeline-dot"></div>
+                <div v-if="idx < timelineStages.length - 1" class="timeline-line"></div>
+              </div>
+              <div class="timeline-stage-content">
+                <div class="timeline-stage-header">
+                  <h4 class="timeline-stage-name">{{ stage.stage_name }}</h4>
+                  <span class="timeline-stage-days">Day {{ stage.start_day }} - {{ stage.end_day }}</span>
+                </div>
+                <p v-if="stage.description" class="timeline-stage-desc">{{ stage.description }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-else class="step-empty">No timeline stages available</div>
+
+          <!-- Tips section -->
+          <div v-if="instanceData?.current_tips && instanceData.current_tips.length > 0" class="timeline-tips">
+            <h4 class="tips-title">Current Tips</h4>
+            <ul class="tips-list">
+              <li v-for="(tip, idx) in instanceData.current_tips" :key="'tip-' + idx">{{ tip }}</li>
+            </ul>
+          </div>
+
+          <!-- Revisit buttons -->
+          <div class="revisit-actions">
+            <button class="btn-secondary" @click="journalStep = 1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+              View Checklist
+            </button>
+            <button class="btn-secondary" @click="journalStep = 2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <path d="M14 2v6h6"></path>
+                <path d="M16 13H8"></path>
+                <path d="M16 17H8"></path>
+                <path d="M10 9H8"></path>
+              </svg>
+              View Setup
+            </button>
+          </div>
+
+          <!-- Navigation button -->
+          <div class="step-footer">
+            <button class="btn-primary" @click="closeJournalDetailView">Done</button>
           </div>
         </div>
       </div>
@@ -541,8 +722,103 @@ function getJournalCardStyle(jp: { plant_name: string }): Record<string, string>
 const detailPlant = ref<Plant | null>(null)
 function openPlantDetail(p: Plant) { detailPlant.value = p }
 
-// Timeline modal for journal item
-const timelineModalOpen = ref(false)
+// Active tab state for sidebar navigation
+const activeTab = ref<'favourites' | 'journals' | 'guides'>('journals')
+
+// Journal detail view state (for new 3-step flow)
+const journalDetailOpen = ref(false)
+const selectedJournalPlant = ref<ApiUserPlantInstanceSummary | null>(null)
+const journalStep = ref(1) // 1=Checklist, 2=Setup, 3=Timeline
+const setupComplete = ref(false) // Track if setup was marked complete
+
+// Computed: Check if checklist meets 80% threshold
+const checklistMeetsThreshold = computed(() => checklistPercent.value >= 80)
+
+async function openJournalDetailView(jp: ApiUserPlantInstanceSummary) {
+  selectedJournalPlant.value = jp
+  journalDetailOpen.value = true
+
+  // Load all necessary data for the 3-step flow first
+  await openJournalTimelineFrom({ plant_id: jp.plant_id, plant_name: jp.plant_name })
+
+  // Use Phase 1 status endpoint to determine which step to show
+  const instanceId = jp.instance_id
+  try {
+    const statusData = await plantApiService.getInstanceStatus(instanceId) as {
+      growing_status?: { is_active?: boolean }
+      setup_status?: { completed?: boolean }
+      checklist_status?: { completion_percentage?: number }
+    }
+
+    const isGrowing = Boolean(statusData?.growing_status?.is_active)
+    const setupDone = Boolean(statusData?.setup_status?.completed)
+    const checklistPct = Number(statusData?.checklist_status?.completion_percentage || 0)
+
+    if (isGrowing) {
+      // Already growing, go straight to timeline
+      journalStep.value = 3
+      setupComplete.value = true
+    } else if (setupDone || checklistPct >= 80) {
+      // Setup complete or checklist done, go to setup/instructions
+      journalStep.value = 2
+      setupComplete.value = setupDone
+    } else {
+      // Start at checklist
+      journalStep.value = 1
+      setupComplete.value = false
+    }
+  } catch {
+    // Fallback to old logic if status endpoint fails
+    const isStarted = isJournalStarted(instanceId)
+    const checklistDone = checklistPercent.value >= 80
+
+    if (isStarted) {
+      journalStep.value = 3
+      setupComplete.value = true
+    } else if (checklistDone) {
+      journalStep.value = 2
+      setupComplete.value = false
+    } else {
+      journalStep.value = 1
+      setupComplete.value = false
+    }
+  }
+}
+
+function closeJournalDetailView() {
+  journalDetailOpen.value = false
+  selectedJournalPlant.value = null
+  journalStep.value = 1
+  setupComplete.value = false
+}
+
+// Mark setup as complete and start growing
+async function markSetupComplete() {
+  const instanceId = currentInstanceId.value
+  if (!instanceId) {
+    showInfo('Error', 'No instance ID found')
+    return
+  }
+
+  try {
+    // First, mark setup as complete via Phase 1 endpoint
+    await plantApiService.completeSetup(instanceId)
+    setupComplete.value = true
+  } catch {
+    showInfo('Failed', 'Failed to mark setup as complete')
+    return
+  }
+
+  // Then call the startGrowing function to activate the plant
+  await startGrowing()
+
+  // If successful, move to timeline
+  if (growing.value) {
+    journalStep.value = 3
+  }
+}
+
+// Timeline data loading (used by new three-step flow)
 const timelineLoading = ref(false)
 const timelineError = ref('')
 type TimelineStage = { stage_name: string; start_day: number; end_day: number; description?: string }
@@ -686,34 +962,60 @@ async function loadDetailAndTips(plantId: number) {
     instanceLoading.value = false
   }
 
-  reqLoading.value = true
-  reqError.value = ''
-  try {
-    const r = await plantApiService.getPlantRequirements(plantId) as RequirementsResponse
-    requirements.value = r
-  } catch {
-    reqError.value = 'Failed to load requirements'
-  } finally {
-    reqLoading.value = false
-  }
+  // Only load requirements, instructions, and checklist if NOT actively growing
+  // This speeds up loading for plants that are already in the timeline stage
+  if (!growing.value) {
+    reqLoading.value = true
+    reqError.value = ''
+    try {
+      const r = await plantApiService.getPlantRequirements(plantId) as RequirementsResponse
+      requirements.value = r
+    } catch {
+      reqError.value = 'Failed to load requirements'
+    } finally {
+      reqLoading.value = false
+    }
 
-  insLoading.value = true
-  insError.value = ''
-  try {
-    const ins = await plantApiService.getPlantInstructions(plantId) as InstructionsResponse
-    instructions.value = ins
-  } catch {
-    insError.value = 'Failed to load instructions'
-  } finally {
-    insLoading.value = false
+    insLoading.value = true
+    insError.value = ''
+    try {
+      const ins = await plantApiService.getPlantInstructions(plantId) as InstructionsResponse
+      instructions.value = ins
+    } catch {
+      insError.value = 'Failed to load instructions'
+    } finally {
+      insLoading.value = false
+    }
+
+    // Load checklist state from backend (Phase 1 endpoint)
+    // ALWAYS clear the checklist first to ensure we start fresh for this instance
+    checklistCompletedSet.value.clear()
+
+    try {
+      const checklistData = await plantApiService.getInstanceChecklist(instanceId) as { checklist_items?: Array<{ item_key: string; is_completed: boolean }> }
+      if (checklistData?.checklist_items && Array.isArray(checklistData.checklist_items)) {
+        // Populate from backend - only for THIS specific instance
+        checklistData.checklist_items.forEach((item) => {
+          if (item.is_completed && item.item_key) {
+            checklistCompletedSet.value.add(String(item.item_key))
+          }
+        })
+        console.log(`[Checklist] Loaded ${checklistCompletedSet.value.size} completed items for instance ${instanceId}`)
+      } else {
+        console.log(`[Checklist] No checklist items found for instance ${instanceId} - starting fresh`)
+      }
+    } catch (e) {
+      // If backend checklist endpoint fails, checklist remains empty (already cleared above)
+      console.warn('[Checklist] Failed to load checklist state from backend:', e)
+    }
+  } else {
+    console.log(`[LoadDetail] Skipping checklist/requirements/instructions for actively growing plant (instance ${instanceId})`)
   }
 }
 
 // Checklist state and helpers
-const showChecklist = ref(false)
-function toggleChecklist() { showChecklist.value = !showChecklist.value }
 function slugify(s: string): string { return String(s || '').toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-') }
-function keyFor(category?: string, item?: string): string { return `${slugify(category || '')}::${slugify(item || '')}` }
+function keyFor(category?: string, item?: string): string { return `${slugify(category || '')}_${slugify(item || '')}` }
 
 const checklistCompletedSet = ref<Set<string>>(new Set<string>())
 // Read local checklist on demand (currently not auto-used; kept for future)
@@ -812,13 +1114,16 @@ async function startGrowing() {
   }
   const instanceId = currentInstanceId.value
   if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+
+  // Show loading modal immediately
+  loadingModal.value = { show: true, message: 'Starting growth...' }
+
   try {
     // Call new API to explicitly start growing with today's date
     const today = new Date()
     const startDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0, 10)
     await plantApiService.startGrowingInstance(instanceId, startDate)
     // Mark as started locally regardless; backend sets is_active=true and resets stage
-    showInfo('Started', 'Growth started.')
     try { localStorage.setItem(`journal_started:${instanceId}`, '1') } catch {}
     // Mark last auto-update time to now to ensure next run occurs ~24h later
     try { localStorage.setItem(`auto_update_last:${instanceId}`, String(Date.now())) } catch {}
@@ -827,14 +1132,22 @@ async function startGrowing() {
     // Ensure daily auto update will run when needed
     await ensureDailyAutoUpdate(instanceId)
   } catch {
+    loadingModal.value = { show: false, message: '' }
     showInfo('Failed', 'Failed to start growing. Please try again later.')
+    return
+  } finally {
+    loadingModal.value = { show: false, message: '' }
   }
+
+  // Show success message after loading is done
+  showInfo('Started', 'Growth started.')
 }
 
 // daysFromStart removed (not used)
 
 async function openJournalTimelineFrom(jp: { plant_id: number; plant_name: string }) {
-  timelineModalOpen.value = true
+  // DON'T open the old timeline modal - the new three-step flow modal is already open
+  // timelineModalOpen.value = true  // REMOVED
   timelineLoading.value = true
   // Show blocking loading overlay until timeline + details + requirements + instructions are all loaded
   loadingModal.value = { show: true, message: 'Loading timeline...' }
@@ -930,12 +1243,51 @@ const ensurePlantsLoaded = async () => {
 
 onMounted(async () => {
   loadDisplayNameOverride()
+
+  // TESTING MODE: Auto-login with test email for UI development
+  const TESTING_MODE = true
+  const TEST_EMAIL = 'pbav0003@student.monash.edu'
+
+  if (TESTING_MODE && !isLoggedIn.value) {
+    // Auto-login with test email
+    try {
+      localStorage.setItem('plantopia_user_email', TEST_EMAIL)
+      localStorage.setItem('plantopia_user_logged_in', 'true')
+      localStorage.setItem('plantopia_user_name', 'Test User')
+      auth.userLogin('Test User', '', undefined)
+    } catch {}
+  }
+
   // Load journal plants for logged-in users (by email)
   if (isLoggedIn.value) {
     await loadJournalPlantsFromBackend()
     // Always refresh favourites from API when opening profile
     try { await plantsStore.loadFavouritesFromApi() } catch {}
     try { await guidesStore.syncFavouritesFromServer() } catch {}
+
+    // Check if we should auto-open a journal detail view (from "I want to grow this plant")
+    try {
+      const pendingInstanceId = localStorage.getItem('pending_journal_open_instance_id')
+      const pendingPlantId = localStorage.getItem('pending_journal_open_plant_id')
+      if (pendingInstanceId && pendingPlantId) {
+        // Clear the pending flags
+        localStorage.removeItem('pending_journal_open_instance_id')
+        localStorage.removeItem('pending_journal_open_plant_id')
+
+        // Find the plant in the journal list
+        const instanceId = Number(pendingInstanceId)
+        const plantId = Number(pendingPlantId)
+        const plant = journalPlants.value.find(p => Number(p.instance_id) === instanceId || Number(p.plant_id) === plantId)
+
+        if (plant) {
+          // Wait a moment for the UI to settle, then open the journal detail view
+          setTimeout(() => {
+            openJournalDetailView(plant)
+          }, 500)
+        }
+      }
+    } catch {}
+
     return
   }
   await ensureGoogleIdentityLoaded().catch(() => { showGsiFallback.value = true })
@@ -1245,7 +1597,16 @@ const openHelpChat = () => {
 </script>
 
 <style scoped>
-.profile-container { min-height: calc(100vh - 64px); display:grid; place-items:center; padding: 2rem; }
+/* ====================
+   NEW FULL-WIDTH LAYOUT
+   ==================== */
+
+.profile-container-new {
+  min-height: calc(100vh - 64px);
+  width: 100%;
+  position: relative;
+}
+
 .recommendations-bg::after {
   content: '';
   position: fixed;
@@ -1258,7 +1619,1301 @@ const openHelpChat = () => {
   background-attachment: fixed;
   z-index: -2;
   pointer-events: none;
+  opacity: 0.4;
 }
+
+/* Login State */
+.login-wrapper {
+  min-height: calc(100vh - 64px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.login-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 3rem 2.5rem;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #065f46;
+  margin-bottom: 1.5rem;
+}
+
+/* Profile Layout - Sidebar + Main */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: calc(100vh - 64px);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+/* ====================
+   SIDEBAR
+   ==================== */
+
+.profile-sidebar {
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow-y: auto;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-section {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+/* User Profile Card */
+.user-profile-card {
+  text-align: center;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border: 1px solid #10b981;
+}
+
+.user-avatar-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #065f46;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 auto 1rem;
+  box-shadow: 0 4px 12px rgba(6, 95, 70, 0.3);
+}
+
+.user-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 0 0 0.25rem;
+}
+
+.user-email {
+  font-size: 13px;
+  color: #059669;
+  margin: 0 0 1rem;
+  word-break: break-word;
+}
+
+.btn-edit {
+  background: #ffffff;
+  color: #10b981;
+  border: 2px solid #10b981;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.btn-edit:hover {
+  background: #10b981;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Quick Stats */
+.quick-stats {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.sidebar-heading {
+  font-size: 14px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.stat-item:last-child {
+  border-bottom: none;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #10b981;
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nav-tab {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.nav-tab:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.nav-tab.active {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  margin-top: auto;
+  background: transparent;
+  padding: 0;
+}
+
+.btn-signout {
+  background: #ffffff;
+  color: #ef4444;
+  border: 2px solid #ef4444;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.btn-signout:hover {
+  background: #ef4444;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* ====================
+   MAIN CONTENT AREA
+   ==================== */
+
+.profile-main-content {
+  padding: 2rem 3rem;
+  overflow-y: auto;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.content-section {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.content-header {
+  margin-bottom: 2rem;
+}
+
+.content-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 0 0 0.5rem;
+}
+
+.content-subtitle {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.empty-hint {
+  margin-top: 0.5rem;
+  font-size: 14px;
+  color: #9ca3af;
+}
+
+/* Plants Grid */
+.plants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.plant-card-new,
+.journal-card-new {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: relative;
+}
+
+.plant-card-new:hover,
+.journal-card-new:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  border-color: #10b981;
+}
+
+.plant-card-thumb {
+  height: 200px;
+  background: #f3f4f6;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plant-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.plant-card-info {
+  padding: 1rem;
+}
+
+.plant-card-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #065f46;
+  margin: 0 0 0.25rem;
+}
+
+.plant-card-category {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+/* Journal Card Specific */
+.journal-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.badge {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 12px;
+  padding: 0.25rem 0.75rem;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-stage {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.btn-delete-journal {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: rgba(239, 68, 68, 0.9);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.journal-card-new:hover .btn-delete-journal {
+  opacity: 1;
+}
+
+.btn-delete-journal:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.btn-delete-journal svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Guides List */
+.guides-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.guide-item-new {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.guide-item-new:hover {
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateX(4px);
+}
+
+.guide-icon {
+  width: 48px;
+  height: 48px;
+  background: #d1fae5;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.guide-icon svg {
+  width: 24px;
+  height: 24px;
+  color: #065f46;
+  stroke-width: 2;
+}
+
+.guide-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #065f46;
+  margin: 0 0 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guide-category {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.guide-arrow {
+  width: 20px;
+  height: 20px;
+  color: #d1d5db;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.guide-item-new:hover .guide-arrow {
+  color: #10b981;
+  transform: translateX(4px);
+}
+
+/* ====================
+   JOURNAL DETAIL MODAL (THREE-STEP FLOW)
+   ==================== */
+
+.journal-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.journal-detail-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.journal-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2rem 2.5rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.journal-detail-title h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.journal-detail-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.journal-detail-close {
+  background: #f3f4f6;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 28px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.journal-detail-close:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* Step Indicator */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 2.5rem;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+  transition: all 0.3s ease;
+}
+
+.step-item.active .step-circle {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.step-item.completed .step-circle {
+  background: #059669;
+  color: white;
+}
+
+.step-item.locked .step-circle {
+  background: #f3f4f6;
+  color: #d1d5db;
+}
+
+.step-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  transition: all 0.3s ease;
+}
+
+.step-item.active .step-label {
+  color: #10b981;
+}
+
+.step-item.completed .step-label {
+  color: #059669;
+}
+
+.step-item.locked .step-label {
+  color: #d1d5db;
+}
+
+.step-line {
+  width: 80px;
+  height: 3px;
+  background: #e5e7eb;
+  margin: 0 0.5rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.step-line.filled {
+  background: #10b981;
+}
+
+/* Body */
+.journal-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2.5rem;
+}
+
+.step-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.step-header {
+  margin-bottom: 2rem;
+}
+
+.step-header h3 {
+  margin: 0 0 0.5rem;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.step-header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
+}
+
+/* Loading/Error states */
+.step-loading,
+.step-error,
+.step-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #6b7280;
+  font-size: 15px;
+}
+
+.step-error {
+  color: #dc2626;
+}
+
+/* Checklist Progress */
+.checklist-progress-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  transition: width 0.4s ease;
+  border-radius: 6px;
+}
+
+.progress-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+}
+
+/* Checklist Categories */
+.checklist-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.checklist-category {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.category-title {
+  margin: 0 0 1rem;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #10b981;
+}
+
+.checklist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checklist-item:hover {
+  background: #f9fafb;
+}
+
+.checklist-item input[type="checkbox"] {
+  margin-top: 2px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #10b981;
+}
+
+.checklist-item-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.checklist-item-name {
+  font-size: 15px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.checklist-item-quantity {
+  font-size: 13px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+}
+
+.checklist-item-optional {
+  font-size: 13px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Instructions */
+.instruction-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.instruction-step {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.instruction-number {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.instruction-content {
+  flex: 1;
+}
+
+.instruction-title {
+  margin: 0 0 0.75rem;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.instruction-description {
+  margin: 0 0 0.75rem;
+  font-size: 15px;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.instruction-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+.instruction-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.instruction-tips {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.instruction-tips strong {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.instruction-tips ul {
+  margin: 0.5rem 0 0 1.25rem;
+  padding: 0;
+}
+
+.instruction-tips li {
+  margin: 0.25rem 0;
+}
+
+/* Timeline Current Day */
+.timeline-current-day {
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 16px;
+  margin-bottom: 2rem;
+  color: white;
+}
+
+.current-day-label {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.current-day-number {
+  font-size: 56px;
+  font-weight: 800;
+  margin: 0.5rem 0;
+  line-height: 1;
+}
+
+.current-stage-badge {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Vertical Timeline */
+.vertical-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 2rem;
+}
+
+.timeline-stage {
+  display: flex;
+  gap: 1.5rem;
+  position: relative;
+}
+
+.timeline-stage-marker {
+  flex-shrink: 0;
+  width: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.timeline-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d1d5db;
+  border: 3px solid white;
+  box-shadow: 0 0 0 2px #d1d5db;
+  transition: all 0.3s ease;
+}
+
+.timeline-stage.current .timeline-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 4px #d1fae5;
+  width: 20px;
+  height: 20px;
+}
+
+.timeline-stage.past .timeline-dot {
+  background: #059669;
+  box-shadow: 0 0 0 2px #d1fae5;
+}
+
+.timeline-stage.future .timeline-dot {
+  background: #e5e7eb;
+  box-shadow: 0 0 0 2px #f3f4f6;
+}
+
+.timeline-line {
+  flex: 1;
+  width: 3px;
+  background: #e5e7eb;
+  margin: 4px 0;
+  transition: all 0.3s ease;
+}
+
+.timeline-stage.past .timeline-line {
+  background: #d1fae5;
+}
+
+.timeline-stage-content {
+  flex: 1;
+  padding: 0.5rem 0 2rem 0;
+}
+
+.timeline-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-stage-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.timeline-stage.current .timeline-stage-name {
+  color: #10b981;
+}
+
+.timeline-stage-days {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 600;
+  background: #f3f4f6;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.timeline-stage.current .timeline-stage-days {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.timeline-stage-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+/* Tips Section */
+.timeline-tips {
+  padding: 1.5rem;
+  background: #fef3c7;
+  border: 2px solid #fbbf24;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.tips-title {
+  margin: 0 0 1rem;
+  font-size: 16px;
+  font-weight: 700;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tips-title::before {
+  content: "💡";
+  font-size: 20px;
+}
+
+.tips-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #78350f;
+}
+
+.tips-list li {
+  margin: 0.5rem 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Revisit Actions */
+.revisit-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.revisit-actions .btn-secondary {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.revisit-actions svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Footer Buttons */
+.step-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 2rem;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-secondary {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* ====================
+   RESPONSIVE DESIGN
+   ==================== */
+
+@media (max-width: 1024px) {
+  .profile-layout {
+    grid-template-columns: 280px 1fr;
+  }
+
+  .profile-main-content {
+    padding: 1.5rem 2rem;
+  }
+
+  .plants-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1.5rem 1rem;
+    gap: 1rem;
+  }
+
+  .sidebar-section {
+    padding: 1rem;
+  }
+
+  .profile-main-content {
+    padding: 1.5rem 1rem;
+  }
+
+  .content-title {
+    font-size: 24px;
+  }
+
+  .plants-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-tab {
+    padding: 0.75rem;
+    font-size: 14px;
+  }
+
+  /* Journal Detail Modal responsive */
+  .journal-detail-overlay {
+    padding: 1rem;
+  }
+
+  .journal-detail-modal {
+    max-height: 95vh;
+  }
+
+  .journal-detail-header {
+    padding: 1.5rem 1.5rem 1rem;
+  }
+
+  .journal-detail-title h2 {
+    font-size: 22px;
+  }
+
+  .journal-detail-close {
+    width: 36px;
+    height: 36px;
+    font-size: 24px;
+  }
+
+  .step-indicator {
+    padding: 1rem 1rem;
+  }
+
+  .step-circle {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .step-line {
+    width: 50px;
+  }
+
+  .step-label {
+    font-size: 12px;
+  }
+
+  .journal-detail-body {
+    padding: 1.5rem;
+  }
+
+  .step-header h3 {
+    font-size: 20px;
+  }
+
+  .checklist-progress-section {
+    padding: 1rem;
+  }
+
+  .checklist-category {
+    padding: 1rem;
+  }
+
+  .category-title {
+    font-size: 16px;
+  }
+
+  .instruction-step {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .instruction-number {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .timeline-current-day {
+    padding: 1.5rem;
+  }
+
+  .current-day-number {
+    font-size: 48px;
+  }
+
+  .vertical-timeline {
+    margin-left: -0.5rem;
+  }
+
+  .timeline-stage-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .revisit-actions {
+    flex-direction: column;
+  }
+
+  .step-footer {
+    flex-direction: column-reverse;
+    gap: 0.75rem;
+  }
+
+  .step-footer button {
+    width: 100%;
+  }
+}
+
+/* ====================
+   LEGACY STYLES (keep for modals)
+   ==================== */
 .section-card { background:#ffffff; border: 1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
 .profile-sections { display:grid; gap:16px; }
 .profile-info { display:grid; grid-template-columns: 1fr; align-items:center; }

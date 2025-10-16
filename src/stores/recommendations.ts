@@ -77,6 +77,12 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
     filters.value = { ...newFilters }
   }
 
+  function clearResults() {
+    plants.value = []
+    showResults.value = false
+    error.value = null
+  }
+
   return {
     // state
     plants,
@@ -88,6 +94,7 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
     // actions
     submitSearch,
     updateFilters,
+    clearResults,
   }
 })
 
