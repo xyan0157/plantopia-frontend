@@ -105,22 +105,29 @@ import { useRecommendationsStore } from '@/stores/recommendations'
 
 const route = useRoute()
 
-// Search parameters interface matching the enhanced form
+// Search parameters interface matching the SearchForm
 interface SearchParams {
   location: string
   locationType: string
-  areaSize: string
+  areaM2: number
   sunlight: string
   windExposure: string
-  hasContainers: boolean
+  containers: boolean
+  containerSizes: string[]
   goal: string
+  edibleTypes: string[]
+  ornamentalTypes: string[]
   maintainability: string
+  watering: string
   timeToResults: string
+  seasonIntent: string
+  colors: string[]
+  fragrant: boolean
+  pollenSensitive: boolean
+  petsOrToddlers: boolean
   budget: string
   hasBasicTools: boolean
   organicOnly: boolean
-  edibleTypes: string[]
-  ornamentalTypes: string[]
 }
 
 // Reactive state management
@@ -129,18 +136,25 @@ const selectedPlant = ref<Plant | null>(null)     // Currently selected plant fo
 const searchParams = ref<SearchParams>({          // Current search form parameters
   location: '',
   locationType: '',
-  areaSize: '',
+  areaM2: 2.0,
   sunlight: '',
   windExposure: '',
-  hasContainers: false,
+  containers: false,
+  containerSizes: [],
   goal: '',
+  edibleTypes: [],
+  ornamentalTypes: [],
   maintainability: '',
+  watering: '',
   timeToResults: '',
+  seasonIntent: '',
+  colors: [],
+  fragrant: false,
+  pollenSensitive: false,
+  petsOrToddlers: false,
   budget: '',
   hasBasicTools: false,
   organicOnly: false,
-  edibleTypes: [],
-  ornamentalTypes: [],
 })
 const recStore = useRecommendationsStore()
 const plants = computed(() => recStore.plants)
@@ -157,15 +171,20 @@ const visiblePlants = computed(() => {
 
 // Filter data for sidebar
 const filterData = ref({
-  areaSize: '',
+  areaM2: 2.0,
   windExposure: '',
-  hasContainers: false,
+  containers: false,
+  containerSizes: [] as string[],
   maintainability: '',
+  watering: '',
+  seasonIntent: '',
+  colors: [] as string[],
+  fragrant: false,
+  pollenSensitive: false,
+  petsOrToddlers: false,
   budget: '',
   hasBasicTools: false,
   organicOnly: false,
-  edibleTypes: [] as string[],
-  ornamentalTypes: [] as string[],
 })
 
 // Handle search form submission - make API call and show results
@@ -332,7 +351,7 @@ onMounted(() => {
 
 .filter-col {
   position: absolute;
-  top: 1.2rem;
+  top: 3.075rem;
   right: -100px; /* move filter slightly left (reduce negative right) */
   z-index: 3;
 }
@@ -341,18 +360,18 @@ onMounted(() => {
 
 
 @media (max-width: 1870px) {
-  .filter-col { right: -100px; top: 1.8rem; }
+  .filter-col { right: -100px; top: 3.675rem; }
 }
 
 /* Responsive adjustments for filter button position */
 @media (max-width: 1600px) {
-  .filter-col { right: -100px; top: 1.9rem; }
+  .filter-col { right: -100px; top: 3.775rem; }
 }
 @media (max-width: 1440px) {
-  .filter-col { right: -100px; top: 1.9rem; }
+  .filter-col { right: -100px; top: 3.775rem; }
 }
 @media (max-width: 1320px) {
-  .filter-col { right: -100px; top: 1.9rem; }
+  .filter-col { right: -100px; top: 3.775rem; }
 }
 @media (max-width: 1200px) {
   .filter-col {

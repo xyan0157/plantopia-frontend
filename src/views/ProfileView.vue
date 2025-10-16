@@ -223,22 +223,7 @@
     </div>
   </div>
   <!-- Loading Modal -->
-  <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
-  <div v-if="infoOpen" class="info-overlay" @click="closeInfo">
-    <div class="modal-content" @click.stop>
-      <div class="modal-header">
-        <h2 class="modal-title">{{ infoTitle }}</h2>
-        <button class="modal-close" @click="closeInfo">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="placeholder-text">{{ infoMessage }}</div>
-        <div style="text-align:right; margin-top: 8px;">
-          <button class="btn-green" @click="closeInfo">OK</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <LoadingModal v-if="loadingModal.show" :context="'profile'" />
   <!-- Confirm Delete Modal for Journal -->
   <div v-if="confirmDeleteOpen" class="info-overlay" @click="confirmDeleteOpen = false">
     <div class="modal-content" @click.stop>
@@ -564,8 +549,10 @@ import type { Plant, ApiUserPlantInstanceSummary } from '@/services/api'
 import { useGuidesStore } from '@/stores/guides'
 import { renderMarkdown } from '@/services/markdownService'
 import LoadingModal from '@/components/LoadingModal.vue'
+import { useToast } from '@/composables/useToast'
 
 const auth = useAuthStore()
+const toast = useToast()
 // const router = useRouter()
 
 const isLoggedIn = computed(() => auth.userIsLoggedIn)
@@ -796,7 +783,7 @@ function closeJournalDetailView() {
 async function markSetupComplete() {
   const instanceId = currentInstanceId.value
   if (!instanceId) {
-    showInfo('Error', 'No instance ID found')
+    toast.error('No instance ID found')
     return
   }
 
@@ -804,8 +791,9 @@ async function markSetupComplete() {
     // First, mark setup as complete via Phase 1 endpoint
     await plantApiService.completeSetup(instanceId)
     setupComplete.value = true
+    toast.success('Setup marked as complete!')
   } catch {
-    showInfo('Failed', 'Failed to mark setup as complete')
+    toast.error('Failed to mark setup as complete')
     return
   }
 
@@ -874,12 +862,7 @@ const growing = ref(false)
 const dayElapsed = ref<number>(0)
 const currentStageDisplay = ref<string>('')
 
-// Generic info modal (replaces all toasts/alerts)
-const infoTitle = ref('')
-const infoMessage = ref('')
-const infoOpen = ref(false)
-function showInfo(title: string, message: string) { infoTitle.value = title; infoMessage.value = message; infoOpen.value = true }
-function closeInfo() { infoOpen.value = false }
+// Info modal removed - now using toast notifications
 
 // Help chat state
 const helpChatOpen = ref(false)
@@ -894,14 +877,14 @@ async function sendChatFn() {
   const text = chatInput.value.trim()
   if (!text) return
   const id = chatId.value
-  if (!id) { showInfo('No chat', 'Please start the chat first.'); return }
+  if (!id) { toast.warning('Please start the chat first.'); return }
   chatMessages.value.push({ role: 'user', text })
   chatInput.value = ''
   try {
     const res = await plantApiService.sendPlantChatMessage({ chat_id: id, message: text })
     chatMessages.value.push({ role: 'ai', text: res.reply || '...' })
   } catch {
-    showInfo('Failed', 'Failed to send message.')
+    toast.error('Failed to send message.')
   }
 }
 const sendChatHandler = () => { void sendChatFn() }
@@ -1056,7 +1039,7 @@ async function onChecklistChange(key: string, checked: boolean) {
     // rollback
     if (checked) checklistCompletedSet.value.delete(key); else checklistCompletedSet.value.add(key)
     saveChecklistLocal(instanceId)
-    showInfo('Failed', 'Failed to update checklist. Please try again later.')
+    toast.error('Failed to update checklist. Please try again later.')
   }
 }
 
@@ -1068,7 +1051,7 @@ function isStageSelected(name?: string): boolean {
 async function onSelectStage(name?: string) {
   const stage = String(name || '').trim()
   if (!stage) return
-  if (!growing.value) { showInfo('Action required', 'Please click Start Growing first.'); return }
+  if (!growing.value) { toast.warning('Please click Start Growing first.'); return }
   selectedStage.value = stage
   // set day to stage start day
   try {
@@ -1078,13 +1061,13 @@ async function onSelectStage(name?: string) {
     }
   } catch {}
   const instanceId = currentInstanceId.value
-  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  if (!instanceId) { toast.error('No active plant instance.'); return }
   try {
     await plantApiService.updatePlantInstanceProgress(instanceId, { current_stage: stage, align_to_stage_start: true })
-    showInfo('Updated', 'Stage updated to ' + stage)
+    toast.success('Stage updated to ' + stage)
     await refreshInstanceAfterProgress()
   } catch {
-    showInfo('Failed', 'Failed to update stage.')
+    toast.error('Failed to update stage.')
   }
 }
 
@@ -1109,11 +1092,11 @@ const progressPercent = computed(() => {
 async function startGrowing() {
   const percent = checklistPercent.value
   if (percent < 80) {
-    showInfo('Checklist required', 'Please complete at least 80% of the checklist before starting.')
+    toast.warning('Please complete at least 80% of the checklist before starting.')
     return
   }
   const instanceId = currentInstanceId.value
-  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  if (!instanceId) { toast.error('No active plant instance.'); return }
 
   // Show loading modal immediately
   loadingModal.value = { show: true, message: 'Starting growth...' }
@@ -1131,16 +1114,14 @@ async function startGrowing() {
     await refreshInstanceAfterProgress()
     // Ensure daily auto update will run when needed
     await ensureDailyAutoUpdate(instanceId)
+    // Show success message
+    toast.success('Growth started successfully!')
   } catch {
-    loadingModal.value = { show: false, message: '' }
-    showInfo('Failed', 'Failed to start growing. Please try again later.')
+    toast.error('Failed to start growing. Please try again later.')
     return
   } finally {
     loadingModal.value = { show: false, message: '' }
   }
-
-  // Show success message after loading is done
-  showInfo('Started', 'Growth started.')
 }
 
 // daysFromStart removed (not used)
@@ -1223,8 +1204,10 @@ async function confirmDelete() {
     console.log('[Journal] delete request', { instance_id: Number(id) })
     const resp = await plantApiService.deletePlantInstance(Number(id))
     console.log('[Journal] delete response', resp)
+    toast.success('Plant removed from journal successfully!')
   } catch (e) {
     console.error('[Journal] delete error', e)
+    toast.error('Failed to remove plant from journal')
   }
   finally {
     loadingModal.value = { show: false, message: '' }
@@ -1245,7 +1228,7 @@ onMounted(async () => {
   loadDisplayNameOverride()
 
   // TESTING MODE: Auto-login with test email for UI development
-  const TESTING_MODE = true
+  const TESTING_MODE = false
   const TEST_EMAIL = 'pbav0003@student.monash.edu'
 
   if (TESTING_MODE && !isLoggedIn.value) {
@@ -1541,6 +1524,7 @@ function saveEdit() {
   } catch {}
   editing.value = false
   showEdit.value = false
+  toast.success('Profile updated successfully!')
 }
 
 function openEdit() { startEdit() }
@@ -1579,7 +1563,7 @@ function onPlantPointerUp() {
 // expose helper for template
 const openHelpChat = () => {
   const instanceId = currentInstanceId.value
-  if (!instanceId) { showInfo('No instance', 'No active plant instance.'); return }
+  if (!instanceId) { toast.error('No active plant instance.'); return }
   ;(async () => {
     try {
       const email = userEmail.value
@@ -1589,7 +1573,7 @@ const openHelpChat = () => {
       chatMessages.value = [{ role: 'ai', text: 'Hi! How can I help with your plant today?' }]
       helpChatOpen.value = true
     } catch {
-      showInfo('Failed', 'Failed to start help chat.')
+      toast.error('Failed to start help chat.')
     }
     chatLoading.value = false
   })()

@@ -2,22 +2,29 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { plantApiService, buildApiRequest, type Plant } from '@/services/api'
 
-// Minimal shape mirrored from RecommendationsView form
+// Search parameters interface matching the SearchForm
 export interface SearchParams {
   location: string
   locationType: string
-  areaSize: string
+  areaM2: number
   sunlight: string
   windExposure: string
-  hasContainers: boolean
+  containers: boolean
+  containerSizes: string[]
   goal: string
+  edibleTypes: string[]
+  ornamentalTypes: string[]
   maintainability: string
+  watering: string
   timeToResults: string
+  seasonIntent: string
+  colors: string[]
+  fragrant: boolean
+  pollenSensitive: boolean
+  petsOrToddlers: boolean
   budget: string
   hasBasicTools: boolean
   organicOnly: boolean
-  edibleTypes: string[]
-  ornamentalTypes: string[]
 }
 
 export const useRecommendationsStore = defineStore('recommendations', () => {
@@ -36,29 +43,34 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
 
     try {
       await plantApiService.healthCheck()
+
+      console.log('[STORE] Building API request with params:', params)
+
       const apiReq = buildApiRequest({
         location: params.location,
         locationType: params.locationType,
-        areaM2: Number(params.areaSize) || 2.0,
+        areaM2: params.areaM2 || 2.0,
         sunlight: params.sunlight,
-        windExposure: params.windExposure,
-        containers: params.hasContainers,
-        containerSizes: [],
+        windExposure: params.windExposure || 'Moderate',
+        containers: params.containers,
+        containerSizes: params.containerSizes,
         goal: params.goal,
-        edibleTypes: params.edibleTypes || [],
-        ornamentalTypes: params.ornamentalTypes || [],
-        maintainability: params.maintainability,
-        watering: 'Medium',
+        edibleTypes: params.edibleTypes,
+        ornamentalTypes: params.ornamentalTypes,
+        maintainability: params.maintainability || 'Low',
+        watering: params.watering || 'Medium',
         timeToResults: params.timeToResults,
-        seasonIntent: 'Start Now',
-        colors: [],
-        fragrant: false,
-        pollenSensitive: false,
-        petsOrToddlers: false,
-        budget: params.budget,
+        seasonIntent: params.seasonIntent || 'Start Now',
+        colors: params.colors,
+        fragrant: params.fragrant,
+        pollenSensitive: params.pollenSensitive,
+        petsOrToddlers: params.petsOrToddlers,
+        budget: params.budget || 'Medium',
         hasBasicTools: params.hasBasicTools,
         organicOnly: params.organicOnly,
-      } as any)
+      })
+
+      console.log('[STORE] Final API request:', apiReq)
 
       const apiResp = await plantApiService.getRecommendations(apiReq)
       const transformed = plantApiService.transformApiResponseToPlants(apiResp)
@@ -69,7 +81,7 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
       // keep previous results state; do not clear old results here
     } finally {
       loading.value = false
-      
+
     }
   }
 

@@ -3,6 +3,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
 import { useAuthStore } from './stores/auth'
 import AiChatWidget from '@/components/AiChatWidget.vue'
+import ToastContainer from '@/components/ToastContainer.vue'
 import {
   HomeIcon,
   MagnifyingGlassIcon,
@@ -93,6 +94,9 @@ function toggleChatbot() {
     <div id="chatbot-panel" class="chatbot-panel">
       <AiChatWidget />
     </div>
+
+    <!-- Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 

@@ -375,7 +375,7 @@
       @close="showSignIn = false"
     />
     <!-- Loading Modal -->
-    <LoadingModal v-if="loadingModal.show" :message="loadingModal.message" />
+    <LoadingModal v-if="loadingModal.show" :context="'plants'" />
   </div>
 </template>
 
@@ -390,9 +390,11 @@ import { renderMarkdown } from '@/services/markdownService'
 import PlantRequirements from '@/views/recommendation/PlantRequirements.vue'
 import SignInModal from '@/components/SignInModal.vue'
 import LoadingModal from '@/components/LoadingModal.vue'
+import { useToast } from '@/composables/useToast'
 
 // Reactive state
 const store = usePlantsStore()
+const toast = useToast()
 const plants = computed(() => store.plants)
 const loading = computed(() => store.loading)
 const error = computed(() => store.error)
@@ -445,10 +447,19 @@ const renderedDescription = computed(() => {
 const toggleFav = async (p: Plant) => {
   const email = localStorage.getItem('plantopia_user_email') || ''
   if (!email) { promptSignIn('Please sign in to use favourites.'); return }
+  const wasFavourite = store.isFavourite(String(p.id))
   try {
     loadingModal.value = { show: true, message: 'Saving favourite...' }
     if (!store.favouritesLoaded) await store.loadFavouritesFromApi()
     await store.toggleFavourite(String(p.id))
+    // Show success toast based on action
+    if (wasFavourite) {
+      toast.success(`${p.name} removed from favourites`)
+    } else {
+      toast.success(`${p.name} added to favourites`)
+    }
+  } catch (error) {
+    toast.error('Failed to update favourites')
   } finally {
     loadingModal.value = { show: false, message: '' }
   }
@@ -586,8 +597,10 @@ async function startTracking(plant: Plant) {
     if (Number.isFinite(instanceId) && instanceId > 0) {
       try { await plantApiService.startGrowingInstance(instanceId) } catch (e) { console.warn('[UI] startGrowingInstance failed', e) }
     }
+    toast.success(`${plant.name} added to your journal!`)
   } catch (e) {
     console.error('[UI] startTracking error', e)
+    toast.error('Failed to add plant to journal')
   } finally {
     loadingModal.value = { show: false, message: '' }
   }
