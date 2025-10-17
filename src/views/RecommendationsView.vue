@@ -103,6 +103,15 @@ import FilterSidebar from './recommendation/FilterSidebar.vue'
 import { plantApiService, buildApiRequest, type Plant } from '@/services/api'
 import { useRecommendationsStore } from '@/stores/recommendations'
 
+// Debounce utility to prevent excessive API calls during rapid filter changes
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  return function(this: any, ...args: Parameters<T>) {
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => func.apply(this, args), wait)
+  }
+}
+
 const route = useRoute()
 
 // Search parameters interface matching the SearchForm
@@ -206,14 +215,25 @@ const closeModal = () => {
   selectedPlant.value = null
 }
 
+// Debounced search function - waits 800ms after last filter change before triggering API call
+// This prevents excessive API calls when users are rapidly adjusting multiple filters
+const debouncedSearch = debounce(async (params: SearchParams) => {
+  console.log('[RECOMMENDATIONS] Auto-searching with updated filters:', params)
+  await recStore.submitSearch(params)
+}, 800)
+
 // Handle filter updates from sidebar
 const handleUpdateFilters = async (filters: typeof filterData.value) => {
   filterData.value = { ...filters }
   // Update search params with filter data
   Object.assign(searchParams.value, filters)
-  // Trigger a new search if results are already showing
+
+  // Auto-trigger search when filters change, but only if results are already displayed
+  // This ensures users see updated results when changing filters without re-submitting the form
+  // Use debouncing to prevent API spam during rapid filter adjustments
   if (showResults.value && searchParams.value.location) {
-    await recStore.submitSearch(searchParams.value)
+    console.log('[RECOMMENDATIONS] Filter changed, triggering debounced search')
+    debouncedSearch(searchParams.value)
   }
 }
 
