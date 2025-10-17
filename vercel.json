@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://budgets-accepting-porcelain-austin.trycloudflare.com/api/:path*"
+      "destination": "http://34.70.141.84/api/:path*"
     },
     {
       "source": "/chat/:path*",
-      "destination": "https://budgets-accepting-porcelain-austin.trycloudflare.com/chat/:path*"
+      "destination": "http://34.70.141.84/chat/:path*"
     }
   ]
 }
