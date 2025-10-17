@@ -71,8 +71,26 @@ export const useRecommendationsStore = defineStore('recommendations', () => {
       })
 
       console.log('[STORE] Final API request:', apiReq)
+      console.log('=== DETAILED API REQUEST INSPECTION ===')
+      console.log('Suburb:', apiReq.suburb)
+      console.log('Location Type:', apiReq.user_preferences.site.location_type)
+      console.log('Sun Exposure:', apiReq.user_preferences.site.sun_exposure)
+      console.log('Goal:', apiReq.user_preferences.preferences.goal)
+      console.log('Time to Results:', apiReq.user_preferences.preferences.time_to_results)
+      console.log('Maintainability:', apiReq.user_preferences.preferences.maintainability)
+      console.log('Watering:', apiReq.user_preferences.preferences.watering)
+      console.log('=======================================')
 
       const apiResp = await plantApiService.getRecommendations(apiReq)
+
+      console.log('=== BACKEND RESPONSE INSPECTION ===')
+      console.log('Number of recommendations:', apiResp.recommendations?.length || 0)
+      console.log('Plant IDs:', apiResp.recommendations?.map(p => p.id) || [])
+      console.log('Plant Names:', apiResp.recommendations?.map(p => p.plant_name) || [])
+      console.log('Suburb returned:', apiResp.suburb)
+      console.log('Climate zone:', apiResp.climate_zone)
+      console.log('===================================')
+
       const transformed = plantApiService.transformApiResponseToPlants(apiResp)
       plants.value = transformed
       showResults.value = true

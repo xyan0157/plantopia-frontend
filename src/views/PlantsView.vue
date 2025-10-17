@@ -722,9 +722,9 @@ const paletteFor = (c: string): Palette => {
     case 'blue': return { bgStart: '#60a5fa', bgEnd: '#3b82f6' }
     case 'yellow': return { bgStart: '#f59e0b', bgEnd: '#d97706' }
     case 'orange': return { bgStart: '#fb923c', bgEnd: '#f97316' }
-    case 'white': return { bgStart: '#e5e7eb', bgEnd: '#d1d5db' }
-    case 'green': return { bgStart: '#34d399', bgEnd: '#10b981' }
-    default: return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0' }
+    case 'white': return { bgStart: '#9ca3af', bgEnd: '#6b7280' } // Darker grey for better contrast with white text
+    case 'green': return { bgStart: '#22c55e', bgEnd: '#16a34a' } // Darker green for better contrast with white text
+    default: return { bgStart: '#86efac', bgEnd: '#4ade80' } // More vibrant default green for better readability
   }
 }
 const getCardStyle = (p: Plant) => {
