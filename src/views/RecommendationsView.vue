@@ -207,12 +207,14 @@ const closeModal = () => {
 }
 
 // Handle filter updates from sidebar
-const handleUpdateFilters = (filters: typeof filterData.value) => {
+const handleUpdateFilters = async (filters: typeof filterData.value) => {
   filterData.value = { ...filters }
   // Update search params with filter data
   Object.assign(searchParams.value, filters)
-  // Do NOT auto-run search when results are already shown.
-  // Results remain fixed until the user submits a new search from the form.
+  // Trigger a new search if results are already showing
+  if (showResults.value && searchParams.value.location) {
+    await recStore.submitSearch(searchParams.value)
+  }
 }
 
 // Handle route query parameters (from dashboard redirect)

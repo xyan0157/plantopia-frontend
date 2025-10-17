@@ -507,6 +507,7 @@ const handleRadioToggle = (fieldName: keyof FilterData, value: string) => {
 
 // Clear all filters
 const clearAllFilters = () => {
+  preferredColor.value = '' // Clear the color proxy
   localFilters.value = {
     areaM2: 2.0,
     windExposure: '',
