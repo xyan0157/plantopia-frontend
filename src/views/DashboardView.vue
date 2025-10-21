@@ -352,7 +352,7 @@
           <div class="solution-text">
             <h2 class="section-title">The Solution is Growing</h2>
             <p class="solution-description">
-              Climate-sensitive plants aren't just beautiful—they're Melbourne's natural cooling system.
+              Climate-sensitive plants aren't just beautiful, they're Melbourne's natural cooling system.
             </p>
             <div class="solution-points">
               <div class="solution-point">
