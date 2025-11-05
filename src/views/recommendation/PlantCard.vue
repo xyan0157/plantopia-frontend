@@ -145,11 +145,14 @@ const toPalette = (c: string): Palette => {
     case 'orange':
       return { bgStart: '#fb923c', bgEnd: '#f97316', border: '#c2410c' }
     case 'white':
-      return { bgStart: '#e5e7eb', bgEnd: '#d1d5db', border: '#9ca3af' }
+      // Changed to darker grey for better contrast with white text
+      return { bgStart: '#9ca3af', bgEnd: '#6b7280', border: '#4b5563' }
     case 'green':
-      return { bgStart: '#34d399', bgEnd: '#10b981', border: '#047857' }
+      // Changed to darker, more saturated green for better contrast with white text
+      return { bgStart: '#22c55e', bgEnd: '#16a34a', border: '#15803d' }
     default:
-      return { bgStart: '#e8f6ee', bgEnd: '#bbf7d0', border: '#a7f3d0' }
+      // Changed default light green to be more vibrant for better readability
+      return { bgStart: '#86efac', bgEnd: '#4ade80', border: '#22c55e' }
   }
 }
 const palette = computed<Palette>(() => toPalette(pickDominantColor()))
